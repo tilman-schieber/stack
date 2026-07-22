@@ -1,0 +1,40 @@
+{
+  "name": "mtg-deck-builder",
+  "version": "0.1.0",
+  "description": "Visual MTG deck builder — import Arena decklists, cache card images locally",
+  "main": "./out/main/index.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "postinstall": "electron-builder install-app-deps",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "pack:linux": "electron-vite build && electron-builder --linux AppImage",
+    "pack:mac": "electron-vite build && electron-builder --mac dmg",
+    "pack:win": "electron-vite build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.11"
+  },
+  "build": {
+    "appId": "com.stack.mtgdeckbuilder",
+    "productName": "MTG Deck Builder",
+    "files": ["out/**/*", "resources/**/*"],
+    "asarUnpack": ["**/node_modules/better-sqlite3/**"],
+    "linux": { "target": ["AppImage"], "category": "Game" },
+    "mac": { "target": ["dmg"] },
+    "win": { "target": ["nsis"] }
+  }
+}

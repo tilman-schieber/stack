@@ -1,0 +1,345 @@
+/* ===== Engine (rules-enforced) play mode ===== */
+.play-area.engine {
+  display: flex;
+  flex-direction: column;
+  position: relative; /* anchor for the floating stack overlay */
+}
+
+.eng-turnbar {
+  gap: 12px;
+}
+.eng-turn {
+  font-weight: 700;
+}
+.eng-active {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* A seat: hand, panel, then battlefield + rail */
+.eng-seat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 0;
+}
+.eng-seat.top {
+  justify-content: flex-start;
+}
+.eng-seat.bottom {
+  flex-direction: column-reverse;
+}
+
+.eng-hand {
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px;
+  overflow-x: auto;
+  background: #101116;
+  min-height: 96px;
+  align-items: center;
+}
+.eng-hand-card {
+  width: 66px;
+  height: 92px;
+  flex: 0 0 auto;
+  cursor: default;
+}
+.eng-hand-card.playable {
+  cursor: pointer;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.eng-hand-card.selectable {
+  cursor: pointer;
+}
+
+/* Panel: name, life, mana, hand count */
+.eng-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 12px;
+  background: #14151a;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.eng-prio-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4caf50;
+  margin-left: 6px;
+}
+.eng-life {
+  font-weight: 700;
+  font-size: 16px;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.eng-life.targetable {
+  cursor: crosshair;
+  outline: 2px solid #e05a5a;
+}
+.eng-count {
+  color: var(--muted);
+  font-size: 13px;
+}
+.eng-mana {
+  display: inline-flex;
+  gap: 3px;
+}
+.eng-mana-pip {
+  color: #1a1206;
+  font-weight: 700;
+  font-size: 12px;
+  border-radius: 8px;
+  padding: 0 6px;
+}
+
+/* Battlefield + rail */
+.eng-body {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.eng-battlefield {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  overflow: auto;
+}
+.eng-lands,
+.eng-creatures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-content: flex-start;
+}
+.eng-creatures {
+  flex: 1 1 auto;
+}
+.eng-rail {
+  width: 108px;
+}
+
+/* Board card sizing in engine mode */
+.play-area.engine .board-card {
+  width: 84px;
+  height: 117px;
+  cursor: default;
+}
+.play-area.engine .board-card.tapped {
+  margin: 0 20px; /* room for the rotation */
+}
+.board-card.atk {
+  outline: 3px solid #e0a52e;
+}
+.board-card.blk {
+  outline: 3px solid #4c8bf0;
+}
+.board-card.sick {
+  opacity: 0.6;
+}
+.board-card.targetable {
+  cursor: crosshair;
+  outline: 3px solid #e05a5a;
+}
+.board-card.selectable {
+  cursor: pointer;
+}
+.board-card.chosen {
+  outline: 3px solid var(--accent);
+}
+.board-card.assigned {
+  outline: 3px solid #4c8bf0;
+}
+
+.eng-pt {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.82);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 0 5px;
+}
+.eng-dmg {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #b02020;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+  min-width: 17px;
+  height: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Floating stack overlay (right-centre of the table) */
+.eng-stack-overlay {
+  position: absolute;
+  top: 50%;
+  right: 150px;
+  transform: translateY(-50%);
+  z-index: 900;
+  width: 210px;
+  max-height: 80%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(10, 11, 14, 0.94);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+.eng-stack-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.eng-stack-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 4px;
+}
+.eng-stack-card.top {
+  outline: 2px solid var(--accent);
+}
+.eng-stack-card.targetable {
+  cursor: crosshair;
+  outline: 2px solid #e05a5a;
+}
+.eng-stack-card img {
+  width: 40px;
+  height: 56px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+.eng-stack-ability {
+  width: 40px;
+  height: 56px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2e2356;
+  font-size: 20px;
+}
+.eng-stack-cardname {
+  font-size: 13px;
+  font-weight: 600;
+}
+.eng-stack-next {
+  font-size: 10px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Stops panel (anchored under the turn bar) */
+.eng-turnbar {
+  position: relative;
+}
+.eng-stops-panel {
+  position: absolute;
+  top: 100%;
+  right: 8px;
+  z-index: 1200;
+  width: 280px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  padding: 10px 12px;
+}
+.eng-stops-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.eng-stops-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.eng-stops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.eng-stops-table th,
+.eng-stops-table td {
+  padding: 3px 6px;
+  text-align: center;
+}
+.eng-stops-table th:first-child,
+.eng-stops-table td:first-child {
+  text-align: left;
+}
+.eng-stops-table tbody tr.now {
+  background: rgba(224, 165, 46, 0.16);
+}
+.eng-stops-table th {
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Contextual prompt bar */
+.eng-prompt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: #17181e;
+  border-top: 1px solid var(--border);
+  min-height: 48px;
+}
+.eng-prompt .primary {
+  padding: 6px 14px;
+}
+.eng-win {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* Right-click zoom preview */
+.eng-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  cursor: zoom-out;
+}
+.eng-zoom img {
+  height: 80vh;
+  max-width: 90vw;
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+}
+.eng-error {
+  color: #e07070;
+  font-size: 13px;
+}

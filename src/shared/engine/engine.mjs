@@ -1,0 +1,915 @@
+// The M0 game engine: a deterministic step function. `advance()` runs until it
+// needs a choice, at which point it sets state.pending (a PendingDecision) and
+// returns; `choose(answer)` feeds the answer and continues. Nothing here touches
+// React or Electron — it is driven by scripted choices in headless tests and
+// (later) by UI in engine-backed game mode.
+//
+// Rule references are to MagicCompRules20260619.txt.
+
+import { createState, createAbility, zone, zoneKey, moveObject, objectsIn } from './state.mjs'
+import { manaAbilityColor } from './behaviors.mjs'
+import { isPermanent, parseManaCost } from './cards.mjs'
+import { recompute } from './layers.mjs'
+
+// Step order (rules 500–514). First strike is folded into a single combat-damage
+// step for M0 (no keywords yet). Priority is granted in PRIORITY_STEPS only.
+const STEP_ORDER = [
+  'untap',
+  'upkeep',
+  'draw',
+  'main1',
+  'beginCombat',
+  'declareAttackers',
+  'declareBlockers',
+  'combatDamage',
+  'endCombat',
+  'main2',
+  'end',
+  'cleanup'
+]
+const PRIORITY_STEPS = new Set([
+  'upkeep',
+  'draw',
+  'main1',
+  'beginCombat',
+  'declareAttackers',
+  'declareBlockers',
+  'combatDamage',
+  'endCombat',
+  'main2',
+  'end'
+])
+const MAIN_STEPS = new Set(['main1', 'main2'])
+
+export class GameEngine {
+  constructor(opts) {
+    this.state = createState(opts)
+  }
+
+  // ---- lifecycle -------------------------------------------------------
+
+  start(handSize = 7) {
+    const s = this.state
+    this.handSize = handSize
+    for (const p of s.players) this.draw(p.id, handSize)
+    // London mulligan phase, resolved player by player before turn 1.
+    s.step = 'mulligan'
+    s.activePlayer = 0
+    s.mulliganPlayer = 0
+    this._askMulligan()
+    return this
+  }
+
+  // ---- London mulligan (rule 103.5) -----------------------------------
+
+  _askMulligan() {
+    const s = this.state
+    const pid = s.mulliganPlayer
+    s.pending = {
+      kind: 'mulligan',
+      player: pid,
+      mulligans: s.players[pid].mulligans,
+      hand: [...zone(s, 'hand', pid)]
+    }
+  }
+
+  _applyMulligan(answer) {
+    const s = this.state
+    const pid = s.mulliganPlayer
+    if (answer?.keep) {
+      const n = s.players[pid].mulligans
+      const handLen = zone(s, 'hand', pid).length
+      const count = Math.min(n, handLen)
+      if (count > 0) {
+        s.pending = {
+          kind: 'bottom',
+          player: pid,
+          count,
+          hand: [...zone(s, 'hand', pid)]
+        }
+      } else {
+        this._nextMulliganPlayer()
+      }
+    } else {
+      // Mulligan: shuffle the whole hand back and draw a fresh seven.
+      for (const oid of [...zone(s, 'hand', pid)]) moveObject(s, oid, 'library')
+      const libKey = zoneKey('library', pid)
+      s.zones[libKey] = s.rng.shuffle(s.zones[libKey])
+      this.draw(pid, this.handSize || 7)
+      s.players[pid].mulligans++
+      this._askMulligan()
+    }
+  }
+
+  _applyBottom(pending, answer) {
+    const s = this.state
+    const bottom = answer?.bottom || []
+    if (bottom.length !== pending.count)
+      throw new Error(`must put exactly ${pending.count} card(s) on the bottom`)
+    for (const oid of bottom) moveObject(s, oid, 'library') // to the bottom
+    this._nextMulliganPlayer()
+  }
+
+  _nextMulliganPlayer() {
+    const s = this.state
+    if (s.mulliganPlayer < s.players.length - 1) {
+      s.mulliganPlayer++
+      this._askMulligan()
+    } else {
+      s.mulliganPlayer = null
+      s.turnNumber = 1
+      s.activePlayer = 0
+      this._enterStep('untap') // _pump (in choose) advances into the game
+    }
+  }
+
+  get pending() {
+    return this.state.pending
+  }
+
+  // ---- the driver ------------------------------------------------------
+
+  // Run non-interactive transitions until a decision is required. Priority is
+  // handled entirely inside choose(); _pump only walks turn-based steps.
+  _pump() {
+    const s = this.state
+    let guard = 0
+    while (!s.pending && s.winner == null) {
+      if (++guard > 10000) throw new Error('engine pump did not converge')
+      this._checkSBA()
+      if (s.winner != null) break
+      if (s.prio) return // a priority loop is active; wait for choose()
+      // Current step's turn-based work is done at entry; if it grants priority
+      // that was set up in _enterStep. So an idle _pump advances to next step.
+      this._advanceStep()
+    }
+  }
+
+  choose(answer) {
+    const s = this.state
+    const pending = s.pending
+    if (!pending) throw new Error('no pending decision')
+    if (pending.kind === 'gameOver') return this
+    s.pending = null
+    try {
+      switch (pending.kind) {
+        case 'mulligan':
+          this._applyMulligan(answer)
+          break
+        case 'bottom':
+          this._applyBottom(pending, answer)
+          break
+        case 'priority':
+          this._resolvePriority(pending, answer)
+          break
+        case 'declareAttackers':
+          this._applyAttackers(answer)
+          break
+        case 'declareBlockers':
+          this._applyBlockers(answer)
+          break
+        case 'discard':
+          this._applyDiscard(pending, answer)
+          break
+        default:
+          throw new Error(`unhandled decision ${pending.kind}`)
+      }
+    } catch (err) {
+      // An illegal choice must not corrupt the game: restore the decision so the
+      // caller can try again.
+      s.pending = pending
+      throw err
+    }
+    this._pump()
+    return this
+  }
+
+  // ---- steps -----------------------------------------------------------
+
+  _enterStep(step) {
+    const s = this.state
+    s.step = step
+    this._emptyManaPools()
+
+    switch (step) {
+      case 'untap': {
+        // 502: untap active player's permanents; clear summoning sickness for
+        // creatures they control; reset the land-per-turn allowance.
+        for (const o of objectsIn(s, 'battlefield')) {
+          if (o.controller === s.activePlayer) {
+            o.status.tapped = false
+            o.status.summoningSick = false
+          }
+        }
+        s.players[s.activePlayer].landsPlayed = 0
+        break // no priority; _pump advances
+      }
+      case 'draw': {
+        // 103.8a: the starting player skips only the very first draw step of the
+        // game (turn 1). Every later turn — including all of theirs — draws.
+        if (s.turnNumber !== 1) this.draw(s.activePlayer, 1)
+        this._grantPriority()
+        break
+      }
+      case 'declareAttackers': {
+        const eligible = this._eligibleAttackers()
+        if (eligible.length === 0) {
+          this._gotoStep('main2') // skip the rest of combat
+          return
+        }
+        s.combat = { attackers: [], blocks: {} }
+        s.pending = { kind: 'declareAttackers', player: s.activePlayer, eligible }
+        break
+      }
+      case 'declareBlockers': {
+        const def = this._defendingPlayer()
+        const eligible = this._eligibleBlockers(def)
+        s.pending = {
+          kind: 'declareBlockers',
+          player: def,
+          eligible,
+          attackers: s.combat.attackers
+        }
+        break
+      }
+      case 'combatDamage': {
+        this._combatDamage()
+        this._grantPriority()
+        break
+      }
+      case 'endCombat': {
+        for (const o of objectsIn(s, 'battlefield')) {
+          o.status.attacking = false
+          o.status.blocked = false
+          o.status.blocking = null
+        }
+        s.combat = null
+        this._grantPriority()
+        break
+      }
+      case 'cleanup': {
+        // 514: discard to hand size, then remove damage. No priority in M0.
+        const ap = s.activePlayer
+        const hand = zone(s, 'hand', ap)
+        if (hand.length > 7) {
+          s.pending = { kind: 'discard', player: ap, count: hand.length - 7, hand: [...hand] }
+          return
+        }
+        this._endCleanup()
+        break
+      }
+      default: {
+        if (PRIORITY_STEPS.has(step)) this._grantPriority()
+      }
+    }
+  }
+
+  _endCleanup() {
+    const s = this.state
+    for (const o of objectsIn(s, 'battlefield')) {
+      o.status.damage = 0
+      o.status.markedDeath = false
+    }
+    // "Until end of turn" effects wear off during cleanup (rule 514.2).
+    s.continuous = s.continuous.filter((e) => e.duration !== 'eot')
+    this._emptyManaPools()
+    // hand over the turn — each player's turn is numbered sequentially.
+    s.activePlayer = this._otherPlayer(s.activePlayer)
+    s.turnNumber++
+    this._enterStep('untap')
+  }
+
+  _advanceStep() {
+    const s = this.state
+    const i = STEP_ORDER.indexOf(s.step)
+    if (s.step === 'cleanup') {
+      this._endCleanup()
+      return
+    }
+    this._enterStep(STEP_ORDER[i + 1])
+  }
+
+  _gotoStep(step) {
+    this._enterStep(step)
+  }
+
+  // ---- priority (rule 117) --------------------------------------------
+
+  _grantPriority() {
+    this._grantPriorityTo(this.state.activePlayer)
+  }
+
+  // Before any player receives priority: perform SBAs, then put waiting triggered
+  // abilities on the stack (APNAP order). Then hand priority to `pid`.
+  _grantPriorityTo(pid) {
+    const s = this.state
+    this._checkSBA()
+    if (s.winner != null) return // _checkSBA set a gameOver decision
+    this._putTriggersOnStack()
+    s.prio = { player: pid, passCount: 0 }
+    s.pending = { kind: 'priority', player: pid, actions: this._legalActions(pid) }
+  }
+
+  _putTriggersOnStack() {
+    const s = this.state
+    if (s.pendingTriggers.length === 0) return
+    const active = s.activePlayer
+    // APNAP: active player's triggers go on the stack first (resolve last).
+    const ordered = [
+      ...s.pendingTriggers.filter((t) => t.controller === active),
+      ...s.pendingTriggers.filter((t) => t.controller !== active)
+    ]
+    s.pendingTriggers = []
+    for (const t of ordered) {
+      const ao = createAbility(s, {
+        controller: t.controller,
+        sourceOid: t.sourceOid,
+        effect: t.effect,
+        targets: t.targets
+      })
+      zone(s, 'stack').push(ao.oid)
+    }
+  }
+
+  _resolvePriority(pending, answer) {
+    const s = this.state
+    const action = answer || { type: 'pass' }
+    if (action.type === 'pass') {
+      s.prio.passCount++
+      if (s.prio.passCount >= s.players.length) {
+        if (zone(s, 'stack').length > 0) {
+          this._resolveTop()
+          // Active player receives priority after a stack object resolves; this
+          // also runs SBAs and places any triggers the resolution produced.
+          this._grantPriorityTo(s.activePlayer)
+        } else {
+          s.prio = null // priority loop ends; _pump advances the step
+        }
+      } else {
+        const next = this._otherPlayer(s.prio.player)
+        s.prio.player = next
+        s.pending = { kind: 'priority', player: next, actions: this._legalActions(next) }
+      }
+      return
+    }
+
+    // A game action was taken; the acting player retains priority afterwards.
+    const actor = s.prio.player
+    this._performAction(actor, action)
+    if (s.winner != null) return
+    this._grantPriorityTo(actor)
+  }
+
+  // ---- legal actions ---------------------------------------------------
+
+  _legalActions(pid) {
+    const s = this.state
+    const actions = [{ type: 'pass' }]
+    const stackEmpty = zone(s, 'stack').length === 0
+    const sorcerySpeed = pid === s.activePlayer && MAIN_STEPS.has(s.step) && stackEmpty
+    const player = s.players[pid]
+
+    for (const oid of zone(s, 'hand', pid)) {
+      const o = s.objects[oid]
+      const p = o.printed
+      if (p.types.includes('Land')) {
+        if (sorcerySpeed && player.landsPlayed < 1) actions.push({ type: 'playLand', oid })
+        continue
+      }
+      const instantSpeed = p.types.includes('Instant')
+      const canCastNow = instantSpeed || sorcerySpeed
+      if (canCastNow && this._canPay(pid, p.manaCost)) {
+        const targets = this._spellTargets(o)
+        // A spell that targets a spell (e.g. a counter) is only castable when
+        // there is something on the stack to target.
+        if (targets.some((t) => t.type === 'spell') && zone(s, 'stack').length === 0) continue
+        actions.push({ type: 'cast', oid, targets, needsTargets: targets.length })
+      }
+    }
+
+    // Activated abilities of permanents this player controls (instant speed).
+    for (const oid of zone(s, 'battlefield')) {
+      const o = s.objects[oid]
+      if (o.controller !== pid) continue
+      ;(o.behavior?.activated || []).forEach((ab, i) => {
+        if (ab.manaAbility) return // mana abilities are paid automatically
+        if (!this._canActivate(pid, o, ab)) return
+        const targets = ab.targets || []
+        actions.push({ type: 'activate', oid, ability: i, targets, needsTargets: targets.length })
+      })
+    }
+    return actions
+  }
+
+  _spellTargets(o) {
+    return o.behavior.spell?.targets || []
+  }
+
+  // ---- performing actions ---------------------------------------------
+
+  _performAction(pid, action) {
+    const s = this.state
+    switch (action.type) {
+      case 'playLand': {
+        moveObject(s, action.oid, 'battlefield')
+        this._enterBattlefield(s.objects[action.oid], pid)
+        s.players[pid].landsPlayed++
+        break
+      }
+      case 'cast': {
+        const o = s.objects[action.oid]
+        this._pay(pid, o.printed.manaCost)
+        moveObject(s, action.oid, 'stack') // clears transient status/controller
+        o.controller = pid
+        o.targets = action.targets || []
+        o.spell = o.behavior.spell
+        break
+      }
+      case 'activate': {
+        const o = s.objects[action.oid]
+        const ab = o.behavior.activated[action.ability]
+        this._payActivationCost(pid, o, ab)
+        // The ability exists on the stack independently of its source.
+        const aoid = createAbility(s, {
+          controller: pid,
+          sourceOid: o.oid,
+          effect: ab.effect,
+          targets: action.targets || []
+        })
+        zone(s, 'stack').push(aoid.oid)
+        break
+      }
+      default:
+        throw new Error(`unknown action ${action.type}`)
+    }
+  }
+
+  // Can `pid` currently pay ability `ab`'s activation cost with source `o`?
+  _canActivate(pid, o, ab) {
+    const cost = ab.cost || {}
+    if (cost.tap) {
+      if (o.status.tapped) return false
+      if (o.printed.types.includes('Creature') && !this._canTap(o)) return false
+    }
+    if (cost.mana && !this._canPay(pid, parseManaCost(cost.mana))) return false
+    if (cost.payLife != null && this.state.players[pid].life <= cost.payLife) return false
+    // sacrifice: 'self' is always payable while the source is on the battlefield
+    return true
+  }
+
+  _payActivationCost(pid, o, ab) {
+    const s = this.state
+    const cost = ab.cost || {}
+    if (cost.mana) this._pay(pid, parseManaCost(cost.mana))
+    if (cost.tap) o.status.tapped = true
+    if (cost.payLife != null) s.players[pid].life -= cost.payLife
+    if (cost.sacrifice === 'self') {
+      this._fireTriggers('dies', o) // sacrificing a creature counts as dying
+      moveObject(s, o.oid, 'graveyard')
+    }
+  }
+
+  _resolveTop() {
+    const s = this.state
+    const stack = zone(s, 'stack')
+    const oid = stack[stack.length - 1]
+    const o = s.objects[oid]
+
+    if (o.kind === 'ability') {
+      this._runEffects(o, o.effect)
+      stack.pop() // abilities cease to exist on resolution (no zone)
+      delete s.objects[oid]
+      return
+    }
+
+    if (o.spell) {
+      this._runEffects(o, o.spell.effect)
+      // The spell may have been removed from the stack already (e.g. countered).
+      if (o.zoneName === 'stack') moveObject(s, oid, 'graveyard')
+    } else if (isPermanent(o.printed)) {
+      moveObject(s, oid, 'battlefield')
+      this._enterBattlefield(o, o.controller ?? o.owner)
+    } else {
+      moveObject(s, oid, 'graveyard')
+    }
+  }
+
+  // Shared entry point for a permanent arriving on the battlefield: fix control,
+  // apply summoning sickness to creatures, and fire enters-the-battlefield
+  // triggers (both the object's own and other permanents watching).
+  _enterBattlefield(o, controller) {
+    o.controller = controller
+    o.timestamp = ++this.state.tsCounter // for layer ordering (rule 613.7)
+    if (o.printed.types.includes('Creature')) o.status.summoningSick = true
+    this._fireTriggers('etb', o)
+  }
+
+  // ---- effects ---------------------------------------------------------
+
+  _runEffects(source, effects) {
+    const s = this.state
+    for (const e of effects || []) {
+      switch (e.op) {
+        case 'dealDamage': {
+          const t = this._resolveTargetRef(source, e.to)
+          if (!t) break
+          if (t.kind === 'player') this._dealDamage(source, { player: t.pid }, e.amount)
+          else if (t.kind === 'object') this._dealDamage(source, { obj: t.obj }, e.amount)
+          break
+        }
+        case 'addMana':
+          s.players[source.controller].manaPool[e.mana]++
+          break
+        case 'draw':
+          this.draw(source.controller, e.amount || 1)
+          break
+        case 'gainLife':
+          s.players[source.controller].life += e.amount
+          break
+        case 'loseLife':
+          s.players[source.controller].life -= e.amount
+          break
+        case 'destroy': {
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield')
+            moveObject(s, t.obj.oid, 'graveyard')
+          break
+        }
+        case 'counter': {
+          const t = this._resolveTargetRef(source, e.to)
+          // Remove the target spell from the stack to its owner's graveyard.
+          if (t?.kind === 'object' && t.obj.zoneName === 'stack')
+            moveObject(s, t.obj.oid, 'graveyard')
+          break
+        }
+        case 'pump': {
+          // A one-shot continuous P/T modification (rule 613.7d), usually EOT.
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object')
+            s.continuous.push({
+              timestamp: ++s.tsCounter,
+              targets: [t.obj.oid],
+              modifyPT: { power: e.power || 0, toughness: e.toughness || 0 },
+              duration: e.duration || 'eot'
+            })
+          break
+        }
+        case 'grantKeyword': {
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object')
+            s.continuous.push({
+              timestamp: ++s.tsCounter,
+              targets: [t.obj.oid],
+              grantKeywords: [e.keyword],
+              duration: e.duration || 'eot'
+            })
+          break
+        }
+        default:
+          throw new Error(`unknown effect op ${e.op}`)
+      }
+    }
+  }
+
+  _resolveTargetRef(source, ref) {
+    // 'self' — the source permanent of an activated/triggered ability.
+    if (ref === 'self') {
+      const obj = this.state.objects[source.sourceOid]
+      return obj ? { kind: 'object', obj } : null
+    }
+    if (!ref?.startsWith?.('target')) return null
+    const idx = Number(ref.slice('target'.length))
+    const t = source.targets?.[idx]
+    if (!t) return null
+    if (t.kind === 'player') return { kind: 'player', pid: t.pid }
+    return { kind: 'object', obj: this.state.objects[t.oid] }
+  }
+
+  // ---- mana (rule 605 mana abilities resolve immediately) --------------
+
+  // Untapped sources the player can tap for one mana each, with the color.
+  _manaSources(pid) {
+    const s = this.state
+    const out = []
+    for (const o of objectsIn(s, 'battlefield')) {
+      if (o.controller !== pid || o.status.tapped) continue
+      const color = manaAbilityColor(o)
+      if (!color) continue
+      // creatures with a {T} mana ability need no summoning sickness (haste ok)
+      if (o.printed.types.includes('Creature') && !this._canTap(o)) continue
+      out.push({ oid: o.oid, color })
+    }
+    return out
+  }
+
+  // Greedy assignment: colored pips first from matching sources, then generic
+  // from anything left. Returns the source oids to tap, or null if unpayable.
+  _planPayment(cost, sources) {
+    const byColor = { W: [], U: [], B: [], R: [], G: [], C: [] }
+    for (const src of sources) byColor[src.color]?.push(src.oid)
+    const chosen = []
+    for (const c of ['W', 'U', 'B', 'R', 'G', 'C']) {
+      let need = cost[c] || 0
+      while (need-- > 0) {
+        if (!byColor[c].length) return null
+        chosen.push(byColor[c].pop())
+      }
+    }
+    const rest = Object.values(byColor).flat()
+    let generic = cost.generic || 0
+    if (rest.length < generic) return null
+    for (let i = 0; i < generic; i++) chosen.push(rest[i])
+    return chosen
+  }
+
+  _canPay(pid, cost) {
+    return this._planPayment(cost, this._manaSources(pid)) != null
+  }
+
+  _pay(pid, cost) {
+    const plan = this._planPayment(cost, this._manaSources(pid))
+    if (!plan) throw new Error('cannot pay cost')
+    for (const oid of plan) this.state.objects[oid].status.tapped = true
+  }
+
+  _emptyManaPools() {
+    for (const p of this.state.players)
+      p.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }
+  }
+
+  // ---- combat (rules 508–510) -----------------------------------------
+
+  _eligibleAttackers() {
+    const s = this.state
+    return objectsIn(s, 'battlefield')
+      .filter(
+        (o) =>
+          o.controller === s.activePlayer &&
+          o.chars.types.includes('Creature') &&
+          !o.status.tapped &&
+          this._canTap(o) // haste overrides summoning sickness
+      )
+      .map((o) => o.oid)
+  }
+
+  // Summoning sickness prevents attacking / {T} abilities unless the creature has
+  // haste (or is not a creature).
+  _canTap(o) {
+    return !o.status.summoningSick || this._hasKW(o, 'Haste')
+  }
+
+  _applyAttackers(answer) {
+    const s = this.state
+    const attackers = answer?.attackers || []
+    for (const oid of attackers) {
+      const o = s.objects[oid]
+      o.status.attacking = true
+      if (!this._hasKW(o, 'Vigilance')) o.status.tapped = true
+      this._fireTriggers('attacks', o)
+    }
+    s.combat.attackers = attackers
+    if (attackers.length === 0) {
+      this._gotoStep('main2')
+      return
+    }
+    this._grantPriority()
+  }
+
+  _defendingPlayer() {
+    return this._otherPlayer(this.state.activePlayer)
+  }
+
+  _eligibleBlockers(pid) {
+    const s = this.state
+    return objectsIn(s, 'battlefield')
+      .filter(
+        (o) => o.controller === pid && o.chars.types.includes('Creature') && !o.status.tapped
+      )
+      .map((o) => o.oid)
+  }
+
+  // Can `blocker` legally block `attacker`? (Evasion: flyers need flying/reach.)
+  _canBlock(blocker, attacker) {
+    if (this._hasKW(attacker, 'Flying') && !this._hasKW(blocker, 'Flying') && !this._hasKW(blocker, 'Reach'))
+      return false
+    return true
+  }
+
+  _applyBlockers(answer) {
+    const s = this.state
+    const blocks = answer?.blocks || {}
+
+    // Validate legality before committing (evasion + menace).
+    const perAttacker = {}
+    for (const [blockerOid, attackerOid] of Object.entries(blocks)) {
+      const b = s.objects[blockerOid]
+      const a = s.objects[attackerOid]
+      if (!b || !a || !a.status.attacking) throw new Error('illegal block: not an attacker')
+      if (!this._canBlock(b, a)) throw new Error(`illegal block: ${b.chars.name} cannot block a flyer`)
+      ;(perAttacker[attackerOid] ||= []).push(blockerOid)
+    }
+    for (const atkOid of s.combat.attackers) {
+      const n = perAttacker[atkOid]?.length || 0
+      if (n === 1 && this._hasKW(s.objects[atkOid], 'Menace'))
+        throw new Error('illegal block: menace must be blocked by two or more creatures')
+    }
+
+    s.combat.blocks = blocks
+    for (const [blockerOid, attackerOid] of Object.entries(blocks)) {
+      s.objects[blockerOid].status.blocking = attackerOid
+      s.objects[attackerOid].status.blocked = true // stays blocked even if blockers leave
+    }
+    this._grantPriority()
+  }
+
+  // Combat damage. If any combatant has first/double strike we run two passes
+  // (first-strike, then regular) with SBAs between, so first strikers can kill a
+  // blocker before it hits back. (M2 grants priority once, after both passes.)
+  _combatDamage() {
+    const s = this.state
+    recompute(s) // fresh P/T (anthems, pumps) before assigning damage
+    const combatants = [
+      ...s.combat.attackers.map((oid) => s.objects[oid]),
+      ...Object.keys(s.combat.blocks).map((oid) => s.objects[oid])
+    ].filter(Boolean)
+    const anyFS = combatants.some(
+      (o) => this._hasKW(o, 'First strike') || this._hasKW(o, 'Double strike')
+    )
+    if (anyFS) {
+      this._combatDamagePass('first')
+      this._checkSBA()
+      this._combatDamagePass('regular')
+    } else {
+      this._combatDamagePass('all')
+    }
+  }
+
+  // Which creatures deal damage in this pass.
+  _dealsInPass(o, pass) {
+    if (pass === 'all') return true
+    const fs = this._hasKW(o, 'First strike')
+    const ds = this._hasKW(o, 'Double strike')
+    if (pass === 'first') return fs || ds
+    return ds || !fs // regular: double strikers again, and non-first-strikers
+  }
+
+  _combatDamagePass(pass) {
+    const s = this.state
+    const def = this._defendingPlayer()
+    const onBf = (oid) => s.objects[oid] && s.objects[oid].zoneName === 'battlefield'
+
+    // Attackers deal damage.
+    for (const atkOid of s.combat.attackers) {
+      const atk = s.objects[atkOid]
+      if (!onBf(atkOid) || !this._dealsInPass(atk, pass)) continue
+      const power = atk.chars.power
+      const blockers = (s.combat.blocks
+        ? Object.entries(s.combat.blocks)
+            .filter(([, a]) => a === atkOid)
+            .map(([b]) => b)
+        : []
+      ).filter((b) => onBf(b) && s.objects[b].status.blocking === atkOid)
+
+      if (!atk.status.blocked) {
+        this._dealDamage(atk, { player: def }, power) // unblocked
+      } else if (blockers.length === 0) {
+        // Blocked but all blockers gone: only trample leaks through.
+        if (this._hasKW(atk, 'Trample')) this._dealDamage(atk, { player: def }, power)
+      } else {
+        let remaining = power
+        const trample = this._hasKW(atk, 'Trample')
+        const deathtouch = this._hasKW(atk, 'Deathtouch')
+        for (const blkOid of blockers) {
+          const b = s.objects[blkOid]
+          const lethal = deathtouch ? 1 : Math.max(1, b.chars.toughness - b.status.damage)
+          if (trample) {
+            const assign = Math.min(remaining, lethal)
+            this._dealDamage(atk, { obj: b }, assign)
+            remaining -= assign
+          } else {
+            this._dealDamage(atk, { obj: b }, remaining) // dump the rest here
+            remaining = 0
+            break
+          }
+        }
+        if (trample && remaining > 0) this._dealDamage(atk, { player: def }, remaining)
+      }
+    }
+
+    // Blockers deal damage to the attacker they block.
+    for (const [blkOid, atkOid] of Object.entries(s.combat.blocks)) {
+      const b = s.objects[blkOid]
+      if (!onBf(blkOid) || !this._dealsInPass(b, pass)) continue
+      if (onBf(atkOid)) this._dealDamage(b, { obj: s.objects[atkOid] }, b.chars.power)
+    }
+  }
+
+  // Central damage application: marks deathtouch kills and grants lifelink.
+  _dealDamage(source, target, amount) {
+    if (amount <= 0) return
+    const s = this.state
+    if (target.player != null) {
+      s.players[target.player].life -= amount
+    } else if (target.obj) {
+      target.obj.status.damage += amount
+      if (this._hasKW(source, 'Deathtouch')) target.obj.status.markedDeath = true
+    }
+    if (this._hasKW(source, 'Lifelink')) s.players[source.controller].life += amount
+  }
+
+  _hasKW(o, kw) {
+    return !!o?.chars?.keywords?.includes(kw)
+  }
+
+  // ---- state-based actions (rule 704) ---------------------------------
+
+  _checkSBA() {
+    const s = this.state
+    let repeat = true
+    while (repeat) {
+      repeat = false
+      recompute(s) // fresh characteristics (layers) before checking SBAs
+      for (const p of s.players) {
+        if (p.life <= 0 && s.winner == null) {
+          s.winner = this._otherPlayer(p.id)
+        }
+      }
+      for (const o of objectsIn(s, 'battlefield')) {
+        if (!o.chars.types.includes('Creature')) continue
+        const tough = o.chars.toughness
+        const lethal =
+          tough != null && (tough <= 0 || o.status.damage >= tough || o.status.markedDeath)
+        if (lethal) {
+          // Fire dies triggers while the creature is still on the battlefield
+          // (leaves-the-battlefield abilities "look back in time").
+          this._fireTriggers('dies', o)
+          moveObject(s, o.oid, 'graveyard')
+          repeat = true
+        }
+      }
+    }
+    if (s.winner != null && (!s.pending || s.pending.kind !== 'gameOver')) {
+      s.prio = null
+      s.pending = { kind: 'gameOver', winner: s.winner }
+    }
+  }
+
+  _applyDiscard(pending, answer) {
+    const s = this.state
+    const discard = answer?.discard || []
+    if (discard.length !== pending.count) throw new Error('must discard exactly ' + pending.count)
+    for (const oid of discard) moveObject(s, oid, 'graveyard')
+    this._endCleanup()
+  }
+
+  // ---- triggered abilities --------------------------------------------
+
+  // Scan permanents on the battlefield for triggered abilities matching `event`
+  // about `subject`, and queue matches. They are put on the stack the next time
+  // a player would receive priority (see _putTriggersOnStack).
+  _fireTriggers(event, subject) {
+    const s = this.state
+    for (const oid of zone(s, 'battlefield')) {
+      const w = s.objects[oid]
+      for (const ab of w.behavior?.triggered || []) {
+        if (ab.trigger.event !== event) continue
+        if (ab.trigger.self) {
+          if (w.oid !== subject.oid) continue
+        } else if (!this._matchFilter(ab.trigger.filter, subject, w)) {
+          continue
+        }
+        s.pendingTriggers.push({
+          controller: w.controller,
+          sourceOid: w.oid,
+          subjectOid: subject.oid,
+          effect: ab.effect,
+          targets: null // targeted triggers arrive in a later milestone
+        })
+      }
+    }
+  }
+
+  _matchFilter(filter, subject, watcher) {
+    if (!filter) return true
+    if (filter.another && subject.oid === watcher.oid) return false
+    if (filter.type && !subject.chars.types.includes(filter.type)) return false
+    if (filter.controller === 'you' && subject.controller !== watcher.controller) return false
+    if (filter.controller === 'opponent' && subject.controller === watcher.controller) return false
+    return true
+  }
+
+  // ---- primitives ------------------------------------------------------
+
+  draw(pid, n = 1) {
+    const s = this.state
+    for (let i = 0; i < n; i++) {
+      const lib = zone(s, 'library', pid)
+      if (lib.length === 0) return // empty-library loss handled later
+      moveObject(s, lib[0], 'hand')
+    }
+  }
+
+  _otherPlayer(pid) {
+    return pid === 0 ? 1 : 0
+  }
+}
