@@ -151,6 +151,11 @@
 .board-card.selectable {
   cursor: pointer;
 }
+.board-card.activatable {
+  cursor: pointer;
+  outline: 2px solid #38c1b0; /* teal — an ability can be activated */
+  outline-offset: 1px;
+}
 .board-card.chosen {
   outline: 3px solid var(--accent);
 }

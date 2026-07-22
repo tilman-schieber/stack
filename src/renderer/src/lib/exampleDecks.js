@@ -8,16 +8,17 @@ export const EXAMPLE_DECKS = [
   {
     slug: 'example-red-aggro',
     name: 'Goblins (example)',
-    description: 'Mono-red goblin aggro — a lord that pumps the team, plus burn.',
+    description: 'Mono-red goblin aggro — a lord, sac-for-damage, firebreathing and burn.',
     cards: [
       [14, 'Mountain'],
+      [4, 'Mogg Fanatic'], // sacrifice: 1 damage (activated ability)
       [4, 'Raging Goblin'], // haste
       [4, 'Goblin Piker'], // vanilla 2/1
-      [4, 'Boggart Brute'], // menace 3/2
+      [3, 'Boggart Brute'], // menace 3/2
       [2, 'Goblin King'], // lord: other Goblins get +1/+1 (layer 7d)
+      [2, 'Shivan Dragon'], // {R}: +1/+0 firebreathing (activated ability)
       [4, 'Lightning Bolt'],
-      [4, 'Shock'],
-      [4, 'Lightning Strike']
+      [3, 'Lightning Strike']
     ]
   },
   {

@@ -124,13 +124,18 @@ export default function EnginePlayArea() {
   const wantsPlayer = targetSlot && (targetSlot.type === 'player' || targetSlot.type === 'any')
   const wantsSpell = targetSlot && targetSlot.type === 'spell'
 
+  // Submit a targeted action (spell cast or ability activation) once all its
+  // targets are chosen.
+  function submit(action, chosen) {
+    if (action.type === 'activate')
+      choose({ type: 'activate', oid: action.oid, ability: action.ability, targets: chosen })
+    else choose({ type: 'cast', oid: action.oid, targets: chosen })
+  }
+
   function addTarget(t) {
     const chosen = [...cast.chosen, t]
-    if (chosen.length >= cast.action.targets.length) {
-      choose({ type: 'cast', oid: cast.action.oid, targets: chosen })
-    } else {
-      setCast({ ...cast, chosen })
-    }
+    if (chosen.length >= cast.action.targets.length) submit(cast.action, chosen)
+    else setCast({ ...cast, chosen })
   }
 
   // ---- click dispatch ----
@@ -168,6 +173,15 @@ export default function EnginePlayArea() {
       if (wantsCreature && isCreature(card)) addTarget({ kind: 'object', oid: card.oid })
       return
     }
+    // Activate an ability of a permanent you control (instant speed).
+    if (kind === 'priority' && controllerPid === pending.player) {
+      const a = actionFor(card.oid)
+      if (a?.type === 'activate') {
+        if (a.needsTargets > 0) setCast({ action: a, chosen: [] })
+        else choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
+      }
+      return
+    }
     if (kind === 'declareAttackers' && controllerPid === view.activePlayer) {
       if (!pending.eligible.includes(card.oid)) return
       setAttackers((a) =>
@@ -198,6 +212,8 @@ export default function EnginePlayArea() {
     if (card.blocking) cls.push('blk')
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
     if (cast && wantsCreature && isCreature(card)) cls.push('targetable')
+    if (!cast && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
+      cls.push('activatable')
     if (kind === 'declareAttackers' && controllerPid === view.activePlayer && pending.eligible.includes(card.oid))
       cls.push('selectable', attackers.includes(card.oid) ? 'chosen' : '')
     if (kind === 'declareBlockers') {
