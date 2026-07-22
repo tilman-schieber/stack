@@ -335,5 +335,15 @@ export const SAMPLE_CARDS = {
     toughness: '1',
     colors: ['R'],
     oracle_text: 'Sacrifice Mogg Fanatic: It deals 1 damage to any target.'
+  },
+  'Flametongue Kavu': {
+    name: 'Flametongue Kavu',
+    mana_cost: '{2}{R}{R}',
+    type_line: 'Creature — Kavu',
+    power: '4',
+    toughness: '2',
+    colors: ['R'],
+    oracle_text:
+      'When Flametongue Kavu enters the battlefield, it deals 4 damage to target creature.'
   }
 }

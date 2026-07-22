@@ -120,6 +120,16 @@ export const BEHAVIORS = {
         effect: [{ op: 'dealDamage', amount: 1, to: 'target0' }]
       }
     ]
+  },
+  'Flametongue Kavu': {
+    // A targeted triggered ability — the target is chosen as it goes on the stack.
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        targets: [{ type: 'creature' }],
+        effect: [{ op: 'dealDamage', amount: 4, to: 'target0' }]
+      }
+    ]
   }
 }
 

@@ -171,6 +171,9 @@ export class GameEngine {
         case 'discard':
           this._applyDiscard(pending, answer)
           break
+        case 'chooseTargets':
+          this._applyChooseTargets(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -305,30 +308,64 @@ export class GameEngine {
     const s = this.state
     this._checkSBA()
     if (s.winner != null) return // _checkSBA set a gameOver decision
-    this._putTriggersOnStack()
+    s.priorityAfter = pid
+    this._advanceTriggerPlacement() // may pause for a target choice, else grants
+  }
+
+  // Put queued triggered abilities on the stack in APNAP order. Pauses with a
+  // `chooseTargets` decision when a trigger needs a target; resumes via
+  // _applyChooseTargets. When the queue is empty, grants priority.
+  _advanceTriggerPlacement() {
+    const s = this.state
+    // APNAP: active player's triggers first (they end up lowest on the stack).
+    s.pendingTriggers.sort(
+      (a, b) => (a.controller === s.activePlayer ? 0 : 1) - (b.controller === s.activePlayer ? 0 : 1)
+    )
+    while (s.pendingTriggers.length) {
+      const t = s.pendingTriggers.shift()
+      const spec = t.targetSpec || []
+      if (spec.length) {
+        if (!spec.every((sp) => this._legalTargetsExist(sp))) continue // fizzles: no legal target
+        s.pending = {
+          kind: 'chooseTargets',
+          player: t.controller,
+          sourceOid: t.sourceOid,
+          name: s.objects[t.sourceOid]?.printed?.name || 'Ability',
+          targets: spec,
+          _trigger: t
+        }
+        return
+      }
+      this._placeTrigger(t, [])
+    }
+    const pid = s.priorityAfter ?? s.activePlayer
     s.prio = { player: pid, passCount: 0 }
     s.pending = { kind: 'priority', player: pid, actions: this._legalActions(pid) }
   }
 
-  _putTriggersOnStack() {
+  _placeTrigger(t, chosenTargets) {
+    const ao = createAbility(this.state, {
+      controller: t.controller,
+      sourceOid: t.sourceOid,
+      effect: t.effect,
+      targets: chosenTargets
+    })
+    zone(this.state, 'stack').push(ao.oid)
+  }
+
+  _applyChooseTargets(pending, answer) {
+    this._placeTrigger(pending._trigger, answer?.targets || [])
+    this._advanceTriggerPlacement() // continue with the rest of the queue
+  }
+
+  // Is there at least one legal target for a target spec of the given type?
+  _legalTargetsExist(spec) {
     const s = this.state
-    if (s.pendingTriggers.length === 0) return
-    const active = s.activePlayer
-    // APNAP: active player's triggers go on the stack first (resolve last).
-    const ordered = [
-      ...s.pendingTriggers.filter((t) => t.controller === active),
-      ...s.pendingTriggers.filter((t) => t.controller !== active)
-    ]
-    s.pendingTriggers = []
-    for (const t of ordered) {
-      const ao = createAbility(s, {
-        controller: t.controller,
-        sourceOid: t.sourceOid,
-        effect: t.effect,
-        targets: t.targets
-      })
-      zone(s, 'stack').push(ao.oid)
-    }
+    if (spec.type === 'player' || spec.type === 'any') return true
+    if (spec.type === 'creature')
+      return objectsIn(s, 'battlefield').some((o) => o.chars.types.includes('Creature'))
+    if (spec.type === 'spell') return zone(s, 'stack').length > 0
+    return true
   }
 
   _resolvePriority(pending, answer) {
@@ -883,7 +920,7 @@ export class GameEngine {
           sourceOid: w.oid,
           subjectOid: subject.oid,
           effect: ab.effect,
-          targets: null // targeted triggers arrive in a later milestone
+          targetSpec: ab.targets || [] // targets chosen when placed on the stack
         })
       }
     }

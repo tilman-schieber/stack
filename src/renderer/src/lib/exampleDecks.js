@@ -11,14 +11,15 @@ export const EXAMPLE_DECKS = [
     description: 'Mono-red goblin aggro — a lord, sac-for-damage, firebreathing and burn.',
     cards: [
       [14, 'Mountain'],
-      [4, 'Mogg Fanatic'], // sacrifice: 1 damage (activated ability)
+      [3, 'Mogg Fanatic'], // sacrifice: 1 damage (activated ability)
       [4, 'Raging Goblin'], // haste
       [4, 'Goblin Piker'], // vanilla 2/1
       [3, 'Boggart Brute'], // menace 3/2
       [2, 'Goblin King'], // lord: other Goblins get +1/+1 (layer 7d)
+      [2, 'Flametongue Kavu'], // ETB: 4 damage to target creature (targeted trigger)
       [2, 'Shivan Dragon'], // {R}: +1/+0 firebreathing (activated ability)
       [4, 'Lightning Bolt'],
-      [3, 'Lightning Strike']
+      [2, 'Lightning Strike']
     ]
   },
   {

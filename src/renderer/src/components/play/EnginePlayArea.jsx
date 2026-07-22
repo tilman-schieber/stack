@@ -95,6 +95,7 @@ export default function EnginePlayArea() {
   const [pickBlocker, setPickBlocker] = useState(null)
   const [discardSel, setDiscardSel] = useState([])
   const [bottomSel, setBottomSel] = useState([]) // cards to put on the bottom (mulligan)
+  const [chooseSel, setChooseSel] = useState([]) // engine-initiated target choice
 
   useEffect(() => {
     setCast(null)
@@ -103,6 +104,7 @@ export default function EnginePlayArea() {
     setPickBlocker(null)
     setDiscardSel([])
     setBottomSel([])
+    setChooseSel([])
   }, [view])
 
   useEffect(() => {
@@ -119,13 +121,16 @@ export default function EnginePlayArea() {
     kind === 'priority' ? pending.actions?.find((a) => a.oid === oid) : null
 
   // ---- targeting helpers ----
-  const targetSlot = cast ? cast.action.targets[cast.chosen.length] : null
+  // Unifies player-initiated targeting (cast/activate) with engine-initiated
+  // target choices (a triggered ability's `chooseTargets` decision).
+  const engineTargeting = kind === 'chooseTargets'
+  const targeting = cast || (engineTargeting ? { targets: pending.targets, chosen: chooseSel } : null)
+  const targetSlot = targeting ? targeting.targets[targeting.chosen.length] : null
   const wantsCreature = targetSlot && (targetSlot.type === 'creature' || targetSlot.type === 'any')
   const wantsPlayer = targetSlot && (targetSlot.type === 'player' || targetSlot.type === 'any')
   const wantsSpell = targetSlot && targetSlot.type === 'spell'
 
-  // Submit a targeted action (spell cast or ability activation) once all its
-  // targets are chosen.
+  // Submit a player-initiated targeted action once all its targets are chosen.
   function submit(action, chosen) {
     if (action.type === 'activate')
       choose({ type: 'activate', oid: action.oid, ability: action.ability, targets: chosen })
@@ -133,9 +138,16 @@ export default function EnginePlayArea() {
   }
 
   function addTarget(t) {
-    const chosen = [...cast.chosen, t]
-    if (chosen.length >= cast.action.targets.length) submit(cast.action, chosen)
-    else setCast({ ...cast, chosen })
+    const chosen = [...targeting.chosen, t]
+    const done = chosen.length >= targeting.targets.length
+    if (cast) {
+      if (done) submit(cast.action, chosen)
+      else setCast({ ...cast, chosen })
+    } else {
+      // engine chooseTargets
+      if (done) choose({ targets: chosen })
+      else setChooseSel(chosen)
+    }
   }
 
   // ---- click dispatch ----
@@ -156,7 +168,7 @@ export default function EnginePlayArea() {
       )
       return
     }
-    if (cast) return
+    if (targeting) return
     if (kind === 'priority' && pid === pending.player) {
       const a = actionFor(card.oid)
       if (!a) return
@@ -169,7 +181,7 @@ export default function EnginePlayArea() {
   }
 
   function onBattlefieldCard(card, controllerPid) {
-    if (cast) {
+    if (targeting) {
       if (wantsCreature && isCreature(card)) addTarget({ kind: 'object', oid: card.oid })
       return
     }
@@ -198,11 +210,11 @@ export default function EnginePlayArea() {
   }
 
   function onPlayerTarget(pid) {
-    if (cast && wantsPlayer) addTarget({ kind: 'player', pid })
+    if (targeting && wantsPlayer) addTarget({ kind: 'player', pid })
   }
 
   function onStackItem(item) {
-    if (cast && wantsSpell) addTarget({ kind: 'spell', oid: item.oid })
+    if (targeting && wantsSpell) addTarget({ kind: 'spell', oid: item.oid })
   }
 
   // Class flags for a battlefield card given the current mode.
@@ -211,8 +223,8 @@ export default function EnginePlayArea() {
     if (card.attacking) cls.push('atk')
     if (card.blocking) cls.push('blk')
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
-    if (cast && wantsCreature && isCreature(card)) cls.push('targetable')
-    if (!cast && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
+    if (targeting && wantsCreature && isCreature(card)) cls.push('targetable')
+    if (!targeting && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
       cls.push('activatable')
     if (kind === 'declareAttackers' && controllerPid === view.activePlayer && pending.eligible.includes(card.oid))
       cls.push('selectable', attackers.includes(card.oid) ? 'chosen' : '')
@@ -260,9 +272,9 @@ export default function EnginePlayArea() {
           {view.priorityPlayer === p.id && <span className="eng-prio-dot" title="Has priority" />}
         </span>
         <span
-          className={'eng-life ' + (cast && wantsPlayer ? 'targetable' : '')}
+          className={'eng-life ' + (targeting && wantsPlayer ? 'targetable' : '')}
           onClick={() => onPlayerTarget(p.id)}
-          title={cast && wantsPlayer ? 'Target this player' : 'Life'}
+          title={targeting && wantsPlayer ? 'Target this player' : 'Life'}
         >
           ❤ {p.life}
         </span>
@@ -357,7 +369,7 @@ export default function EnginePlayArea() {
 
       <StackOverlay
         stack={view.stack}
-        targeting={!!(cast && wantsSpell)}
+        targeting={!!(targeting && wantsSpell)}
         onItem={onStackItem}
         onZoom={setZoom}
       />
@@ -371,7 +383,11 @@ export default function EnginePlayArea() {
       <Prompt
         view={view}
         pending={pending}
-        cast={cast}
+        targeting={
+          targeting
+            ? { targets: targeting.targets, chosen: targeting.chosen, name: cast ? null : pending.name, cancelable: !!cast }
+            : null
+        }
         attackers={attackers}
         blocks={blocks}
         discardSel={discardSel}
@@ -386,7 +402,7 @@ export default function EnginePlayArea() {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, cast, attackers, blocks, discardSel, bottomSel, error, choose, endGame, cancelCast }) {
+function Prompt({ view, pending, targeting, attackers, blocks, discardSel, bottomSel, error, choose, endGame, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
@@ -421,16 +437,19 @@ function Prompt({ view, pending, cast, attackers, blocks, discardSel, bottomSel,
         </button>
       </>
     )
-  } else if (cast) {
-    const slot = cast.action.targets[cast.chosen.length]
+  } else if (targeting) {
+    const slot = targeting.targets[targeting.chosen.length]
     body = (
       <>
         <span>
-          Choose target ({cast.chosen.length + 1}/{cast.action.targets.length}) — {slot.type}
+          {targeting.name ? <b>{targeting.name}</b> : 'Choose target'} — target{' '}
+          {targeting.chosen.length + 1}/{targeting.targets.length} ({slot.type})
         </span>
-        <button className="mini" onClick={cancelCast}>
-          Cancel
-        </button>
+        {targeting.cancelable && (
+          <button className="mini" onClick={cancelCast}>
+            Cancel
+          </button>
+        )}
       </>
     )
   } else if (kind === 'priority') {
