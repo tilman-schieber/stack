@@ -273,8 +273,9 @@ export class GameEngine {
       o.status.damage = 0
       o.status.markedDeath = false
     }
-    // "Until end of turn" effects wear off during cleanup (rule 514.2).
+    // "Until end of turn" effects and prevention shields wear off (rule 514.2).
     s.continuous = s.continuous.filter((e) => e.duration !== 'eot')
+    s.prevent = s.prevent.filter((e) => e.duration !== 'eot')
     this._emptyManaPools()
     // hand over the turn — each player's turn is numbered sequentially.
     s.activePlayer = this._otherPlayer(s.activePlayer)
@@ -538,6 +539,10 @@ export class GameEngine {
     o.controller = controller
     o.timestamp = ++this.state.tsCounter // for layer ordering (rule 613.7)
     if (o.printed.types.includes('Creature')) o.status.summoningSick = true
+    // Replacement effect: "enters with N counters" (applied before SBAs, so a
+    // 0/0 that enters with +1/+1 counters survives).
+    const ew = o.behavior?.entersWith
+    if (ew) o.status.counters[ew.counter] = (o.status.counters[ew.counter] || 0) + ew.amount
     this._fireTriggers('etb', o)
   }
 
@@ -602,6 +607,9 @@ export class GameEngine {
             })
           break
         }
+        case 'preventAllCombat':
+          s.prevent.push({ type: 'allCombat', duration: e.duration || 'eot' })
+          break
         default:
           throw new Error(`unknown effect op ${e.op}`)
       }
@@ -808,10 +816,10 @@ export class GameEngine {
       ).filter((b) => onBf(b) && s.objects[b].status.blocking === atkOid)
 
       if (!atk.status.blocked) {
-        this._dealDamage(atk, { player: def }, power) // unblocked
+        this._dealDamage(atk, { player: def }, power, { combat: true }) // unblocked
       } else if (blockers.length === 0) {
         // Blocked but all blockers gone: only trample leaks through.
-        if (this._hasKW(atk, 'Trample')) this._dealDamage(atk, { player: def }, power)
+        if (this._hasKW(atk, 'Trample')) this._dealDamage(atk, { player: def }, power, { combat: true })
       } else {
         let remaining = power
         const trample = this._hasKW(atk, 'Trample')
@@ -821,15 +829,15 @@ export class GameEngine {
           const lethal = deathtouch ? 1 : Math.max(1, b.chars.toughness - b.status.damage)
           if (trample) {
             const assign = Math.min(remaining, lethal)
-            this._dealDamage(atk, { obj: b }, assign)
+            this._dealDamage(atk, { obj: b }, assign, { combat: true })
             remaining -= assign
           } else {
-            this._dealDamage(atk, { obj: b }, remaining) // dump the rest here
+            this._dealDamage(atk, { obj: b }, remaining, { combat: true }) // dump the rest here
             remaining = 0
             break
           }
         }
-        if (trample && remaining > 0) this._dealDamage(atk, { player: def }, remaining)
+        if (trample && remaining > 0) this._dealDamage(atk, { player: def }, remaining, { combat: true })
       }
     }
 
@@ -837,14 +845,17 @@ export class GameEngine {
     for (const [blkOid, atkOid] of Object.entries(s.combat.blocks)) {
       const b = s.objects[blkOid]
       if (!onBf(blkOid) || !this._dealsInPass(b, pass)) continue
-      if (onBf(atkOid)) this._dealDamage(b, { obj: s.objects[atkOid] }, b.chars.power)
+      if (onBf(atkOid)) this._dealDamage(b, { obj: s.objects[atkOid] }, b.chars.power, { combat: true })
     }
   }
 
-  // Central damage application: marks deathtouch kills and grants lifelink.
-  _dealDamage(source, target, amount) {
+  // Central damage application: applies prevention, marks deathtouch kills, and
+  // grants lifelink.
+  _dealDamage(source, target, amount, opts = {}) {
     if (amount <= 0) return
     const s = this.state
+    // Prevention (rule 615): "prevent all combat damage this turn" (Fog, etc.).
+    if (opts.combat && s.prevent.some((p) => p.type === 'allCombat')) return
     if (target.player != null) {
       s.players[target.player].life -= amount
     } else if (target.obj) {

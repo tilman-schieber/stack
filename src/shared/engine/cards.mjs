@@ -345,5 +345,22 @@ export const SAMPLE_CARDS = {
     colors: ['R'],
     oracle_text:
       'When Flametongue Kavu enters the battlefield, it deals 4 damage to target creature.'
+  },
+  // Replacement / prevention cards.
+  'Servant of the Scale': {
+    name: 'Servant of the Scale',
+    mana_cost: '{1}{G}',
+    type_line: 'Creature — Elemental',
+    power: '0',
+    toughness: '0',
+    colors: ['G'],
+    oracle_text: 'Servant of the Scale enters the battlefield with two +1/+1 counters on it.'
+  },
+  Fog: {
+    name: 'Fog',
+    mana_cost: '{G}',
+    type_line: 'Instant',
+    colors: ['G'],
+    oracle_text: 'Prevent all combat damage that would be dealt this turn.'
   }
 }

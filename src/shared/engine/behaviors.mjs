@@ -130,6 +130,14 @@ export const BEHAVIORS = {
         effect: [{ op: 'dealDamage', amount: 4, to: 'target0' }]
       }
     ]
+  },
+  // Replacement: a 0/0 that enters with two +1/+1 counters (so it's a 2/2).
+  'Servant of the Scale': {
+    entersWith: { counter: '+1/+1', amount: 2 }
+  },
+  // Prevention shield until end of turn.
+  Fog: {
+    spell: { effect: [{ op: 'preventAllCombat', duration: 'eot' }] }
   }
 }
 
@@ -143,7 +151,8 @@ export function loadBehavior(printed) {
     spell: authored.spell || null,
     activated: authored.activated || [],
     triggered: authored.triggered || [],
-    static: authored.static || []
+    static: authored.static || [],
+    entersWith: authored.entersWith || null
   }
 }
 

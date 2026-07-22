@@ -27,14 +27,16 @@ export const EXAMPLE_DECKS = [
     name: 'Green Stompy (example)',
     description: 'Mono-green fatties with ramp, trample, reach — and a combat trick.',
     cards: [
-      [16, 'Forest'],
+      [15, 'Forest'],
       [4, 'Llanowar Elves'], // mana dork
-      [4, 'Grizzly Bears'], // vanilla 2/2
+      [3, 'Grizzly Bears'], // vanilla 2/2
       [3, 'Elvish Visionary'], // ETB: draw
-      [4, 'Rumbling Baloth'], // trample 4/4
+      [3, 'Servant of the Scale'], // enters with two +1/+1 counters (replacement)
+      [3, 'Rumbling Baloth'], // trample 4/4
       [2, 'Giant Spider'], // reach 2/4
-      [4, 'Craw Wurm'], // vanilla 6/4
-      [3, 'Giant Growth'] // +3/+3 until end of turn
+      [2, 'Craw Wurm'], // vanilla 6/4
+      [2, 'Giant Growth'], // +3/+3 until end of turn
+      [3, 'Fog'] // prevent all combat damage this turn
     ]
   },
   {

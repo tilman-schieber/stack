@@ -152,6 +152,7 @@ export function createState({ players, seed = 'stack' }) {
     pending: null,
     pendingTriggers: [], // triggered abilities waiting to go on the stack
     continuous: [], // floating continuous effects (until-end-of-turn pumps, etc.)
+    prevent: [], // active damage-prevention shields (rule 615)
     tsCounter: 0, // monotonic timestamps for layer ordering (rule 613)
     log: [],
     players: [],
