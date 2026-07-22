@@ -138,6 +138,30 @@ export const BEHAVIORS = {
   // Prevention shield until end of turn.
   Fog: {
     spell: { effect: [{ op: 'preventAllCombat', duration: 'eot' }] }
+  },
+  // Aura: cast targeting a creature; enters attached; static via 'attached' scope.
+  Rancor: {
+    enchant: { type: 'creature' },
+    static: [
+      {
+        affects: { scope: 'attached' },
+        modifyPT: { power: 2, toughness: 0 },
+        grantKeywords: ['Trample']
+      }
+    ]
+  },
+  // Equipment: enters free; sorcery-speed Equip ability attaches it.
+  Bonesplitter: {
+    static: [{ affects: { scope: 'attached' }, modifyPT: { power: 2, toughness: 0 } }],
+    activated: [
+      {
+        equip: true,
+        sorcerySpeed: true,
+        cost: { mana: '{1}' },
+        targets: [{ type: 'creature' }],
+        effect: [{ op: 'attach', to: 'target0' }]
+      }
+    ]
   }
 }
 
@@ -152,7 +176,8 @@ export function loadBehavior(printed) {
     activated: authored.activated || [],
     triggered: authored.triggered || [],
     static: authored.static || [],
-    entersWith: authored.entersWith || null
+    entersWith: authored.entersWith || null,
+    enchant: authored.enchant || null // Aura: what it can be attached to
   }
 }
 

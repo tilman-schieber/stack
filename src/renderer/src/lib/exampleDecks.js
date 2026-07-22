@@ -13,13 +13,14 @@ export const EXAMPLE_DECKS = [
       [14, 'Mountain'],
       [3, 'Mogg Fanatic'], // sacrifice: 1 damage (activated ability)
       [4, 'Raging Goblin'], // haste
-      [4, 'Goblin Piker'], // vanilla 2/1
+      [3, 'Goblin Piker'], // vanilla 2/1
       [3, 'Boggart Brute'], // menace 3/2
       [2, 'Goblin King'], // lord: other Goblins get +1/+1 (layer 7d)
       [2, 'Flametongue Kavu'], // ETB: 4 damage to target creature (targeted trigger)
       [2, 'Shivan Dragon'], // {R}: +1/+0 firebreathing (activated ability)
+      [2, 'Bonesplitter'], // Equipment: +2/+0, Equip {1}
       [4, 'Lightning Bolt'],
-      [2, 'Lightning Strike']
+      [1, 'Lightning Strike']
     ]
   },
   {
@@ -27,7 +28,7 @@ export const EXAMPLE_DECKS = [
     name: 'Green Stompy (example)',
     description: 'Mono-green fatties with ramp, trample, reach — and a combat trick.',
     cards: [
-      [15, 'Forest'],
+      [14, 'Forest'],
       [4, 'Llanowar Elves'], // mana dork
       [3, 'Grizzly Bears'], // vanilla 2/2
       [3, 'Elvish Visionary'], // ETB: draw
@@ -36,7 +37,8 @@ export const EXAMPLE_DECKS = [
       [2, 'Giant Spider'], // reach 2/4
       [2, 'Craw Wurm'], // vanilla 6/4
       [2, 'Giant Growth'], // +3/+3 until end of turn
-      [3, 'Fog'] // prevent all combat damage this turn
+      [2, 'Rancor'], // Aura: +2/+0 and trample
+      [2, 'Fog'] // prevent all combat damage this turn
     ]
   },
   {

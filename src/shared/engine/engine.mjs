@@ -418,9 +418,9 @@ export class GameEngine {
       const canCastNow = instantSpeed || sorcerySpeed
       if (canCastNow && this._canPay(pid, p.manaCost)) {
         const targets = this._spellTargets(o)
-        // A spell that targets a spell (e.g. a counter) is only castable when
-        // there is something on the stack to target.
-        if (targets.some((t) => t.type === 'spell') && zone(s, 'stack').length === 0) continue
+        // A targeted spell needs a legal target to be cast (rule 601.2c). This
+        // also gates counters (need a spell on the stack) and Auras (a creature).
+        if (targets.length && !targets.every((t) => this._legalTargetsExist(t))) continue
         actions.push({ type: 'cast', oid, targets, needsTargets: targets.length })
       }
     }
@@ -440,7 +440,10 @@ export class GameEngine {
   }
 
   _spellTargets(o) {
-    return o.behavior.spell?.targets || []
+    if (o.behavior.spell?.targets) return o.behavior.spell.targets
+    // An Aura targets the permanent it will be attached to as it is cast.
+    if (o.behavior.enchant) return [{ type: o.behavior.enchant.type }]
+    return []
   }
 
   // ---- performing actions ---------------------------------------------
@@ -484,6 +487,13 @@ export class GameEngine {
 
   // Can `pid` currently pay ability `ab`'s activation cost with source `o`?
   _canActivate(pid, o, ab) {
+    const s = this.state
+    // Sorcery-speed abilities (e.g. Equip) only when you'd be able to cast a sorcery.
+    if (ab.sorcerySpeed) {
+      if (pid !== s.activePlayer || !MAIN_STEPS.has(s.step) || zone(s, 'stack').length > 0)
+        return false
+    }
+    if (ab.targets?.length && !ab.targets.every((t) => this._legalTargetsExist(t))) return false
     const cost = ab.cost || {}
     if (cost.tap) {
       if (o.status.tapped) return false
@@ -543,6 +553,8 @@ export class GameEngine {
     // 0/0 that enters with +1/+1 counters survives).
     const ew = o.behavior?.entersWith
     if (ew) o.status.counters[ew.counter] = (o.status.counters[ew.counter] || 0) + ew.amount
+    // An Aura enters attached to the permanent it targeted as it was cast.
+    if (o.behavior?.enchant && o.targets?.[0]?.oid) o.status.attachedTo = o.targets[0].oid
     this._fireTriggers('etb', o)
   }
 
@@ -610,6 +622,13 @@ export class GameEngine {
         case 'preventAllCombat':
           s.prevent.push({ type: 'allCombat', duration: e.duration || 'eot' })
           break
+        case 'attach': {
+          // Move the ability's source (an Equipment) onto the target creature.
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && s.objects[source.sourceOid])
+            s.objects[source.sourceOid].status.attachedTo = t.obj.oid
+          break
+        }
         default:
           throw new Error(`unknown effect op ${e.op}`)
       }
@@ -893,6 +912,19 @@ export class GameEngine {
           this._fireTriggers('dies', o)
           moveObject(s, o.oid, 'graveyard')
           repeat = true
+        }
+      }
+      // Attachment SBAs (704.5m/n): an Aura not on a legal permanent goes to the
+      // graveyard; Equipment whose creature is gone simply unattaches.
+      for (const o of objectsIn(s, 'battlefield')) {
+        const gone = o.status.attachedTo && !s.zones.battlefield.includes(o.status.attachedTo)
+        if (o.behavior?.enchant) {
+          if (!o.status.attachedTo || gone) {
+            moveObject(s, o.oid, 'graveyard')
+            repeat = true
+          }
+        } else if (gone && o.behavior?.activated?.some((a) => a.equip)) {
+          o.status.attachedTo = null
         }
       }
     }

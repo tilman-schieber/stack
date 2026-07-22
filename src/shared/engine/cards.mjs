@@ -362,5 +362,20 @@ export const SAMPLE_CARDS = {
     type_line: 'Instant',
     colors: ['G'],
     oracle_text: 'Prevent all combat damage that would be dealt this turn.'
+  },
+  // Attachments: an Aura and an Equipment.
+  Rancor: {
+    name: 'Rancor',
+    mana_cost: '{G}',
+    type_line: 'Enchantment — Aura',
+    colors: ['G'],
+    oracle_text: 'Enchant creature. Enchanted creature gets +2/+0 and has trample.'
+  },
+  Bonesplitter: {
+    name: 'Bonesplitter',
+    mana_cost: '{1}',
+    type_line: 'Artifact — Equipment',
+    colors: [],
+    oracle_text: 'Equipped creature gets +2/+0. Equip {1}.'
   }
 }

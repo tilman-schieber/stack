@@ -26,6 +26,8 @@ function baseChars(o) {
 // Does a static ability's `affects` filter match target `o`, given its source?
 function matchStatic(affects, source, o) {
   if (!affects) return true
+  // An Aura/Equipment affects only the permanent it is attached to.
+  if (affects.scope === 'attached') return o.oid === source.status?.attachedTo
   if (affects.scope === 'creatures' && !o.chars.types.includes('Creature')) return false
   if (affects.scope === 'permanents' && o.chars.types.length === 0) return false
   if (affects.self && o.oid !== source.oid) return false

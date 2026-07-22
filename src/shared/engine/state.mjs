@@ -79,7 +79,8 @@ export function createObject(state, sf, owner) {
       attacking: false,
       blocked: false, // an attacker that was blocked (stays blocked if blockers leave)
       blocking: null, // oid of attacker being blocked
-      markedDeath: false // dealt damage by a deathtouch source
+      markedDeath: false, // dealt damage by a deathtouch source
+      attachedTo: null // oid of the permanent this Aura/Equipment is attached to
     },
     // spell-on-stack extras
     targets: null,
@@ -127,6 +128,7 @@ export function moveObject(state, oid, toName, { toTop = false } = {}) {
     obj.status.blocked = false
     obj.status.blocking = null
     obj.status.markedDeath = false
+    obj.status.attachedTo = null
     obj.controller = obj.owner
   }
 
