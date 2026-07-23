@@ -44,6 +44,21 @@ export const EXAMPLE_DECKS = [
     ]
   },
   {
+    slug: 'pauper-red-madness-burn',
+    name: 'Red Madness Burn (Pauper)',
+    description: 'Mono-red burn with prowess, madness (Fiery Temper) and flashback loot.',
+    cards: [
+      [16, 'Mountain'],
+      [4, 'Monastery Swiftspear'], // prowess, haste
+      [4, 'Mogg Fanatic'], // sacrifice: 1 damage
+      [2, 'Goblin Piker'], // vanilla beater
+      [4, 'Faithless Looting'], // draw 2 / discard 2 (madness enabler), flashback
+      [4, 'Fiery Temper'], // 3 damage, madness {R}
+      [2, 'Firebolt'], // 2 damage, flashback
+      [4, 'Lightning Bolt']
+    ]
+  },
+  {
     slug: 'example-white-skies',
     name: 'White Skies (example)',
     description: 'Anthem + evasion — Glorious Anthem and Levitation turn the team into fliers.',
