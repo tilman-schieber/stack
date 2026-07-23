@@ -10,6 +10,8 @@ function cardView(o) {
     oid: o.oid,
     name: o.chars?.name || o.printed?.name || '',
     cardId: o.cardId || null,
+    token: !!o.token,
+    tokenDef: o.tokenDef || null,
     types: o.chars?.types || [],
     power: o.chars?.power ?? null,
     toughness: o.chars?.toughness ?? null,

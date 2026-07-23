@@ -12,13 +12,14 @@ export const EXAMPLE_DECKS = [
     cards: [
       [14, 'Mountain'],
       [3, 'Mogg Fanatic'], // sacrifice: 1 damage (activated ability)
-      [4, 'Raging Goblin'], // haste
+      [3, 'Raging Goblin'], // haste
       [3, 'Goblin Piker'], // vanilla 2/1
       [3, 'Boggart Brute'], // menace 3/2
       [2, 'Goblin King'], // lord: other Goblins get +1/+1 (layer 7d)
       [2, 'Flametongue Kavu'], // ETB: 4 damage to target creature (targeted trigger)
+      [2, 'Dragon Fodder'], // create two 1/1 Goblin tokens
       [2, 'Shivan Dragon'], // {R}: +1/+0 firebreathing (activated ability)
-      [2, 'Bonesplitter'], // Equipment: +2/+0, Equip {1}
+      [1, 'Bonesplitter'], // Equipment: +2/+0, Equip {1}
       [4, 'Lightning Bolt'],
       [1, 'Lightning Strike']
     ]
@@ -48,11 +49,12 @@ export const EXAMPLE_DECKS = [
     cards: [
       [16, 'Plains'],
       [4, 'Soul Warden'], // ETB lifegain
-      [4, 'White Knight'], // first strike
-      [4, 'Fencing Ace'], // double strike
+      [4, 'White Knight'], // first strike, protection from black
+      [3, 'Fencing Ace'], // double strike
       [4, 'Serra Angel'], // flying, vigilance
-      [4, 'Glorious Anthem'], // creatures you control get +1/+1 (layer 7d)
-      [4, 'Levitation'] // creatures you control have flying (layer 6)
+      [3, 'Raise the Alarm'], // create two 1/1 Soldier tokens
+      [3, 'Glorious Anthem'], // creatures you control get +1/+1 (layer 7d)
+      [3, 'Levitation'] // creatures you control have flying (layer 6)
     ]
   },
   {

@@ -398,5 +398,20 @@ export const SAMPLE_CARDS = {
     power: '2',
     toughness: '2',
     colors: ['W']
+  },
+  // Token makers.
+  'Dragon Fodder': {
+    name: 'Dragon Fodder',
+    mana_cost: '{1}{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    oracle_text: 'Create two 1/1 red Goblin creature tokens.'
+  },
+  'Raise the Alarm': {
+    name: 'Raise the Alarm',
+    mana_cost: '{1}{W}',
+    type_line: 'Instant',
+    colors: ['W'],
+    oracle_text: 'Create two 1/1 white Soldier creature tokens.'
   }
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useEngineGame, PRIORITY_STEPS } from '../../store/engineGame.js'
-import TokenSearch from './TokenSearch.jsx'
+import { useTokenArt, tokenKey } from '../../store/tokenArt.js'
 import '../../play.css'
 import './engine.css'
 
@@ -54,7 +54,15 @@ function LandPile({ pile, onZoom }) {
 // One permanent / stack card, styled from play.css .board-card.
 // Right-click zooms (via onZoom); left-click acts (via onClick).
 function EngineCard({ card, className = '', onClick, onZoom, title }) {
-  const img = cardImg(card)
+  // Tokens have no fixed printing — resolve their art from the token-art store.
+  const key = card.token && card.tokenDef ? tokenKey(card.tokenDef) : null
+  const artId = useTokenArt((s) => (key ? s.cache[key]?.chosenId : null))
+  const ensure = useTokenArt((s) => s.ensure)
+  useEffect(() => {
+    if (key) ensure(card.tokenDef)
+  }, [key, ensure]) // eslint-disable-line react-hooks/exhaustive-deps
+  const imgId = card.token ? artId : card.cardId
+  const img = imgId ? `card://${imgId}` : null
   const pt = card.power != null ? `${card.power}/${card.toughness}` : null
   return (
     <div
@@ -116,8 +124,6 @@ export default function EnginePlayArea() {
   const toggleStop = useEngineGame((s) => s.toggleStop)
   const [showStops, setShowStops] = useState(false)
   const [zoom, setZoom] = useState(null) // card being previewed (right-click)
-  const [tokenFor, setTokenFor] = useState(null) // player id awaiting a token pick
-  const createToken = useEngineGame((s) => s.createToken)
 
   // Transient selection state; reset whenever the engine produces a new view
   // (i.e. a new decision point).
@@ -314,9 +320,6 @@ export default function EnginePlayArea() {
         <span className="eng-count" title="Cards in hand">
           ✋ {p.handCount}
         </span>
-        <button className="mini eng-token-btn" title="Create a token" onClick={() => setTokenFor(p.id)}>
-          ＋ Token
-        </button>
       </div>
 
       <div className="eng-body">
@@ -420,21 +423,8 @@ export default function EnginePlayArea() {
         onZoom={setZoom}
       />
 
-      {zoom && zoom.cardId && (
-        <div className="eng-zoom" onClick={() => setZoom(null)} title="Click to close">
-          <img src={`card://${zoom.cardId}`} alt={zoom.name} />
-        </div>
-      )}
+      {zoom && (zoom.cardId || zoom.token) && <ZoomOverlay card={zoom} onClose={() => setZoom(null)} />}
 
-      {tokenFor !== null && (
-        <TokenSearch
-          onPick={(card) => {
-            createToken(tokenFor, card)
-            setTokenFor(null)
-          }}
-          onClose={() => setTokenFor(null)}
-        />
-      )}
 
       <Prompt
         view={view}
@@ -579,6 +569,66 @@ function Prompt({ view, pending, targeting, attackers, blocks, discardSel, botto
     <div className="eng-prompt">
       {error && <span className="eng-error">{error}</span>}
       {body}
+    </div>
+  )
+}
+
+// Zoom preview. For tokens, arrows cycle through Scryfall art variants and the
+// choice is remembered for future tokens of the same type.
+function ZoomOverlay({ card, onClose }) {
+  const key = card.token && card.tokenDef ? tokenKey(card.tokenDef) : null
+  const entry = useTokenArt((s) => (key ? s.cache[key] : null))
+  const ensure = useTokenArt((s) => s.ensure)
+  const cycle = useTokenArt((s) => s.cycle)
+  useEffect(() => {
+    if (key) ensure(card.tokenDef)
+  }, [key, ensure]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const imgId = card.token ? entry?.chosenId : card.cardId
+  const prints = entry?.prints || []
+  const canCycle = card.token && prints.length > 1
+  const idx = imgId ? prints.findIndex((p) => p.id === imgId) : -1
+
+  return (
+    <div className="eng-zoom" onClick={onClose} title="Click to close">
+      {canCycle && (
+        <button
+          className="eng-zoom-arrow"
+          onClick={(e) => {
+            e.stopPropagation()
+            cycle(key, -1)
+          }}
+        >
+          ‹
+        </button>
+      )}
+      <div className="eng-zoom-body" onClick={(e) => card.token && e.stopPropagation()}>
+        {imgId ? (
+          <img src={`card://${imgId}`} alt={card.name} />
+        ) : (
+          <div className="eng-zoom-placeholder">
+            {card.token ? (entry?.loading ? 'Finding token art…' : 'No art found') : ''}
+          </div>
+        )}
+        {card.token && (
+          <div className="eng-zoom-hint">
+            {prints.length > 1
+              ? `${card.name} token — art ${idx + 1}/${prints.length} (use ‹ ›, remembered)`
+              : `${card.name} token`}
+          </div>
+        )}
+      </div>
+      {canCycle && (
+        <button
+          className="eng-zoom-arrow"
+          onClick={(e) => {
+            e.stopPropagation()
+            cycle(key, 1)
+          }}
+        >
+          ›
+        </button>
+      )}
     </div>
   )
 }

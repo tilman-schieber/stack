@@ -6,7 +6,7 @@
 //
 // Rule references are to MagicCompRules20260619.txt.
 
-import { createState, createAbility, zone, zoneKey, moveObject, objectsIn } from './state.mjs'
+import { createState, createObject, createAbility, zone, zoneKey, moveObject, objectsIn } from './state.mjs'
 import { manaAbilityColor } from './behaviors.mjs'
 import { isPermanent, parseManaCost } from './cards.mjs'
 import { recompute } from './layers.mjs'
@@ -542,6 +542,27 @@ export class GameEngine {
     }
   }
 
+  // Create one token from a token definition and put it onto the battlefield.
+  // The renderer resolves art from Scryfall by the token's characteristics.
+  _createToken(def, controller) {
+    const s = this.state
+    const types = def.types || ['Creature']
+    const sf = {
+      name: def.name,
+      type_line: `Token ${types.join(' ')}${def.subtypes?.length ? ' — ' + def.subtypes.join(' ') : ''}`,
+      power: def.power != null ? String(def.power) : undefined,
+      toughness: def.toughness != null ? String(def.toughness) : undefined,
+      colors: def.colors || [],
+      keywords: def.keywords || []
+    }
+    const o = createObject(s, sf, controller)
+    o.token = true
+    o.tokenDef = def
+    o.zoneName = 'battlefield'
+    s.zones.battlefield.push(o.oid)
+    this._enterBattlefield(o, controller)
+  }
+
   // Shared entry point for a permanent arriving on the battlefield: fix control,
   // apply summoning sickness to creatures, and fire enters-the-battlefield
   // triggers (both the object's own and other permanents watching).
@@ -627,6 +648,11 @@ export class GameEngine {
           const t = this._resolveTargetRef(source, e.to)
           if (t?.kind === 'object' && s.objects[source.sourceOid])
             s.objects[source.sourceOid].status.attachedTo = t.obj.oid
+          break
+        }
+        case 'createToken': {
+          const def = e.token
+          for (let i = 0; i < (e.count || 1); i++) this._createToken(def, source.controller)
           break
         }
         default:

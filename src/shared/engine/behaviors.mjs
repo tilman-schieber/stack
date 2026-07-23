@@ -162,6 +162,29 @@ export const BEHAVIORS = {
         effect: [{ op: 'attach', to: 'target0' }]
       }
     ]
+  },
+  // Token makers — art is resolved from Scryfall by the token's characteristics.
+  'Dragon Fodder': {
+    spell: {
+      effect: [
+        {
+          op: 'createToken',
+          count: 2,
+          token: { name: 'Goblin', types: ['Creature'], subtypes: ['Goblin'], colors: ['R'], power: 1, toughness: 1 }
+        }
+      ]
+    }
+  },
+  'Raise the Alarm': {
+    spell: {
+      effect: [
+        {
+          op: 'createToken',
+          count: 2,
+          token: { name: 'Soldier', types: ['Creature'], subtypes: ['Soldier'], colors: ['W'], power: 1, toughness: 1 }
+        }
+      ]
+    }
   }
 }
 

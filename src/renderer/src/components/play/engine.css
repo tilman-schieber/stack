@@ -373,6 +373,46 @@
   border-radius: 18px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
 }
+.eng-zoom-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.eng-zoom-placeholder {
+  width: 300px;
+  height: 80vh;
+  max-height: 420px;
+  border-radius: 18px;
+  background: var(--panel-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+.eng-zoom-hint {
+  color: #fff;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 6px 14px;
+  border-radius: 20px;
+}
+.eng-zoom-arrow {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  margin: 0 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 36px;
+  line-height: 1;
+  cursor: pointer;
+}
+.eng-zoom-arrow:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
 .eng-error {
   color: #e07070;
   font-size: 13px;
