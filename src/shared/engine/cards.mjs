@@ -502,5 +502,15 @@ export const SAMPLE_CARDS = {
     toughness: '1',
     colors: ['G'],
     oracle_text: '{1}{G}: Basking Rootwalla gets +2/+2 until end of turn. Activate only once each turn. Madness {0}'
+  },
+  'Faerie Seer': {
+    name: 'Faerie Seer',
+    mana_cost: '{U}',
+    type_line: 'Creature — Faerie',
+    power: '1',
+    toughness: '1',
+    colors: ['U'],
+    keywords: ['Flying'],
+    oracle_text: 'When Faerie Seer enters the battlefield, scry 2.'
   }
 }

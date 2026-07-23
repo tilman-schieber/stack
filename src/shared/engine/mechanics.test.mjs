@@ -157,5 +157,22 @@ section('affinity: Frogmite costs {1} less per artifact you control')
   assert(inZone(e, 0, 'battlefield', frog.oid), 'Frogmite resolved (paid the reduced cost)')
 }
 
+// --- ETB scry (resumable trigger resolution) --------------------------------
+
+section('ETB scry: Faerie Seer scries on entering')
+{
+  const e = makeEngine()
+  put(e, 0, 'Island', 'battlefield')
+  const seer = put(e, 0, 'Faerie Seer', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  e.choose({ type: 'cast', oid: seer.oid })
+  // resolve the creature -> ETB trigger -> resolve trigger -> scry pause
+  let g = 0
+  while (e.pending.kind === 'priority' && g++ < 8) e.choose({ type: 'pass' })
+  assert(e.pending.kind === 'scry', 'ETB triggered a scry (resumable ability resolution)')
+  e.choose({ toBottom: [], toTop: e.pending.cards.map((c) => c.oid) })
+  assert(inZone(e, 0, 'battlefield', seer.oid), 'Faerie Seer is on the battlefield after scrying')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)

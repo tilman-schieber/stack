@@ -44,6 +44,22 @@ export const EXAMPLE_DECKS = [
     ]
   },
   {
+    slug: 'pauper-blue-flyers',
+    name: 'Blue Flyers (Pauper)',
+    description: 'Mono-blue tempo — evasive fliers, counters and card selection (Faeries-lite).',
+    cards: [
+      [16, 'Island'],
+      [4, 'Faerie Seer'], // flying, ETB scry 2
+      [4, 'Wind Drake'], // 2/2 flying
+      [2, 'Snapping Drake'], // 3/3 flying
+      [4, 'Counterspell'],
+      [2, 'Cancel'],
+      [3, 'Preordain'],
+      [3, 'Serum Visions'],
+      [2, 'Divination']
+    ]
+  },
+  {
     slug: 'pauper-red-madness-burn',
     name: 'Red Madness Burn (Pauper)',
     description: 'Mono-red burn with prowess, madness (Fiery Temper) and flashback loot.',

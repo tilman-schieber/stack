@@ -214,6 +214,9 @@ export const BEHAVIORS = {
   'Serum Visions': {
     spell: { effect: [{ op: 'draw', amount: 1 }, { op: 'scry', amount: 2 }] }
   },
+  'Faerie Seer': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'scry', amount: 2 }] }]
+  },
   // Planeswalker: loyalty abilities are activated abilities with a loyalty cost.
   'Chandra Nalaar': {
     activated: [
