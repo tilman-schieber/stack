@@ -139,24 +139,43 @@
   margin: 0 22px; /* room for the rotation */
 }
 
-/* Land piles: same-named lands stacked compactly */
+/* Land piles: same-named lands shown as an offset stack of cards */
 .eng-land-pile {
   position: relative;
   flex: 0 0 auto;
 }
+.eng-land-pile.stacked {
+  margin-right: 16px;
+  margin-bottom: 16px;
+}
+.eng-land-pile .board-card {
+  position: relative;
+  z-index: 3;
+}
+/* Two offset "cards" behind the top one to read as a stack. */
+.eng-land-pile.stacked::before,
 .eng-land-pile.stacked::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 5px;
-  box-shadow: 4px 4px 0 -1px rgba(0, 0, 0, 0.45), 8px 8px 0 -2px rgba(0, 0, 0, 0.3);
+  background: #16171d;
+  border: 1px solid #000;
   pointer-events: none;
 }
+.eng-land-pile.stacked::before {
+  transform: translate(7px, 7px);
+  z-index: 1;
+}
+.eng-land-pile.stacked::after {
+  transform: translate(14px, 14px);
+  z-index: 0;
+}
 .eng-pile-badge {
+  z-index: 4;
   position: absolute;
   bottom: 4px;
   right: 4px;
-  z-index: 2;
   background: rgba(0, 0, 0, 0.82);
   color: #fff;
   font-size: 12px;
