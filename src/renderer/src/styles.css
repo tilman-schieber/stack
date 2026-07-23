@@ -471,6 +471,54 @@ code {
   font-size: 18px;
 }
 
+/* ---- Coverage ---- */
+.coverage {
+  margin-bottom: 8px;
+}
+.coverage-bar-wrap {
+  position: relative;
+  height: 22px;
+  background: var(--panel-2);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.coverage-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #c98a2e, #e0a52e);
+  transition: width 0.2s ease;
+}
+.coverage-bar.full {
+  background: linear-gradient(90deg, #3a9d5d, #4caf50);
+}
+.coverage-pct {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  line-height: 22px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.coverage-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+.coverage-list {
+  list-style: none;
+  padding: 6px 0 0;
+  margin: 0;
+}
+.coverage-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.coverage-name {
+  font-size: 13px;
+}
+
 /* ---- Stats ---- */
 .stats-panel h3 {
   font-size: 12px;

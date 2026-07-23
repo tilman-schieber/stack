@@ -1,12 +1,14 @@
 import React, { useMemo } from 'react'
 import { useDeck } from '../store/deck.js'
 import { manaValue, isLand, colorIdentity, primaryType, COLOR_META } from '../lib/cardUtils.js'
+import { deckCoverage } from '@engine/classify.mjs'
 
 // Deck statistics: totals, mana curve, color breakdown, type counts.
 // Rendered with plain CSS/SVG bars — no chart dependency.
 export default function DeckStats() {
   const entries = useDeck((s) => s.entries)
   const stats = useMemo(() => computeStats(entries), [entries])
+  const coverage = useMemo(() => deckCoverage(entries), [entries])
 
   if (entries.length === 0) return <div className="stats-panel muted">No stats yet.</div>
 
@@ -14,6 +16,36 @@ export default function DeckStats() {
 
   return (
     <div className="stats-panel">
+      <h3>Rules-engine coverage</h3>
+      <div className="coverage">
+        <div className="coverage-bar-wrap" title={`${coverage.supported}/${coverage.total} cards supported`}>
+          <div
+            className={'coverage-bar' + (coverage.pct === 100 ? ' full' : '')}
+            style={{ width: `${coverage.pct}%` }}
+          />
+          <span className="coverage-pct">{coverage.pct}%</span>
+        </div>
+        <p className="muted small">
+          {coverage.supported}/{coverage.total} cards play under the rules engine.
+          {coverage.pct === 100 && ' Fully playable in engine mode.'}
+        </p>
+        {coverage.unsupported.length > 0 && (
+          <details className="coverage-details">
+            <summary>{coverage.unsupported.length} unsupported card type(s)</summary>
+            <ul className="coverage-list">
+              {dedupe(coverage.unsupported).map((r) => (
+                <li key={r.name}>
+                  <span className="coverage-name">
+                    {r.qty}× {r.name}
+                  </span>
+                  <span className="muted small">{r.category}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
+
       <h3>Overview</h3>
       <div className="stat-row">
         <span>Total cards</span>
@@ -82,6 +114,17 @@ export default function DeckStats() {
       </div>
     </div>
   )
+}
+
+// Merge unsupported rows by name (summing quantities).
+function dedupe(rows) {
+  const map = new Map()
+  for (const r of rows) {
+    const cur = map.get(r.name)
+    if (cur) cur.qty += r.qty
+    else map.set(r.name, { ...r })
+  }
+  return [...map.values()]
 }
 
 function computeStats(entries) {

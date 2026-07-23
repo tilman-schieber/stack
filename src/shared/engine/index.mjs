@@ -11,3 +11,4 @@ export {
   BASIC_LAND_MANA
 } from './cards.mjs'
 export { loadBehavior, BEHAVIORS } from './behaviors.mjs'
+export { classifyCard, deckCoverage } from './classify.mjs'
