@@ -634,7 +634,7 @@ export class GameEngine {
           break
         case 'destroy': {
           const t = this._resolveTargetRef(source, e.to)
-          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield')
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield' && !this._hasKW(t.obj, 'Indestructible'))
             moveObject(s, t.obj.oid, 'graveyard')
           break
         }
@@ -765,6 +765,7 @@ export class GameEngine {
           o.controller === s.activePlayer &&
           o.chars.types.includes('Creature') &&
           !o.status.tapped &&
+          !this._hasKW(o, 'Defender') && // creatures with defender can't attack
           this._canTap(o) // haste overrides summoning sickness
       )
       .map((o) => o.oid)
@@ -1004,9 +1005,12 @@ export class GameEngine {
       for (const o of objectsIn(s, 'battlefield')) {
         if (!o.chars.types.includes('Creature')) continue
         const tough = o.chars.toughness
-        const lethal =
-          tough != null && (tough <= 0 || o.status.damage >= tough || o.status.markedDeath)
-        if (lethal) {
+        if (tough == null) continue
+        // 0 toughness is put into the graveyard (not destruction — indestructible
+        // does not save it); lethal/deathtouch damage is destruction (it does).
+        const destroyed =
+          (o.status.damage >= tough || o.status.markedDeath) && !this._hasKW(o, 'Indestructible')
+        if (tough <= 0 || destroyed) {
           // Fire dies triggers while the creature is still on the battlefield
           // (leaves-the-battlefield abilities "look back in time").
           this._fireTriggers('dies', o)

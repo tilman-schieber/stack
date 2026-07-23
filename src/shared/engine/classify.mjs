@@ -17,7 +17,10 @@ const SUPPORTED_KEYWORDS = new Set(
     'lifelink',
     'vigilance',
     'haste',
-    'menace'
+    'menace',
+    'indestructible',
+    'flash',
+    'defender'
   ]
 )
 

@@ -422,5 +422,14 @@ export const SAMPLE_CARDS = {
     colors: ['R'],
     oracle_text:
       '+1: Chandra Nalaar deals 1 damage to any target. −3: Chandra Nalaar deals 4 damage to target creature.'
+  },
+  'Darksteel Myr': {
+    name: 'Darksteel Myr',
+    mana_cost: '{2}',
+    type_line: 'Artifact Creature — Myr',
+    power: '0',
+    toughness: '1',
+    colors: [],
+    keywords: ['Indestructible']
   }
 }
