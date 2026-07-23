@@ -421,7 +421,8 @@ export class GameEngine {
         if (sorcerySpeed && player.landsPlayed < 1) actions.push({ type: 'playLand', oid })
         continue
       }
-      const instantSpeed = p.types.includes('Instant')
+      // Instants and cards with flash can be cast any time you have priority.
+      const instantSpeed = p.types.includes('Instant') || p.keywords.includes('Flash')
       const canCastNow = instantSpeed || sorcerySpeed
       if (canCastNow && this._canPay(pid, p.manaCost)) {
         const targets = this._spellTargets(o)

@@ -56,5 +56,21 @@ section('defender: cannot attack')
   assert(e.state.step === 'main2' || e.pending.kind !== 'declareAttackers', 'a defender is not offered as an attacker')
 }
 
+// --- Flash ------------------------------------------------------------------
+
+section('flash: a creature can be cast at instant speed')
+{
+  const e = makeEngine()
+  put(e, 0, 'Forest', 'battlefield')
+  put(e, 0, 'Forest', 'battlefield')
+  const viper = put(e, 0, 'Ambush Viper', 'hand') // Flash
+  const bears = put(e, 0, 'Grizzly Bears', 'hand') // no flash
+  // Begin-combat is not a main phase, so sorcery-speed casts aren't legal there.
+  advanceToPriorityAt(e, 'beginCombat')
+  const acts = e.pending.actions
+  assert(acts.some((a) => a.type === 'cast' && a.oid === viper.oid), 'flash creature castable outside a main phase')
+  assert(!acts.some((a) => a.type === 'cast' && a.oid === bears.oid), 'non-flash creature NOT castable outside a main phase')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)

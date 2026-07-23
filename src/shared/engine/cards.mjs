@@ -431,5 +431,14 @@ export const SAMPLE_CARDS = {
     toughness: '1',
     colors: [],
     keywords: ['Indestructible']
+  },
+  'Ambush Viper': {
+    name: 'Ambush Viper',
+    mana_cost: '{1}{G}',
+    type_line: 'Creature — Snake',
+    power: '2',
+    toughness: '1',
+    colors: ['G'],
+    keywords: ['Flash', 'Deathtouch']
   }
 }
