@@ -237,6 +237,24 @@
   align-items: center;
   justify-content: center;
 }
+.eng-loyalty {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  background: #2b2f3a;
+  color: #ffd479;
+  border: 1px solid #ffd479;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+.eng-ability-menu {
+  position: fixed;
+}
+.eng-ability-menu .eng-menu-cancel {
+  color: var(--muted);
+}
 
 /* Floating stack overlay (right-centre of the table) */
 .eng-stack-overlay {

@@ -185,6 +185,21 @@ export const BEHAVIORS = {
         }
       ]
     }
+  },
+  // Planeswalker: loyalty abilities are activated abilities with a loyalty cost.
+  'Chandra Nalaar': {
+    activated: [
+      {
+        loyalty: 1,
+        targets: [{ type: 'any' }],
+        effect: [{ op: 'dealDamage', amount: 1, to: 'target0' }]
+      },
+      {
+        loyalty: -3,
+        targets: [{ type: 'creature' }],
+        effect: [{ op: 'dealDamage', amount: 4, to: 'target0' }]
+      }
+    ]
   }
 }
 

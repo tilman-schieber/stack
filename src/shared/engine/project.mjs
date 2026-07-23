@@ -22,7 +22,8 @@ function cardView(o) {
     blocked: !!o.status?.blocked,
     blocking: o.status?.blocking || null,
     damage: o.status?.damage || 0,
-    counters: o.status?.counters || {}
+    counters: o.status?.counters || {},
+    loyalty: o.chars?.types?.includes('Planeswalker') ? o.status?.counters?.loyalty ?? null : null
   }
 }
 

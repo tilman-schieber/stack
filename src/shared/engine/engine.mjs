@@ -202,6 +202,7 @@ export class GameEngine {
           if (o.controller === s.activePlayer) {
             o.status.tapped = false
             o.status.summoningSick = false
+            o.status.loyaltyUsed = false // a planeswalker may act again this turn
           }
         }
         s.players[s.activePlayer].landsPlayed = 0
@@ -433,7 +434,14 @@ export class GameEngine {
         if (ab.manaAbility) return // mana abilities are paid automatically
         if (!this._canActivate(pid, o, ab)) return
         const targets = ab.targets || []
-        actions.push({ type: 'activate', oid, ability: i, targets, needsTargets: targets.length })
+        actions.push({
+          type: 'activate',
+          oid,
+          ability: i,
+          targets,
+          needsTargets: targets.length,
+          loyalty: ab.loyalty // present for planeswalker loyalty abilities
+        })
       })
     }
     return actions
@@ -488,6 +496,14 @@ export class GameEngine {
   // Can `pid` currently pay ability `ab`'s activation cost with source `o`?
   _canActivate(pid, o, ab) {
     const s = this.state
+    // Loyalty abilities: sorcery speed, one per planeswalker per turn, and you
+    // must have enough loyalty to pay an activation that removes loyalty.
+    if (ab.loyalty != null) {
+      if (pid !== s.activePlayer || !MAIN_STEPS.has(s.step) || zone(s, 'stack').length > 0)
+        return false
+      if (o.status.loyaltyUsed) return false
+      if (ab.loyalty < 0 && (o.status.counters.loyalty || 0) < -ab.loyalty) return false
+    }
     // Sorcery-speed abilities (e.g. Equip) only when you'd be able to cast a sorcery.
     if (ab.sorcerySpeed) {
       if (pid !== s.activePlayer || !MAIN_STEPS.has(s.step) || zone(s, 'stack').length > 0)
@@ -507,6 +523,10 @@ export class GameEngine {
 
   _payActivationCost(pid, o, ab) {
     const s = this.state
+    if (ab.loyalty != null) {
+      o.status.counters.loyalty = (o.status.counters.loyalty || 0) + ab.loyalty
+      o.status.loyaltyUsed = true
+    }
     const cost = ab.cost || {}
     if (cost.mana) this._pay(pid, parseManaCost(cost.mana))
     if (cost.tap) o.status.tapped = true
@@ -574,6 +594,8 @@ export class GameEngine {
     // 0/0 that enters with +1/+1 counters survives).
     const ew = o.behavior?.entersWith
     if (ew) o.status.counters[ew.counter] = (o.status.counters[ew.counter] || 0) + ew.amount
+    // A planeswalker enters with loyalty counters equal to its printed loyalty.
+    if (o.printed.loyalty != null) o.status.counters.loyalty = o.printed.loyalty
     // An Aura enters attached to the permanent it targeted as it was cast.
     if (o.behavior?.enchant && o.targets?.[0]?.oid) o.status.attachedTo = o.targets[0].oid
     this._fireTriggers('etb', o)
@@ -910,8 +932,13 @@ export class GameEngine {
       // Protection prevents damage from sources of the protected color.
       const prot = target.obj.chars?.protections || []
       if (prot.length && (source?.chars?.colors || []).some((c) => prot.includes(c))) return
-      target.obj.status.damage += amount
-      if (this._hasKW(source, 'Deathtouch')) target.obj.status.markedDeath = true
+      if (target.obj.chars?.types.includes('Planeswalker')) {
+        // Damage to a planeswalker removes that many loyalty counters (306.8).
+        target.obj.status.counters.loyalty = (target.obj.status.counters.loyalty || 0) - amount
+      } else {
+        target.obj.status.damage += amount
+        if (this._hasKW(source, 'Deathtouch')) target.obj.status.markedDeath = true
+      }
     }
     if (this._hasKW(source, 'Lifelink')) s.players[source.controller].life += amount
   }
@@ -931,6 +958,13 @@ export class GameEngine {
       for (const p of s.players) {
         if ((p.life <= 0 || p.loses) && s.winner == null) {
           s.winner = this._otherPlayer(p.id)
+        }
+      }
+      // A planeswalker with no loyalty is put into its owner's graveyard (704.5i).
+      for (const o of objectsIn(s, 'battlefield')) {
+        if (o.chars.types.includes('Planeswalker') && (o.status.counters.loyalty || 0) <= 0) {
+          moveObject(s, o.oid, 'graveyard')
+          repeat = true
         }
       }
       for (const o of objectsIn(s, 'battlefield')) {

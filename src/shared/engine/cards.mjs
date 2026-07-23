@@ -413,5 +413,14 @@ export const SAMPLE_CARDS = {
     type_line: 'Instant',
     colors: ['W'],
     oracle_text: 'Create two 1/1 white Soldier creature tokens.'
+  },
+  'Chandra Nalaar': {
+    name: 'Chandra Nalaar',
+    mana_cost: '{3}{R}{R}',
+    type_line: 'Legendary Planeswalker — Chandra',
+    loyalty: '6',
+    colors: ['R'],
+    oracle_text:
+      '+1: Chandra Nalaar deals 1 damage to any target. −3: Chandra Nalaar deals 4 damage to target creature.'
   }
 }

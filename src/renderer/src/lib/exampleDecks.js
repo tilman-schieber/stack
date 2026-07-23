@@ -11,7 +11,8 @@ export const EXAMPLE_DECKS = [
     description: 'Mono-red goblin aggro — a lord, sac-for-damage, firebreathing and burn.',
     cards: [
       [14, 'Mountain'],
-      [3, 'Mogg Fanatic'], // sacrifice: 1 damage (activated ability)
+      [2, 'Mogg Fanatic'], // sacrifice: 1 damage (activated ability)
+      [1, 'Chandra Nalaar'], // planeswalker: loyalty abilities
       [3, 'Raging Goblin'], // haste
       [3, 'Goblin Piker'], // vanilla 2/1
       [3, 'Boggart Brute'], // menace 3/2

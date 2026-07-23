@@ -77,6 +77,7 @@ function EngineCard({ card, className = '', onClick, onZoom, title }) {
       {img ? <img src={img} alt={card.name} draggable={false} /> : <div className="cardback" />}
       {isCreature(card) && pt && <span className="eng-pt">{pt}</span>}
       {card.damage > 0 && <span className="eng-dmg">{card.damage}</span>}
+      {card.loyalty != null && <span className="eng-loyalty">◆ {card.loyalty}</span>}
     </div>
   )
 }
@@ -124,6 +125,7 @@ export default function EnginePlayArea() {
   const toggleStop = useEngineGame((s) => s.toggleStop)
   const [showStops, setShowStops] = useState(false)
   const [zoom, setZoom] = useState(null) // card being previewed (right-click)
+  const [abilityMenu, setAbilityMenu] = useState(null) // { actions, x, y } picker
 
   // Transient selection state; reset whenever the engine produces a new view
   // (i.e. a new decision point).
@@ -143,6 +145,7 @@ export default function EnginePlayArea() {
     setDiscardSel([])
     setBottomSel([])
     setChooseSel([])
+    setAbilityMenu(null)
   }, [view])
 
   useEffect(() => {
@@ -188,6 +191,13 @@ export default function EnginePlayArea() {
     }
   }
 
+  // Begin an activated ability: enter targeting if it needs a target, else fire.
+  function startActivate(a) {
+    setAbilityMenu(null)
+    if (a.needsTargets > 0) setCast({ action: a, chosen: [] })
+    else choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
+  }
+
   // ---- click dispatch ----
   function onHandCard(card, pid) {
     if (kind === 'discard' && pid === pending.player) {
@@ -218,18 +228,17 @@ export default function EnginePlayArea() {
     }
   }
 
-  function onBattlefieldCard(card, controllerPid) {
+  function onBattlefieldCard(card, controllerPid, ev) {
     if (targeting) {
       if (wantsCreature && isCreature(card)) addTarget({ kind: 'object', oid: card.oid })
       return
     }
-    // Activate an ability of a permanent you control (instant speed).
+    // Activate an ability of a permanent you control. If it has more than one
+    // activatable ability (e.g. a planeswalker), pop a picker.
     if (kind === 'priority' && controllerPid === pending.player) {
-      const a = actionFor(card.oid)
-      if (a?.type === 'activate') {
-        if (a.needsTargets > 0) setCast({ action: a, chosen: [] })
-        else choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
-      }
+      const acts = pending.actions.filter((a) => a.type === 'activate' && a.oid === card.oid)
+      if (acts.length === 1) startActivate(acts[0])
+      else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
       return
     }
     if (kind === 'declareAttackers' && controllerPid === view.activePlayer) {
@@ -339,7 +348,7 @@ export default function EnginePlayArea() {
                       key={c.oid}
                       card={c}
                       className={bfClass(c, p.id)}
-                      onClick={() => onBattlefieldCard(c, p.id)}
+                      onClick={(ev) => onBattlefieldCard(c, p.id, ev)}
                       onZoom={setZoom}
                       title={c.name + (c.keywords?.length ? ' — ' + c.keywords.join(', ') : '')}
                     />
@@ -424,6 +433,20 @@ export default function EnginePlayArea() {
       />
 
       {zoom && (zoom.cardId || zoom.token) && <ZoomOverlay card={zoom} onClose={() => setZoom(null)} />}
+
+      {abilityMenu && (
+        <div className="card-menu eng-ability-menu" style={{ left: abilityMenu.x, top: abilityMenu.y }}>
+          <div className="menu-label">Choose ability</div>
+          {abilityMenu.actions.map((a, i) => (
+            <button key={i} onClick={() => startActivate(a)}>
+              {a.loyalty != null ? (a.loyalty > 0 ? `+${a.loyalty}` : `${a.loyalty}`) + ' loyalty' : 'Activate'}
+            </button>
+          ))}
+          <button className="eng-menu-cancel" onClick={() => setAbilityMenu(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
 
 
       <Prompt
