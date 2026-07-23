@@ -2,14 +2,10 @@ import React, { useEffect, useState } from 'react'
 import DeckBuilder from './views/DeckBuilder.jsx'
 import PlayArea from './views/PlayArea.jsx'
 import { useSettings } from './store/settings.js'
-import { useGame } from './store/game.js'
 
 export default function App() {
   const [view, setView] = useState('build')
   const loadSettings = useSettings((s) => s.load)
-  const started = useGame((s) => s.started)
-  const turn = useGame((s) => s.turn)
-  const activePlayer = useGame((s) => s.players[s.activePlayer]?.name)
 
   useEffect(() => {
     loadSettings()
@@ -27,11 +23,6 @@ export default function App() {
             Play
           </button>
         </nav>
-        {view === 'play' && started && (
-          <div className="topturn">
-            Turn {turn} · {activePlayer}
-          </div>
-        )}
       </header>
       <div className="viewbody">
         {view === 'build' ? <DeckBuilder /> : <PlayArea />}
