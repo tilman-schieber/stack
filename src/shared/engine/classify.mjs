@@ -28,7 +28,10 @@ const SUPPORTED_KEYWORDS = new Set(
 // Is a permanent vanilla (no rules text) or French-vanilla (only supported
 // keyword abilities)? Reminder text in parentheses is ignored.
 function isVanillaOrKeyword(sf) {
-  const text = (sf.oracle_text || '').replace(/\s*\([^)]*\)/g, '').trim()
+  const text = (sf.oracle_text || '')
+    .replace(/\s*\([^)]*\)/g, '') // reminder text
+    .replace(/affinity for artifacts/gi, '') // cost reduction we model
+    .trim()
   if (!text) return true
   const tokens = text
     .split(/[\n,]+/)

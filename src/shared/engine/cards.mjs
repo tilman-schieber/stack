@@ -463,5 +463,14 @@ export const SAMPLE_CARDS = {
     toughness: '2',
     colors: ['R'],
     keywords: ['Haste', 'Prowess']
+  },
+  Frogmite: {
+    name: 'Frogmite',
+    mana_cost: '{4}',
+    type_line: 'Artifact Creature — Frog',
+    power: '2',
+    toughness: '2',
+    colors: [],
+    oracle_text: 'Affinity for artifacts (This spell costs {1} less to cast for each artifact you control.)'
   }
 }

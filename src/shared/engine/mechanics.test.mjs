@@ -138,5 +138,24 @@ section('prowess: does NOT trigger on a creature spell')
   assert(`${swift.chars.power}/${swift.chars.toughness}` === '1/2', 'no prowess bump from a creature spell')
 }
 
+// --- Affinity for artifacts -------------------------------------------------
+
+section('affinity: Frogmite costs {1} less per artifact you control')
+{
+  const e = makeEngine()
+  put(e, 0, 'Darksteel Myr', 'battlefield') // 3 artifacts
+  put(e, 0, 'Darksteel Myr', 'battlefield')
+  put(e, 0, 'Darksteel Myr', 'battlefield')
+  put(e, 0, 'Island', 'battlefield') // only 1 mana available
+  const frog = put(e, 0, 'Frogmite', 'hand') // {4}, reduced to {1}
+  advanceToPriorityAt(e, 'main1')
+  const acts = e.pending.actions
+  assert(acts.some((a) => a.type === 'cast' && a.oid === frog.oid), 'Frogmite castable for 1 with 3 artifacts out')
+  e.choose({ type: 'cast', oid: frog.oid })
+  e.choose({ type: 'pass' })
+  if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+  assert(inZone(e, 0, 'battlefield', frog.oid), 'Frogmite resolved (paid the reduced cost)')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)

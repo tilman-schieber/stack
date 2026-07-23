@@ -453,7 +453,7 @@ export class GameEngine {
       // Instants and cards with flash can be cast any time you have priority.
       const instantSpeed = p.types.includes('Instant') || p.keywords.includes('Flash')
       const canCastNow = instantSpeed || sorcerySpeed
-      if (canCastNow && this._canPay(pid, p.manaCost)) {
+      if (canCastNow && this._canPay(pid, this._effectiveCost(pid, o))) {
         const targets = this._spellTargets(o)
         // A targeted spell needs a legal target to be cast (rule 601.2c). This
         // also gates counters (need a spell on the stack) and Auras (a creature).
@@ -503,7 +503,7 @@ export class GameEngine {
       }
       case 'cast': {
         const o = s.objects[action.oid]
-        this._pay(pid, o.printed.manaCost)
+        this._pay(pid, this._effectiveCost(pid, o))
         moveObject(s, action.oid, 'stack') // clears transient status/controller
         o.controller = pid
         o.targets = action.targets || []
@@ -842,6 +842,18 @@ export class GameEngine {
     if (rest.length < generic) return null
     for (let i = 0; i < generic; i++) chosen.push(rest[i])
     return chosen
+  }
+
+  // The mana cost to cast `o`, after cost reductions (affinity for artifacts).
+  _effectiveCost(pid, o) {
+    const cost = { ...o.printed.manaCost }
+    if (/affinity for artifacts/i.test(o.printed.oracleText || '')) {
+      const artifacts = objectsIn(this.state, 'battlefield').filter(
+        (x) => x.controller === pid && x.chars.types.includes('Artifact')
+      ).length
+      cost.generic = Math.max(0, (cost.generic || 0) - artifacts)
+    }
+    return cost
   }
 
   _canPay(pid, cost) {
