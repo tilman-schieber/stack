@@ -115,27 +115,54 @@
   overflow: auto;
 }
 .eng-lands,
-.eng-creatures {
+.eng-creatures,
+.eng-others {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-content: flex-start;
 }
 .eng-creatures {
   flex: 1 1 auto;
 }
 .eng-rail {
-  width: 108px;
+  width: 122px;
 }
 
 /* Board card sizing in engine mode */
 .play-area.engine .board-card {
-  width: 84px;
-  height: 117px;
+  width: 108px;
+  height: 151px;
   cursor: default;
 }
 .play-area.engine .board-card.tapped {
-  margin: 0 20px; /* room for the rotation */
+  margin: 0 22px; /* room for the rotation */
+}
+
+/* Land piles: same-named lands stacked compactly */
+.eng-land-pile {
+  position: relative;
+  flex: 0 0 auto;
+}
+.eng-land-pile.stacked::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+  box-shadow: 4px 4px 0 -1px rgba(0, 0, 0, 0.45), 8px 8px 0 -2px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+.eng-pile-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.82);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 1px 6px;
 }
 .board-card.atk {
   outline: 3px solid #e0a52e;

@@ -32,6 +32,17 @@ export function manaValue(cost) {
   return (cost.generic || 0) + cost.W + cost.U + cost.B + cost.R + cost.G + cost.C
 }
 
+const COLOR_WORD = { white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G' }
+
+// Parse "protection from <color>" out of oracle text → ['B', …].
+export function parseProtections(text) {
+  const out = []
+  const re = /protection from (white|blue|black|red|green)/gi
+  let m
+  while ((m = re.exec(text || ''))) out.push(COLOR_WORD[m[1].toLowerCase()])
+  return out
+}
+
 // "Basic Land — Forest" → { supertypes:['Basic'], types:['Land'], subtypes:['Forest'] }
 export function parseTypeLine(line) {
   const out = { supertypes: [], types: [], subtypes: [] }
@@ -64,6 +75,7 @@ export function printedFromScryfall(sf) {
     power,
     toughness,
     loyalty: sf.loyalty != null ? Number(sf.loyalty) : null,
+    protections: parseProtections(sf.oracle_text),
     oracleText: sf.oracle_text || ''
   }
 }
@@ -171,7 +183,8 @@ export const SAMPLE_CARDS = {
     power: '2',
     toughness: '2',
     colors: ['W'],
-    keywords: ['First strike']
+    keywords: ['First strike'],
+    oracle_text: 'First strike, protection from black'
   },
   'Fencing Ace': {
     name: 'Fencing Ace',

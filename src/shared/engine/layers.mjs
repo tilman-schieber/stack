@@ -18,6 +18,7 @@ function baseChars(o) {
     supertypes: [...p.supertypes],
     colors: [...p.colors],
     keywords: [...p.keywords],
+    protections: [...(p.protections || [])],
     power: p.power,
     toughness: p.toughness
   }

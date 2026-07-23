@@ -752,10 +752,13 @@ export class GameEngine {
       .map((o) => o.oid)
   }
 
-  // Can `blocker` legally block `attacker`? (Evasion: flyers need flying/reach.)
+  // Can `blocker` legally block `attacker`? Evasion (flyers need flying/reach)
+  // and protection (a creature can't be blocked by the colors it's protected from).
   _canBlock(blocker, attacker) {
     if (this._hasKW(attacker, 'Flying') && !this._hasKW(blocker, 'Flying') && !this._hasKW(blocker, 'Reach'))
       return false
+    const prot = attacker.chars.protections || []
+    if (prot.length && (blocker.chars.colors || []).some((c) => prot.includes(c))) return false
     return true
   }
 
@@ -878,6 +881,9 @@ export class GameEngine {
     if (target.player != null) {
       s.players[target.player].life -= amount
     } else if (target.obj) {
+      // Protection prevents damage from sources of the protected color.
+      const prot = target.obj.chars?.protections || []
+      if (prot.length && (source?.chars?.colors || []).some((c) => prot.includes(c))) return
       target.obj.status.damage += amount
       if (this._hasKW(source, 'Deathtouch')) target.obj.status.markedDeath = true
     }

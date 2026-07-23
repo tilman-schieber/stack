@@ -21,6 +21,35 @@ const STEP_LABEL = {
 
 const cardImg = (c) => (c.cardId ? `card://${c.cardId}` : null)
 const isCreature = (c) => c.types?.includes('Creature')
+const isLand = (c) => c.types?.includes('Land')
+
+// A stack of same-named lands, shown compactly with an untapped/total badge.
+function LandPile({ pile, onZoom }) {
+  const untapped = pile.cards.filter((c) => !c.tapped).length
+  const total = pile.cards.length
+  const rep = pile.cards.find((c) => !c.tapped) || pile.cards[0]
+  return (
+    <div
+      className={'eng-land-pile' + (total > 1 ? ' stacked' : '')}
+      title={`${pile.name} — ${untapped}/${total} untapped`}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        if (rep.cardId) onZoom(rep)
+      }}
+    >
+      <div className="board-card">
+        {rep.cardId ? (
+          <img src={cardImg(rep)} alt={pile.name} draggable={false} />
+        ) : (
+          <div className="cardback" />
+        )}
+      </div>
+      <span className="eng-pile-badge">
+        {untapped}/{total}
+      </span>
+    </div>
+  )
+}
 
 // One permanent / stack card, styled from play.css .board-card.
 // Right-click zooms (via onZoom); left-click acts (via onClick).
@@ -294,26 +323,15 @@ export default function EnginePlayArea() {
         <div className="battlefield eng-battlefield" data-player={p.id}>
           {p.battlefield.length === 0 && <div className="bf-hint">No permanents</div>}
           {(() => {
-            const lands = (
-              <div className="eng-lands" key="lands">
-                {p.battlefield
-                  .filter((c) => !isCreature(c))
-                  .map((c) => (
-                    <EngineCard
-                      key={c.oid}
-                      card={c}
-                      className={bfClass(c, p.id)}
-                      onClick={() => onBattlefieldCard(c, p.id)}
-                      onZoom={setZoom}
-                    />
-                  ))}
-              </div>
-            )
-            const creatures = (
-              <div className="eng-creatures" key="creatures">
-                {p.battlefield
-                  .filter(isCreature)
-                  .map((c) => (
+            const byName = (a, b) => a.name.localeCompare(b.name)
+            const creatures = p.battlefield.filter(isCreature).sort(byName)
+            const lands = p.battlefield.filter(isLand).sort(byName)
+            const others = p.battlefield.filter((c) => !isCreature(c) && !isLand(c)).sort(byName)
+
+            const cardRow = (list, cls, key) =>
+              list.length ? (
+                <div className={cls} key={key}>
+                  {list.map((c) => (
                     <EngineCard
                       key={c.oid}
                       card={c}
@@ -323,11 +341,33 @@ export default function EnginePlayArea() {
                       title={c.name + (c.keywords?.length ? ' — ' + c.keywords.join(', ') : '')}
                     />
                   ))}
+                </div>
+              ) : null
+
+            // Lands stacked into per-name piles.
+            const piles = []
+            for (const c of lands) {
+              const p0 = piles.find((x) => x.name === c.name)
+              if (p0) p0.cards.push(c)
+              else piles.push({ name: c.name, cards: [c] })
+            }
+            const landsEl = lands.length ? (
+              <div className="eng-lands" key="lands">
+                {piles.map((pile) => (
+                  <LandPile key={pile.name} pile={pile} onZoom={setZoom} />
+                ))}
               </div>
-            )
-            // Lands sit toward each player's outer edge (creatures front the
-            // centre line): bottom seat = creatures then lands; top = reversed.
-            return place === 'bottom' ? [creatures, lands] : [lands, creatures]
+            ) : null
+
+            const creaturesEl = cardRow(creatures, 'eng-creatures', 'creatures')
+            const othersEl = cardRow(others, 'eng-others', 'others')
+            // Creatures front the centre line; other permanents behind them;
+            // lands at the player's outer edge.
+            const bands =
+              place === 'bottom'
+                ? [creaturesEl, othersEl, landsEl]
+                : [landsEl, othersEl, creaturesEl]
+            return bands.filter(Boolean)
           })()}
         </div>
         <div className="right-rail eng-rail">
