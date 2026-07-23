@@ -101,5 +101,42 @@ section('scry: Preordain — pause to scry 2, then draw')
   assert(inZone(e, 0, 'graveyard', pre.oid), 'Preordain went to the graveyard')
 }
 
+// --- Prowess ----------------------------------------------------------------
+
+section('prowess: +1/+1 until EOT when you cast a noncreature spell')
+{
+  const e = makeEngine()
+  const swift = put(e, 0, 'Monastery Swiftspear', 'battlefield', { summoningSick: false }) // 1/2
+  put(e, 0, 'Mountain', 'battlefield')
+  const bolt = put(e, 0, 'Lightning Bolt', 'hand')
+  advanceToPriorityAt(e, 'main1')
+
+  e.choose({ type: 'cast', oid: bolt.oid, targets: [{ kind: 'player', pid: 1 }] })
+  // prowess trigger goes on the stack above the bolt; resolve both
+  e.choose({ type: 'pass' })
+  if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+  if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+  if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+  const { recompute } = await import('./layers.mjs')
+  recompute(e.state)
+  assert(`${swift.chars.power}/${swift.chars.toughness}` === '2/3', 'Swiftspear is 2/3 after a noncreature spell')
+}
+
+section('prowess: does NOT trigger on a creature spell')
+{
+  const e = makeEngine()
+  const swift = put(e, 0, 'Monastery Swiftspear', 'battlefield', { summoningSick: false })
+  put(e, 0, 'Forest', 'battlefield')
+  put(e, 0, 'Forest', 'battlefield')
+  const bears = put(e, 0, 'Grizzly Bears', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  e.choose({ type: 'cast', oid: bears.oid })
+  e.choose({ type: 'pass' })
+  if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+  const { recompute: rc } = await import('./layers.mjs')
+  rc(e.state)
+  assert(`${swift.chars.power}/${swift.chars.toughness}` === '1/2', 'no prowess bump from a creature spell')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)

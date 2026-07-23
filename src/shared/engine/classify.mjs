@@ -20,7 +20,8 @@ const SUPPORTED_KEYWORDS = new Set(
     'menace',
     'indestructible',
     'flash',
-    'defender'
+    'defender',
+    'prowess'
   ]
 )
 

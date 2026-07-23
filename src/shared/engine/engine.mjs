@@ -508,6 +508,7 @@ export class GameEngine {
         o.controller = pid
         o.targets = action.targets || []
         o.spell = o.behavior.spell
+        this._fireTriggers('castSpell', o) // prowess etc.
         break
       }
       case 'activate': {
@@ -1209,6 +1210,7 @@ export class GameEngine {
     if (!filter) return true
     if (filter.another && subject.oid === watcher.oid) return false
     if (filter.type && !subject.chars.types.includes(filter.type)) return false
+    if (filter.noncreature && subject.chars.types.includes('Creature')) return false
     if (filter.controller === 'you' && subject.controller !== watcher.controller) return false
     if (filter.controller === 'opponent' && subject.controller === watcher.controller) return false
     return true

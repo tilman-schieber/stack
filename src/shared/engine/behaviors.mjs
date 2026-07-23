@@ -215,10 +215,20 @@ export const BEHAVIORS = {
 // (impl:"oracle:<id>") arrive with later milestones.
 export function loadBehavior(printed) {
   const authored = BEHAVIORS[printed.name] || {}
+  const triggered = [...(authored.triggered || [])]
+
+  // Keyword expansion: Prowess is derived from the keyword line.
+  if ((printed.keywords || []).includes('Prowess')) {
+    triggered.push({
+      trigger: { event: 'castSpell', filter: { controller: 'you', noncreature: true } },
+      effect: [{ op: 'pump', to: 'self', power: 1, toughness: 1, duration: 'eot' }]
+    })
+  }
+
   return {
     spell: authored.spell || null,
     activated: authored.activated || [],
-    triggered: authored.triggered || [],
+    triggered,
     static: authored.static || [],
     entersWith: authored.entersWith || null,
     enchant: authored.enchant || null // Aura: what it can be attached to

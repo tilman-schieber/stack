@@ -454,5 +454,14 @@ export const SAMPLE_CARDS = {
     type_line: 'Sorcery',
     colors: ['U'],
     oracle_text: 'Draw a card, then scry 2.'
+  },
+  'Monastery Swiftspear': {
+    name: 'Monastery Swiftspear',
+    mana_cost: '{R}',
+    type_line: 'Creature — Human Monk',
+    power: '1',
+    toughness: '2',
+    colors: ['R'],
+    keywords: ['Haste', 'Prowess']
   }
 }
