@@ -897,7 +897,7 @@ export class GameEngine {
       repeat = false
       recompute(s) // fresh characteristics (layers) before checking SBAs
       for (const p of s.players) {
-        if (p.life <= 0 && s.winner == null) {
+        if ((p.life <= 0 || p.loses) && s.winner == null) {
           s.winner = this._otherPlayer(p.id)
         }
       }
@@ -925,6 +925,35 @@ export class GameEngine {
           }
         } else if (gone && o.behavior?.activated?.some((a) => a.equip)) {
           o.status.attachedTo = null
+        }
+      }
+      // Legend rule (704.5j): keep only the newest of same-named legendary
+      // permanents a player controls.
+      const legends = {}
+      for (const o of objectsIn(s, 'battlefield')) {
+        if (!o.chars.supertypes.includes('Legendary')) continue
+        ;(legends[o.controller + '|' + o.chars.name] ||= []).push(o)
+      }
+      for (const group of Object.values(legends)) {
+        if (group.length < 2) continue
+        group.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        for (const o of group.slice(1)) {
+          this._fireTriggers('dies', o)
+          moveObject(s, o.oid, 'graveyard')
+          repeat = true
+        }
+      }
+      // +1/+1 and -1/-1 counters annihilate in pairs (704.5q).
+      for (const o of objectsIn(s, 'battlefield')) {
+        const plus = o.status.counters['+1/+1'] || 0
+        const minus = o.status.counters['-1/-1'] || 0
+        const k = Math.min(plus, minus)
+        if (k > 0) {
+          if (plus - k > 0) o.status.counters['+1/+1'] = plus - k
+          else delete o.status.counters['+1/+1']
+          if (minus - k > 0) o.status.counters['-1/-1'] = minus - k
+          else delete o.status.counters['-1/-1']
+          repeat = true
         }
       }
     }
@@ -984,7 +1013,10 @@ export class GameEngine {
     const s = this.state
     for (let i = 0; i < n; i++) {
       const lib = zone(s, 'library', pid)
-      if (lib.length === 0) return // empty-library loss handled later
+      if (lib.length === 0) {
+        s.players[pid].loses = true // drew from an empty library (SBA, rule 704.5c)
+        continue
+      }
       moveObject(s, lib[0], 'hand')
     }
   }

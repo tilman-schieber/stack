@@ -377,5 +377,13 @@ export const SAMPLE_CARDS = {
     type_line: 'Artifact — Equipment',
     colors: [],
     oracle_text: 'Equipped creature gets +2/+0. Equip {1}.'
+  },
+  'Isamaru, Hound of Konda': {
+    name: 'Isamaru, Hound of Konda',
+    mana_cost: '{W}',
+    type_line: 'Legendary Creature — Hound Dog',
+    power: '2',
+    toughness: '2',
+    colors: ['W']
   }
 }
