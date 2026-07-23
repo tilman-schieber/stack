@@ -77,6 +77,7 @@ export function createObject(state, sf, owner) {
       damage: 0,
       counters: {},
       attacking: false,
+      attackingTarget: null, // { player: pid } or { planeswalker: oid }
       blocked: false, // an attacker that was blocked (stays blocked if blockers leave)
       blocking: null, // oid of attacker being blocked
       markedDeath: false, // dealt damage by a deathtouch source
@@ -125,6 +126,7 @@ export function moveObject(state, oid, toName, { toTop = false } = {}) {
     obj.status.damage = 0
     obj.status.counters = {}
     obj.status.attacking = false
+    obj.status.attackingTarget = null
     obj.status.blocked = false
     obj.status.blocking = null
     obj.status.markedDeath = false

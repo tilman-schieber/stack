@@ -130,7 +130,8 @@ export default function EnginePlayArea() {
   // Transient selection state; reset whenever the engine produces a new view
   // (i.e. a new decision point).
   const [cast, setCast] = useState(null) // { action, chosen: [] }
-  const [attackers, setAttackers] = useState([])
+  const [attackers, setAttackers] = useState({}) // attackerOid -> defender descriptor
+  const [attackTarget, setAttackTarget] = useState(null) // current defender for new attackers
   const [blocks, setBlocks] = useState({}) // blockerOid -> attackerOid
   const [pickBlocker, setPickBlocker] = useState(null)
   const [discardSel, setDiscardSel] = useState([])
@@ -139,7 +140,8 @@ export default function EnginePlayArea() {
 
   useEffect(() => {
     setCast(null)
-    setAttackers([])
+    setAttackers({})
+    setAttackTarget(null)
     setBlocks({})
     setPickBlocker(null)
     setDiscardSel([])
@@ -158,8 +160,17 @@ export default function EnginePlayArea() {
   if (!view) return null
   const pending = view.pending || {}
   const kind = pending.kind
+  const defenderPid = view.activePlayer === 0 ? 1 : 0
   const actionFor = (oid) =>
     kind === 'priority' ? pending.actions?.find((a) => a.oid === oid) : null
+
+  // Human-readable name of what new attackers will be sent at.
+  const attackTargetName =
+    kind === 'declareAttackers'
+      ? !attackTarget || attackTarget.player != null
+        ? view.players[defenderPid]?.name
+        : pending.defenders?.find((d) => d.oid === attackTarget.planeswalker)?.name || 'planeswalker'
+      : null
 
   // ---- targeting helpers ----
   // Unifies player-initiated targeting (cast/activate) with engine-initiated
@@ -241,11 +252,19 @@ export default function EnginePlayArea() {
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
       return
     }
-    if (kind === 'declareAttackers' && controllerPid === view.activePlayer) {
-      if (!pending.eligible.includes(card.oid)) return
-      setAttackers((a) =>
-        a.includes(card.oid) ? a.filter((o) => o !== card.oid) : [...a, card.oid]
-      )
+    if (kind === 'declareAttackers') {
+      // Click your eligible creature to send it at the current target; click an
+      // enemy planeswalker to make it the target for subsequent attackers.
+      if (controllerPid === view.activePlayer && pending.eligible.includes(card.oid)) {
+        setAttackers((a) => {
+          const next = { ...a }
+          if (next[card.oid]) delete next[card.oid]
+          else next[card.oid] = attackTarget || { player: defenderPid }
+          return next
+        })
+      } else if (controllerPid !== view.activePlayer && card.loyalty != null) {
+        setAttackTarget({ planeswalker: card.oid })
+      }
     } else if (kind === 'declareBlockers') {
       if (controllerPid === pending.player && pending.eligible.includes(card.oid)) {
         setPickBlocker(card.oid) // choose a blocker, then click the attacker
@@ -257,7 +276,12 @@ export default function EnginePlayArea() {
   }
 
   function onPlayerTarget(pid) {
-    if (targeting && wantsPlayer) addTarget({ kind: 'player', pid })
+    if (targeting && wantsPlayer) {
+      addTarget({ kind: 'player', pid })
+      return
+    }
+    // During attacker declaration, clicking the defending player targets them.
+    if (kind === 'declareAttackers' && pid !== view.activePlayer) setAttackTarget({ player: pid })
   }
 
   function onStackItem(item) {
@@ -273,8 +297,12 @@ export default function EnginePlayArea() {
     if (targeting && wantsCreature && isCreature(card)) cls.push('targetable')
     if (!targeting && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
       cls.push('activatable')
-    if (kind === 'declareAttackers' && controllerPid === view.activePlayer && pending.eligible.includes(card.oid))
-      cls.push('selectable', attackers.includes(card.oid) ? 'chosen' : '')
+    if (kind === 'declareAttackers') {
+      if (controllerPid === view.activePlayer && pending.eligible.includes(card.oid))
+        cls.push('selectable', attackers[card.oid] ? 'chosen' : '')
+      if (controllerPid !== view.activePlayer && card.loyalty != null)
+        cls.push('selectable', attackTarget?.planeswalker === card.oid ? 'assigned' : '')
+    }
     if (kind === 'declareBlockers') {
       if (controllerPid === pending.player && pending.eligible.includes(card.oid))
         cls.push('selectable', pickBlocker === card.oid ? 'chosen' : '', blocks[card.oid] ? 'assigned' : '')
@@ -458,6 +486,7 @@ export default function EnginePlayArea() {
             : null
         }
         attackers={attackers}
+        attackTargetName={attackTargetName}
         blocks={blocks}
         discardSel={discardSel}
         bottomSel={bottomSel}
@@ -471,7 +500,7 @@ export default function EnginePlayArea() {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, targeting, attackers, blocks, discardSel, bottomSel, error, choose, endGame, cancelCast }) {
+function Prompt({ view, pending, targeting, attackers, attackTargetName, blocks, discardSel, bottomSel, error, choose, endGame, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
@@ -536,9 +565,24 @@ function Prompt({ view, pending, targeting, attackers, blocks, discardSel, botto
     body = (
       <>
         <span>
-          <b>{nameOf(pending.player)}</b> — declare attackers ({attackers.length} selected).
+          <b>{nameOf(pending.player)}</b> — declare attackers ({Object.keys(attackers).length} selected)
+          {pending.defenders?.length > 1 && (
+            <>
+              {' '}
+              · attacking <b>{attackTargetName}</b> (click a planeswalker or the player to retarget)
+            </>
+          )}
+          .
         </span>
-        <button className="primary" onClick={() => choose({ attackers })} disabled={attackers.length === 0}>
+        <button
+          className="primary"
+          onClick={() =>
+            choose({
+              attackers: Object.entries(attackers).map(([oid, defender]) => ({ oid, defender }))
+            })
+          }
+          disabled={Object.keys(attackers).length === 0}
+        >
           Attack
         </button>
         <button className="mini" onClick={() => choose({ attackers: [] })}>

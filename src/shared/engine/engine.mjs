@@ -222,7 +222,12 @@ export class GameEngine {
           return
         }
         s.combat = { attackers: [], blocks: {} }
-        s.pending = { kind: 'declareAttackers', player: s.activePlayer, eligible }
+        s.pending = {
+          kind: 'declareAttackers',
+          player: s.activePlayer,
+          eligible,
+          defenders: this._attackDefenders()
+        }
         break
       }
       case 'declareBlockers': {
@@ -244,6 +249,7 @@ export class GameEngine {
       case 'endCombat': {
         for (const o of objectsIn(s, 'battlefield')) {
           o.status.attacking = false
+          o.status.attackingTarget = null
           o.status.blocked = false
           o.status.blocking = null
         }
@@ -772,15 +778,21 @@ export class GameEngine {
 
   _applyAttackers(answer) {
     const s = this.state
-    const attackers = answer?.attackers || []
-    for (const oid of attackers) {
+    const def = this._defendingPlayer()
+    // Entries may be bare oids (attack the defending player) or { oid, defender }
+    // where defender is { player } or { planeswalker }.
+    const entries = (answer?.attackers || []).map((a) =>
+      typeof a === 'string' ? { oid: a, defender: { player: def } } : a
+    )
+    for (const { oid, defender } of entries) {
       const o = s.objects[oid]
       o.status.attacking = true
+      o.status.attackingTarget = defender || { player: def }
       if (!this._hasKW(o, 'Vigilance')) o.status.tapped = true
       this._fireTriggers('attacks', o)
     }
-    s.combat.attackers = attackers
-    if (attackers.length === 0) {
+    s.combat.attackers = entries.map((e) => e.oid)
+    if (entries.length === 0) {
       this._gotoStep('main2')
       return
     }
@@ -789,6 +801,27 @@ export class GameEngine {
 
   _defendingPlayer() {
     return this._otherPlayer(this.state.activePlayer)
+  }
+
+  // Legal things an attacker may be declared against: the defending player and
+  // each planeswalker they control.
+  _attackDefenders() {
+    const s = this.state
+    const def = this._defendingPlayer()
+    const out = [{ kind: 'player', pid: def, name: s.players[def].name }]
+    for (const o of objectsIn(s, 'battlefield')) {
+      if (o.controller === def && o.chars.types.includes('Planeswalker'))
+        out.push({ kind: 'planeswalker', oid: o.oid, name: o.chars.name, loyalty: o.status.counters.loyalty })
+    }
+    return out
+  }
+
+  // Resolve an attacker's declared target into a _dealDamage target.
+  _attackTargetOf(atk) {
+    const t = atk.status.attackingTarget
+    if (t?.planeswalker && this.state.objects[t.planeswalker]?.zoneName === 'battlefield')
+      return { obj: this.state.objects[t.planeswalker] }
+    return { player: t?.player ?? this._defendingPlayer() }
   }
 
   _eligibleBlockers(pid) {
@@ -885,11 +918,12 @@ export class GameEngine {
         : []
       ).filter((b) => onBf(b) && s.objects[b].status.blocking === atkOid)
 
+      const tgt = this._attackTargetOf(atk)
       if (!atk.status.blocked) {
-        this._dealDamage(atk, { player: def }, power, { combat: true }) // unblocked
+        this._dealDamage(atk, tgt, power, { combat: true }) // unblocked → its target
       } else if (blockers.length === 0) {
         // Blocked but all blockers gone: only trample leaks through.
-        if (this._hasKW(atk, 'Trample')) this._dealDamage(atk, { player: def }, power, { combat: true })
+        if (this._hasKW(atk, 'Trample')) this._dealDamage(atk, tgt, power, { combat: true })
       } else {
         let remaining = power
         const trample = this._hasKW(atk, 'Trample')
@@ -907,7 +941,7 @@ export class GameEngine {
             break
           }
         }
-        if (trample && remaining > 0) this._dealDamage(atk, { player: def }, remaining, { combat: true })
+        if (trample && remaining > 0) this._dealDamage(atk, tgt, remaining, { combat: true })
       }
     }
 
