@@ -32,16 +32,16 @@
 
 .eng-hand {
   display: flex;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 8px 12px;
   overflow-x: auto;
   background: #101116;
-  min-height: 96px;
+  min-height: 190px;
   align-items: center;
 }
 .eng-hand-card {
-  width: 66px;
-  height: 92px;
+  width: 130px;
+  height: 182px;
   flex: 0 0 auto;
   cursor: default;
 }

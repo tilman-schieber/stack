@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useEngineGame, PRIORITY_STEPS } from '../../store/engineGame.js'
+import TokenSearch from './TokenSearch.jsx'
 import '../../play.css'
 import './engine.css'
 
@@ -86,6 +87,8 @@ export default function EnginePlayArea() {
   const toggleStop = useEngineGame((s) => s.toggleStop)
   const [showStops, setShowStops] = useState(false)
   const [zoom, setZoom] = useState(null) // card being previewed (right-click)
+  const [tokenFor, setTokenFor] = useState(null) // player id awaiting a token pick
+  const createToken = useEngineGame((s) => s.createToken)
 
   // Transient selection state; reset whenever the engine produces a new view
   // (i.e. a new decision point).
@@ -282,6 +285,9 @@ export default function EnginePlayArea() {
         <span className="eng-count" title="Cards in hand">
           ✋ {p.handCount}
         </span>
+        <button className="mini eng-token-btn" title="Create a token" onClick={() => setTokenFor(p.id)}>
+          ＋ Token
+        </button>
       </div>
 
       <div className="eng-body">
@@ -378,6 +384,16 @@ export default function EnginePlayArea() {
         <div className="eng-zoom" onClick={() => setZoom(null)} title="Click to close">
           <img src={`card://${zoom.cardId}`} alt={zoom.name} />
         </div>
+      )}
+
+      {tokenFor !== null && (
+        <TokenSearch
+          onPick={(card) => {
+            createToken(tokenFor, card)
+            setTokenFor(null)
+          }}
+          onClose={() => setTokenFor(null)}
+        />
       )}
 
       <Prompt

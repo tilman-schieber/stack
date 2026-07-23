@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import DeckBuilder from './views/DeckBuilder.jsx'
 import PlayArea from './views/PlayArea.jsx'
+import TokenBrowser from './views/TokenBrowser.jsx'
 import { useSettings } from './store/settings.js'
 import { useGame } from './store/game.js'
 
@@ -23,6 +24,9 @@ export default function App() {
           <button className={view === 'build' ? 'active' : ''} onClick={() => setView('build')}>
             Build
           </button>
+          <button className={view === 'tokens' ? 'active' : ''} onClick={() => setView('tokens')}>
+            Tokens
+          </button>
           <button className={view === 'play' ? 'active' : ''} onClick={() => setView('play')}>
             Play
           </button>
@@ -34,7 +38,9 @@ export default function App() {
         )}
       </header>
       <div className="viewbody">
-        {view === 'build' ? <DeckBuilder /> : <PlayArea />}
+        {view === 'build' && <DeckBuilder />}
+        {view === 'tokens' && <TokenBrowser />}
+        {view === 'play' && <PlayArea />}
       </div>
     </div>
   )

@@ -1,11 +1,18 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { imageSrc, typeLine } from '../../lib/cardUtils.js'
+import { loadFavoriteTokens } from '../../lib/tokens.js'
 
 // Search Scryfall for any card/token and put it on the battlefield as a token.
+// Favorited tokens (from the Tokens tab) are offered first for quick access.
 export default function TokenSearch({ onPick, onClose }) {
   const [query, setQuery] = useState('t:token ')
   const [results, setResults] = useState([])
+  const [favorites, setFavorites] = useState([])
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    loadFavoriteTokens().then(setFavorites)
+  }, [])
 
   async function run(e) {
     e?.preventDefault()
@@ -25,13 +32,29 @@ export default function TokenSearch({ onPick, onClose }) {
           <div>
             <h2>Create token</h2>
             <p className="muted small">
-              Search Scryfall (e.g. <code>t:token soldier</code>) and click to add.
+              Pick a favorite below, or search Scryfall (e.g. <code>t:token soldier</code>).
+              Manage favorites in the <b>Tokens</b> tab.
             </p>
           </div>
           <button className="del" onClick={onClose} title="Close">
             ✕
           </button>
         </header>
+
+        {favorites.length > 0 && (
+          <div className="ts-favorites">
+            <div className="menu-label">Favorites</div>
+            <div className="zv-grid">
+              {favorites.map((card) => (
+                <div className="zv-card" key={card.id}>
+                  <img src={imageSrc(card)} alt={card.name} loading="lazy" onClick={() => onPick(card)} />
+                  <div className="zv-name">{card.name}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={run} className="search-form" style={{ padding: '0 20px' }}>
           <input value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
           <button type="submit" disabled={busy}>
@@ -41,12 +64,7 @@ export default function TokenSearch({ onPick, onClose }) {
         <div className="zv-grid">
           {results.map((card) => (
             <div className="zv-card" key={card.id}>
-              <img
-                src={imageSrc(card)}
-                alt={card.name}
-                loading="lazy"
-                onClick={() => onPick(card)}
-              />
+              <img src={imageSrc(card)} alt={card.name} loading="lazy" onClick={() => onPick(card)} />
               <div className="zv-name">{card.name}</div>
               <div className="muted small">{typeLine(card)}</div>
             </div>

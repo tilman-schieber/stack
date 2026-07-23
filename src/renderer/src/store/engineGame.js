@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { GameEngine, projectGame } from '@engine/index.mjs'
+import { createObject } from '@engine/state.mjs'
 
 // Steps that grant priority (where a stop can be set). Untap and cleanup never
 // grant priority, so they are omitted.
@@ -79,6 +80,23 @@ export const useEngineGame = create((set, get) => ({
     const engine = get()._engine
     if (engine) settle(engine, stops)
     set({ stops, view: engine ? projectGame(engine) : get().view })
+  },
+
+  // Put a token onto a player's battlefield from a Scryfall token card. Treated
+  // as a sanctioned manual insertion (hybrid fallback); the engine derives the
+  // token's characteristics from the card and cleans it up when it leaves play.
+  createToken: (pid, card) => {
+    const engine = get()._engine
+    if (!engine) return
+    const s = engine.state
+    const o = createObject(s, card, pid)
+    o.token = true
+    o.zoneName = 'battlefield'
+    o.controller = pid
+    o.timestamp = ++s.tsCounter
+    if (o.printed.types.includes('Creature')) o.status.summoningSick = true
+    s.zones.battlefield.push(o.oid)
+    set({ view: projectGame(engine) })
   },
 
   endGame: () => set({ started: false, _engine: null, view: null, error: null })
