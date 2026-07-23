@@ -39,7 +39,9 @@
   min-height: 190px;
   align-items: center;
 }
-.eng-hand-card {
+/* Higher specificity than `.play-area.engine .board-card` so hand cards keep
+   their larger size (they carry both .board-card and .eng-hand-card). */
+.play-area.engine .eng-hand .eng-hand-card {
   width: 130px;
   height: 182px;
   flex: 0 0 auto;
