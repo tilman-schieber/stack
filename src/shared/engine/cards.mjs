@@ -472,5 +472,35 @@ export const SAMPLE_CARDS = {
     toughness: '2',
     colors: [],
     oracle_text: 'Affinity for artifacts (This spell costs {1} less to cast for each artifact you control.)'
+  },
+  Firebolt: {
+    name: 'Firebolt',
+    mana_cost: '{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    oracle_text: 'Firebolt deals 2 damage to any target. Flashback {4}{R}'
+  },
+  'Faithless Looting': {
+    name: 'Faithless Looting',
+    mana_cost: '{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    oracle_text: 'Draw two cards, then discard two cards. Flashback {2}{R}'
+  },
+  'Fiery Temper': {
+    name: 'Fiery Temper',
+    mana_cost: '{1}{R}',
+    type_line: 'Instant',
+    colors: ['R'],
+    oracle_text: 'Fiery Temper deals 3 damage to any target. Madness {R}'
+  },
+  'Basking Rootwalla': {
+    name: 'Basking Rootwalla',
+    mana_cost: '{1}{G}',
+    type_line: 'Creature — Lizard',
+    power: '1',
+    toughness: '1',
+    colors: ['G'],
+    oracle_text: '{1}{G}: Basking Rootwalla gets +2/+2 until end of turn. Activate only once each turn. Madness {0}'
   }
 }

@@ -177,6 +177,12 @@ export class GameEngine {
         case 'scry':
           this._applyScry(pending, answer)
           break
+        case 'discardCards':
+          this._applyDiscardCards(pending, answer)
+          break
+        case 'madness':
+          this._applyMadness(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -206,6 +212,7 @@ export class GameEngine {
             o.status.tapped = false
             o.status.summoningSick = false
             o.status.loyaltyUsed = false // a planeswalker may act again this turn
+            o.status.abilityUsed = [] // once-per-turn abilities reset
           }
         }
         s.players[s.activePlayer].landsPlayed = 0
@@ -369,6 +376,16 @@ export class GameEngine {
     this._advanceTriggerPlacement() // continue with the rest of the queue
   }
 
+  // Effect-driven discard (e.g. Faithless Looting). Discards the chosen cards
+  // (routing madness cards to exile), then resumes the paused resolution.
+  _applyDiscardCards(pending, answer) {
+    const discard = (answer?.discard || []).slice(0, pending.count)
+    if (discard.length !== Math.min(pending.count, pending.hand.length))
+      throw new Error(`must discard ${pending.count} card(s)`)
+    for (const oid of discard) this._discardCard(pending.player, oid)
+    this._processMadness(() => this._resumeResolution())
+  }
+
   // Resolve a scry/surveil: `toBottom` go to the bottom of the library (or the
   // graveyard, for surveil); the rest go back on top in `toTop` order.
   _applyScry(pending, answer) {
@@ -462,6 +479,19 @@ export class GameEngine {
       }
     }
 
+    // Flashback: cast a spell from your graveyard for its flashback cost.
+    for (const oid of zone(s, 'graveyard', pid)) {
+      const o = s.objects[oid]
+      const fb = o.behavior?.flashback
+      if (!fb) continue
+      const instantSpeed = o.printed.types.includes('Instant')
+      if (!(instantSpeed || sorcerySpeed)) continue
+      if (!this._canPay(pid, parseManaCost(fb.cost))) continue
+      const targets = this._spellTargets(o)
+      if (targets.length && !targets.every((t) => this._legalTargetsExist(t))) continue
+      actions.push({ type: 'castFlashback', oid, targets, needsTargets: targets.length })
+    }
+
     // Activated abilities of permanents this player controls (instant speed).
     for (const oid of zone(s, 'battlefield')) {
       const o = s.objects[oid]
@@ -511,6 +541,17 @@ export class GameEngine {
         this._fireTriggers('castSpell', o) // prowess etc.
         break
       }
+      case 'castFlashback': {
+        const o = s.objects[action.oid]
+        this._pay(pid, parseManaCost(o.behavior.flashback.cost))
+        moveObject(s, action.oid, 'stack')
+        o.controller = pid
+        o.targets = action.targets || []
+        o.spell = o.behavior.spell
+        o.flashbackCast = true // exiled instead of the graveyard when it leaves
+        this._fireTriggers('castSpell', o)
+        break
+      }
       case 'activate': {
         const o = s.objects[action.oid]
         const ab = o.behavior.activated[action.ability]
@@ -546,6 +587,7 @@ export class GameEngine {
       if (pid !== s.activePlayer || !MAIN_STEPS.has(s.step) || zone(s, 'stack').length > 0)
         return false
     }
+    if (ab.oncePerTurn && (o.status.abilityUsed || []).includes(ab)) return false
     if (ab.targets?.length && !ab.targets.every((t) => this._legalTargetsExist(t))) return false
     const cost = ab.cost || {}
     if (cost.tap) {
@@ -560,6 +602,7 @@ export class GameEngine {
 
   _payActivationCost(pid, o, ab) {
     const s = this.state
+    if (ab.oncePerTurn) (o.status.abilityUsed ||= []).push(ab)
     if (ab.loyalty != null) {
       o.status.counters.loyalty = (o.status.counters.loyalty || 0) + ab.loyalty
       o.status.loyaltyUsed = true
@@ -618,8 +661,11 @@ export class GameEngine {
       if (i >= 0) st.splice(i, 1)
       delete s.objects[ctx.oid]
     } else if (o?.zoneName === 'stack') {
-      // The spell may already have been removed (e.g. countered).
-      moveObject(s, ctx.oid, 'graveyard')
+      // The spell may already have been removed (e.g. countered). Flashback and
+      // madness spells are exiled instead of going to the graveyard.
+      moveObject(s, ctx.oid, o.flashbackCast || o.madnessCast ? 'exile' : 'graveyard')
+      o.flashbackCast = false
+      o.madnessCast = false
     }
   }
 
@@ -705,6 +751,14 @@ export class GameEngine {
         const top = zone(s, 'library', pid).slice(0, e.amount)
         if (top.length === 0) return false
         s.pending = { kind: 'scry', player: pid, cards: [...top], surveil: true }
+        return true
+      }
+      case 'discard': {
+        const pid = source.controller
+        const hand = zone(s, 'hand', pid)
+        const count = Math.min(e.amount, hand.length)
+        if (count === 0) return false
+        s.pending = { kind: 'discardCards', player: pid, count, hand: [...hand] }
         return true
       }
       default:
@@ -1187,8 +1241,59 @@ export class GameEngine {
     const s = this.state
     const discard = answer?.discard || []
     if (discard.length !== pending.count) throw new Error('must discard exactly ' + pending.count)
-    for (const oid of discard) moveObject(s, oid, 'graveyard')
-    this._endCleanup()
+    for (const oid of discard) this._discardCard(pending.player, oid)
+    // Resolve any madness opportunities, then finish cleanup.
+    this._processMadness(() => this._endCleanup())
+  }
+
+  // Discard one card. Madness: exile it instead and queue a cast opportunity.
+  _discardCard(pid, oid) {
+    const s = this.state
+    const o = s.objects[oid]
+    if (o.behavior?.madness) {
+      moveObject(s, oid, 'exile')
+      s.pendingMadness.push({ pid, oid, cost: o.behavior.madness.cost })
+    } else {
+      moveObject(s, oid, 'graveyard')
+    }
+  }
+
+  // Present queued madness cards one at a time; run `after` when the queue drains.
+  _processMadness(after) {
+    const s = this.state
+    if (s.pendingMadness.length === 0) {
+      after()
+      return
+    }
+    const m = s.pendingMadness.shift()
+    this._afterMadness = after
+    const o = s.objects[m.oid]
+    s.pending = {
+      kind: 'madness',
+      player: m.pid,
+      oid: m.oid,
+      name: o.printed.name,
+      cost: m.cost,
+      canPay: this._canPay(m.pid, parseManaCost(m.cost)),
+      targets: this._spellTargets(o)
+    }
+  }
+
+  _applyMadness(pending, answer) {
+    const s = this.state
+    const o = s.objects[pending.oid]
+    if (answer?.cast) {
+      this._pay(pending.player, parseManaCost(pending.cost))
+      moveObject(s, pending.oid, 'stack')
+      o.controller = pending.player
+      o.targets = answer.targets || []
+      o.spell = o.behavior.spell
+      o.madnessCast = true // exiled when it leaves the stack
+      this._fireTriggers('castSpell', o)
+    } else {
+      moveObject(s, pending.oid, 'graveyard')
+    }
+    this._processMadness(this._afterMadness)
   }
 
   // ---- triggered abilities --------------------------------------------

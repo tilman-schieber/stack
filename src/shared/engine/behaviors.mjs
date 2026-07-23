@@ -189,6 +189,28 @@ export const BEHAVIORS = {
   Preordain: {
     spell: { effect: [{ op: 'scry', amount: 2 }, { op: 'draw', amount: 1 }] }
   },
+  Firebolt: {
+    spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', amount: 2, to: 'target0' }] },
+    flashback: { cost: '{4}{R}' }
+  },
+  'Faithless Looting': {
+    spell: { effect: [{ op: 'draw', amount: 2 }, { op: 'discard', amount: 2 }] },
+    flashback: { cost: '{2}{R}' }
+  },
+  'Fiery Temper': {
+    spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', amount: 3, to: 'target0' }] },
+    madness: { cost: '{R}' }
+  },
+  'Basking Rootwalla': {
+    madness: { cost: '{0}' },
+    activated: [
+      {
+        cost: { mana: '{1}{G}' },
+        oncePerTurn: true,
+        effect: [{ op: 'pump', to: 'self', power: 2, toughness: 2, duration: 'eot' }]
+      }
+    ]
+  },
   'Serum Visions': {
     spell: { effect: [{ op: 'draw', amount: 1 }, { op: 'scry', amount: 2 }] }
   },
@@ -231,7 +253,9 @@ export function loadBehavior(printed) {
     triggered,
     static: authored.static || [],
     entersWith: authored.entersWith || null,
-    enchant: authored.enchant || null // Aura: what it can be attached to
+    enchant: authored.enchant || null, // Aura: what it can be attached to
+    flashback: authored.flashback || null, // { cost } — cast from the graveyard
+    madness: authored.madness || null // { cost } — cast when discarded
   }
 }
 

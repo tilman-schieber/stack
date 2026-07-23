@@ -82,10 +82,15 @@ function EngineCard({ card, className = '', onClick, onZoom, title }) {
   )
 }
 
-function Pile({ label, count, topCard, faceDown }) {
+function Pile({ label, count, topCard, faceDown, onOpen }) {
   return (
     <div className="rail-pile">
-      <div className="rail-pile-card" title={`${label} (${count})`}>
+      <div
+        className="rail-pile-card"
+        title={`${label} (${count})`}
+        onClick={onOpen}
+        style={onOpen ? { cursor: 'pointer' } : undefined}
+      >
         {count === 0 ? (
           <div className="pile-empty" />
         ) : faceDown || !topCard?.cardId ? (
@@ -138,6 +143,7 @@ export default function EnginePlayArea() {
   const [bottomSel, setBottomSel] = useState([]) // cards to put on the bottom (mulligan)
   const [chooseSel, setChooseSel] = useState([]) // engine-initiated target choice
   const [scryBottom, setScryBottom] = useState([]) // scry: oids to put on the bottom
+  const [zoneView, setZoneView] = useState(null) // { pid, zone } graveyard/exile viewer
 
   useEffect(() => {
     setCast(null)
@@ -150,6 +156,7 @@ export default function EnginePlayArea() {
     setChooseSel([])
     setScryBottom([])
     setAbilityMenu(null)
+    setZoneView(null)
   }, [view])
 
   useEffect(() => {
@@ -188,6 +195,9 @@ export default function EnginePlayArea() {
   function submit(action, chosen) {
     if (action.type === 'activate')
       choose({ type: 'activate', oid: action.oid, ability: action.ability, targets: chosen })
+    else if (action.type === 'madness') choose({ cast: true, targets: chosen })
+    else if (action.type === 'castFlashback')
+      choose({ type: 'castFlashback', oid: action.oid, targets: chosen })
     else choose({ type: 'cast', oid: action.oid, targets: chosen })
   }
 
@@ -211,9 +221,15 @@ export default function EnginePlayArea() {
     else choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
   }
 
+  // Cast a madness card: target if needed, else fire immediately.
+  function onMadnessCast(m) {
+    if (m.targets?.length > 0) setCast({ action: { type: 'madness', targets: m.targets }, chosen: [] })
+    else choose({ cast: true })
+  }
+
   // ---- click dispatch ----
   function onHandCard(card, pid) {
-    if (kind === 'discard' && pid === pending.player) {
+    if ((kind === 'discard' || kind === 'discardCards') && pid === pending.player) {
       setDiscardSel((sel) =>
         sel.includes(card.oid) ? sel.filter((o) => o !== card.oid) : [...sel, card.oid]
       )
@@ -323,7 +339,8 @@ export default function EnginePlayArea() {
           const a = actionFor(c.oid)
           const playable = kind === 'priority' && p.id === pending.player && !!a && a.type !== 'pass'
           const selecting =
-            (kind === 'discard' || kind === 'bottom') && p.id === pending.player
+            (kind === 'discard' || kind === 'discardCards' || kind === 'bottom') &&
+            p.id === pending.player
           const chosen = discardSel.includes(c.oid) || bottomSel.includes(c.oid)
           return (
             <EngineCard
@@ -414,8 +431,18 @@ export default function EnginePlayArea() {
         </div>
         <div className="right-rail eng-rail">
           <Pile label="Library" count={p.libraryCount} faceDown />
-          <Pile label="Graveyard" count={p.graveyard.length} topCard={p.graveyard[p.graveyard.length - 1]} />
-          <Pile label="Exile" count={p.exile.length} topCard={p.exile[p.exile.length - 1]} />
+          <Pile
+            label="Graveyard"
+            count={p.graveyard.length}
+            topCard={p.graveyard[p.graveyard.length - 1]}
+            onOpen={() => setZoneView({ pid: p.id, zone: 'graveyard' })}
+          />
+          <Pile
+            label="Exile"
+            count={p.exile.length}
+            topCard={p.exile[p.exile.length - 1]}
+            onOpen={() => setZoneView({ pid: p.id, zone: 'exile' })}
+          />
         </div>
       </div>
     </div>
@@ -474,6 +501,25 @@ export default function EnginePlayArea() {
         />
       )}
 
+      {zoneView && (
+        <ZoneViewer
+          title={`${view.players[zoneView.pid].name}'s ${zoneView.zone}`}
+          cards={view.players[zoneView.pid][zoneView.zone]}
+          flashbackFor={(oid) =>
+            kind === 'priority' && zoneView.pid === pending.player
+              ? pending.actions?.find((a) => a.type === 'castFlashback' && a.oid === oid)
+              : null
+          }
+          onFlashback={(a) => {
+            setZoneView(null)
+            if (a.needsTargets > 0) setCast({ action: a, chosen: [] })
+            else choose({ type: 'castFlashback', oid: a.oid, targets: [] })
+          }}
+          onZoom={setZoom}
+          onClose={() => setZoneView(null)}
+        />
+      )}
+
       {zoom && (zoom.cardId || zoom.token) && <ZoomOverlay card={zoom} onClose={() => setZoom(null)} />}
 
       {abilityMenu && (
@@ -507,6 +553,7 @@ export default function EnginePlayArea() {
         error={error}
         choose={choose}
         endGame={endGame}
+        onMadnessCast={onMadnessCast}
         cancelCast={() => setCast(null)}
       />
     </div>
@@ -514,7 +561,7 @@ export default function EnginePlayArea() {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, targeting, attackers, attackTargetName, blocks, discardSel, bottomSel, error, choose, endGame, cancelCast }) {
+function Prompt({ view, pending, targeting, attackers, attackTargetName, blocks, discardSel, bottomSel, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
@@ -635,6 +682,37 @@ function Prompt({ view, pending, targeting, attackers, attackTargetName, blocks,
         </button>
       </>
     )
+  } else if (kind === 'discardCards') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — discard {pending.count} card(s) ({discardSel.length}/
+          {pending.count}).
+        </span>
+        <button
+          className="primary"
+          disabled={discardSel.length !== Math.min(pending.count, pending.hand.length)}
+          onClick={() => choose({ discard: discardSel })}
+        >
+          Discard
+        </button>
+      </>
+    )
+  } else if (kind === 'madness') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — cast <b>{pending.name}</b> for its madness cost{' '}
+          {pending.cost}?
+        </span>
+        <button className="primary" disabled={!pending.canPay} onClick={() => onMadnessCast(pending)}>
+          Cast (madness)
+        </button>
+        <button className="mini" onClick={() => choose({ cast: false })}>
+          Decline
+        </button>
+      </>
+    )
   } else if (kind === 'gameOver') {
     body = (
       <>
@@ -650,6 +728,47 @@ function Prompt({ view, pending, targeting, attackers, attackTargetName, blocks,
     <div className="eng-prompt">
       {error && <span className="eng-error">{error}</span>}
       {body}
+    </div>
+  )
+}
+
+// Graveyard / exile viewer. Cards with a flashback cast available are highlighted
+// and clickable.
+function ZoneViewer({ title, cards, flashbackFor, onFlashback, onZoom, onClose }) {
+  return (
+    <div className="eng-zoneviewer" onClick={onClose}>
+      <div className="eng-zoneviewer-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="eng-zoneviewer-head">
+          <span style={{ textTransform: 'capitalize' }}>{title}</span>
+          <button className="mini" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        {cards.length === 0 ? (
+          <p className="muted">Empty.</p>
+        ) : (
+          <div className="eng-zoneviewer-grid">
+            {cards.map((c) => {
+              const fb = flashbackFor(c.oid)
+              return (
+                <div
+                  key={c.oid}
+                  className={'eng-zoneviewer-card' + (fb ? ' castable' : '')}
+                  onClick={() => fb && onFlashback(fb)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    if (c.cardId) onZoom(c)
+                  }}
+                  title={fb ? `Flashback: ${c.name}` : c.name}
+                >
+                  {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
+                  {fb && <span className="eng-zoneviewer-fb">Flashback</span>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
