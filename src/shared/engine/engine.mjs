@@ -174,6 +174,9 @@ export class GameEngine {
         case 'chooseTargets':
           this._applyChooseTargets(pending, answer)
           break
+        case 'scry':
+          this._applyScry(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -366,6 +369,31 @@ export class GameEngine {
     this._advanceTriggerPlacement() // continue with the rest of the queue
   }
 
+  // Resolve a scry/surveil: `toBottom` go to the bottom of the library (or the
+  // graveyard, for surveil); the rest go back on top in `toTop` order.
+  _applyScry(pending, answer) {
+    const s = this.state
+    const pid = pending.player
+    const lib = s.zones[zoneKey('library', pid)]
+    const scried = pending.cards
+    for (const oid of scried) {
+      const i = lib.indexOf(oid)
+      if (i >= 0) lib.splice(i, 1)
+    }
+    const toBottom = (answer?.toBottom || []).filter((oid) => scried.includes(oid))
+    const rest = scried.filter((oid) => !toBottom.includes(oid))
+    const topOrder = answer?.toTop?.length === rest.length ? answer.toTop : rest
+
+    if (pending.surveil) {
+      for (const oid of toBottom) moveObject(s, oid, 'graveyard')
+    } else {
+      for (const oid of toBottom) lib.push(oid) // to the bottom
+    }
+    for (let i = topOrder.length - 1; i >= 0; i--) lib.unshift(topOrder[i]) // back on top
+
+    this._resumeResolution()
+  }
+
   // Is there at least one legal target for a target spec of the given type?
   _legalTargetsExist(spec) {
     const s = this.state
@@ -384,9 +412,10 @@ export class GameEngine {
       if (s.prio.passCount >= s.players.length) {
         if (zone(s, 'stack').length > 0) {
           this._resolveTop()
-          // Active player receives priority after a stack object resolves; this
-          // also runs SBAs and places any triggers the resolution produced.
-          this._grantPriorityTo(s.activePlayer)
+          // Active player receives priority after a stack object resolves — unless
+          // the resolution paused for a decision (e.g. scry), which set its own
+          // pending. This also runs SBAs and places triggers the resolution made.
+          if (!this._resume) this._grantPriorityTo(s.activePlayer)
         } else {
           s.prio = null // priority loop ends; _pump advances the step
         }
@@ -551,22 +580,56 @@ export class GameEngine {
     const o = s.objects[oid]
 
     if (o.kind === 'ability') {
-      this._runEffects(o, o.effect)
-      stack.pop() // abilities cease to exist on resolution (no zone)
-      delete s.objects[oid]
+      this._resolveObject = { oid, kind: 'ability' }
+      this._runResolution(o, o.effect)
       return
     }
 
     if (o.spell) {
-      this._runEffects(o, o.spell.effect)
-      // The spell may have been removed from the stack already (e.g. countered).
-      if (o.zoneName === 'stack') moveObject(s, oid, 'graveyard')
+      this._resolveObject = { oid, kind: 'spell' }
+      this._runResolution(o, o.spell.effect)
     } else if (isPermanent(o.printed)) {
       moveObject(s, oid, 'battlefield')
       this._enterBattlefield(o, o.controller ?? o.owner)
     } else {
       moveObject(s, oid, 'graveyard')
     }
+  }
+
+  // Run a resolution's effects; if an interactive effect (e.g. scry) pauses it,
+  // this._resume holds the continuation and _finishResolution runs after the
+  // player's choice (see _applyScry). Returns true if it paused.
+  _runResolution(source, effects) {
+    const done = this._runEffectsFrom(source, effects, 0)
+    if (done) this._finishResolution()
+    return !done
+  }
+
+  _finishResolution() {
+    const s = this.state
+    const ctx = this._resolveObject
+    this._resolveObject = null
+    if (!ctx) return
+    const o = s.objects[ctx.oid]
+    if (ctx.kind === 'ability') {
+      const st = zone(s, 'stack')
+      const i = st.indexOf(ctx.oid)
+      if (i >= 0) st.splice(i, 1)
+      delete s.objects[ctx.oid]
+    } else if (o?.zoneName === 'stack') {
+      // The spell may already have been removed (e.g. countered).
+      moveObject(s, ctx.oid, 'graveyard')
+    }
+  }
+
+  // Resume a paused resolution after an interactive effect's decision.
+  _resumeResolution() {
+    if (!this._resume) return
+    const { source, effects, index } = this._resume
+    this._resume = null
+    const done = this._runEffectsFrom(source, effects, index)
+    if (done) this._finishResolution()
+    if (!this._resume) this._grantPriorityTo(this.state.activePlayer)
   }
 
   // Create one token from a token definition and put it onto the battlefield.
@@ -609,6 +672,45 @@ export class GameEngine {
   }
 
   // ---- effects ---------------------------------------------------------
+
+  // Apply effects from index `start`. Returns true if all ran, or false if an
+  // interactive effect paused (this._resume holds the continuation).
+  _runEffectsFrom(source, effects, start = 0) {
+    const s = this.state
+    const list = effects || []
+    for (let i = start; i < list.length; i++) {
+      const e = list[i]
+      if (this._applyEffect(source, e)) {
+        this._resume = { source, effects: list, index: i + 1 }
+        return false // paused for a decision
+      }
+    }
+    return true
+  }
+
+  // Apply one effect. Returns true if it paused for an interactive decision.
+  _applyEffect(source, e) {
+    const s = this.state
+    switch (e.op) {
+      case 'scry': {
+        const pid = source.controller
+        const top = zone(s, 'library', pid).slice(0, e.amount)
+        if (top.length === 0) return false
+        s.pending = { kind: 'scry', player: pid, cards: [...top], surveil: false }
+        return true
+      }
+      case 'surveil': {
+        const pid = source.controller
+        const top = zone(s, 'library', pid).slice(0, e.amount)
+        if (top.length === 0) return false
+        s.pending = { kind: 'scry', player: pid, cards: [...top], surveil: true }
+        return true
+      }
+      default:
+        this._runEffects(source, [e])
+        return false
+    }
+  }
 
   _runEffects(source, effects) {
     const s = this.state

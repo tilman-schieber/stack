@@ -137,6 +137,7 @@ export default function EnginePlayArea() {
   const [discardSel, setDiscardSel] = useState([])
   const [bottomSel, setBottomSel] = useState([]) // cards to put on the bottom (mulligan)
   const [chooseSel, setChooseSel] = useState([]) // engine-initiated target choice
+  const [scryBottom, setScryBottom] = useState([]) // scry: oids to put on the bottom
 
   useEffect(() => {
     setCast(null)
@@ -147,6 +148,7 @@ export default function EnginePlayArea() {
     setDiscardSel([])
     setBottomSel([])
     setChooseSel([])
+    setScryBottom([])
     setAbilityMenu(null)
   }, [view])
 
@@ -460,6 +462,18 @@ export default function EnginePlayArea() {
         onZoom={setZoom}
       />
 
+      {kind === 'scry' && (
+        <ScryOverlay
+          pending={pending}
+          bottom={scryBottom}
+          setBottom={setScryBottom}
+          onConfirm={() => {
+            const toTop = pending.cards.map((c) => c.oid).filter((oid) => !scryBottom.includes(oid))
+            choose({ toBottom: scryBottom, toTop })
+          }}
+        />
+      )}
+
       {zoom && (zoom.cardId || zoom.token) && <ZoomOverlay card={zoom} onClose={() => setZoom(null)} />}
 
       {abilityMenu && (
@@ -636,6 +650,43 @@ function Prompt({ view, pending, targeting, attackers, attackTargetName, blocks,
     <div className="eng-prompt">
       {error && <span className="eng-error">{error}</span>}
       {body}
+    </div>
+  )
+}
+
+// Scry / Surveil: look at the top cards and send some to the bottom (or the
+// graveyard, for surveil). The rest stay on top in shown order.
+function ScryOverlay({ pending, bottom, setBottom, onConfirm }) {
+  const toggle = (oid) =>
+    setBottom((b) => (b.includes(oid) ? b.filter((o) => o !== oid) : [...b, oid]))
+  const dest = pending.surveil ? 'graveyard' : 'bottom'
+  return (
+    <div className="eng-scry">
+      <div className="eng-scry-panel">
+        <div className="eng-scry-title">
+          {pending.surveil ? 'Surveil' : 'Scry'} {pending.cards.length} — click a card to send it to
+          the {dest}
+        </div>
+        <div className="eng-scry-cards">
+          {pending.cards.map((c) => {
+            const toBottom = bottom.includes(c.oid)
+            return (
+              <div
+                key={c.oid}
+                className={'eng-scry-card' + (toBottom ? ' to-bottom' : '')}
+                onClick={() => toggle(c.oid)}
+                title={c.name}
+              >
+                {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
+                <div className="eng-scry-dest">{toBottom ? dest : 'top'}</div>
+              </div>
+            )
+          })}
+        </div>
+        <button className="primary" onClick={onConfirm}>
+          Confirm
+        </button>
+      </div>
     </div>
   )
 }

@@ -440,5 +440,19 @@ export const SAMPLE_CARDS = {
     toughness: '1',
     colors: ['G'],
     keywords: ['Flash', 'Deathtouch']
+  },
+  Preordain: {
+    name: 'Preordain',
+    mana_cost: '{U}',
+    type_line: 'Sorcery',
+    colors: ['U'],
+    oracle_text: 'Scry 2, then draw a card.'
+  },
+  'Serum Visions': {
+    name: 'Serum Visions',
+    mana_cost: '{U}',
+    type_line: 'Sorcery',
+    colors: ['U'],
+    oracle_text: 'Draw a card, then scry 2.'
   }
 }

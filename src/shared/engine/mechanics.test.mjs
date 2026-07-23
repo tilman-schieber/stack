@@ -1,6 +1,7 @@
 // Headless verification for additional mechanics (Pauper staples). Grows as new
 // mechanics land. Run: node src/shared/engine/mechanics.test.mjs
 
+import { zone } from './state.mjs'
 import { inZone, makeEngine, put, advanceToPriorityAt, makeAsserter } from './_testutil.mjs'
 
 const { assert, stats } = makeAsserter()
@@ -70,6 +71,34 @@ section('flash: a creature can be cast at instant speed')
   const acts = e.pending.actions
   assert(acts.some((a) => a.type === 'cast' && a.oid === viper.oid), 'flash creature castable outside a main phase')
   assert(!acts.some((a) => a.type === 'cast' && a.oid === bears.oid), 'non-flash creature NOT castable outside a main phase')
+}
+
+// --- Scry (Preordain) -------------------------------------------------------
+
+section('scry: Preordain — pause to scry 2, then draw')
+{
+  const e = makeEngine()
+  put(e, 0, 'Island', 'battlefield')
+  const pre = put(e, 0, 'Preordain', 'hand')
+  advanceToPriorityAt(e, 'main1')
+
+  const libTop = zone(e.state, 'library', 0).slice(0, 2)
+  const handBefore = zone(e.state, 'hand', 0).length
+  e.choose({ type: 'cast', oid: pre.oid })
+  // resolving pauses on the scry
+  e.choose({ type: 'pass' })
+  if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+  assert(e.pending.kind === 'scry', 'resolution paused for a scry decision')
+  assert(e.pending.cards.length === 2, 'looking at the top 2 cards')
+
+  // Put the first on the bottom, keep the second on top.
+  e.choose({ toBottom: [libTop[0]], toTop: [libTop[1]] })
+
+  // After scry, Preordain draws a card.
+  assert(zone(e.state, 'hand', 0).length === handBefore, 'net hand unchanged (cast -1, draw +1)')
+  assert(zone(e.state, 'hand', 0).includes(libTop[1]), 'drew the card kept on top')
+  assert(zone(e.state, 'library', 0).slice(-1)[0] === libTop[0], 'the bottomed card is on the bottom')
+  assert(inZone(e, 0, 'graveyard', pre.oid), 'Preordain went to the graveyard')
 }
 
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)

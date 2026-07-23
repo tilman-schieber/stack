@@ -186,6 +186,12 @@ export const BEHAVIORS = {
       ]
     }
   },
+  Preordain: {
+    spell: { effect: [{ op: 'scry', amount: 2 }, { op: 'draw', amount: 1 }] }
+  },
+  'Serum Visions': {
+    spell: { effect: [{ op: 'draw', amount: 1 }, { op: 'scry', amount: 2 }] }
+  },
   // Planeswalker: loyalty abilities are activated abilities with a loyalty cost.
   'Chandra Nalaar': {
     activated: [

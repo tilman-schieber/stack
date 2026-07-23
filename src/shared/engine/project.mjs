@@ -71,13 +71,19 @@ export function projectGame(engine) {
     }
   })
 
+  // Scry/surveil reveals specific library cards to their controller — enrich
+  // them into card views so the UI can show the art.
+  let pending = state.pending
+  if (pending?.kind === 'scry')
+    pending = { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])) }
+
   return {
     turnNumber: state.turnNumber,
     step: state.step,
     activePlayer: state.activePlayer,
     winner: state.winner,
-    pending: state.pending,
-    priorityPlayer: state.pending?.kind === 'priority' ? state.pending.player : null,
+    pending,
+    priorityPlayer: pending?.kind === 'priority' ? pending.player : null,
     stack: zone(state, 'stack').map((oid) => stackView(state, oid)),
     players
   }
