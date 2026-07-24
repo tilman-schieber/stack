@@ -238,7 +238,11 @@ export default function EnginePlayArea() {
   function onHandCard(card, pid, ev) {
     if ((kind === 'discard' || kind === 'discardCards') && pid === pending.player) {
       setDiscardSel((sel) =>
-        sel.includes(card.oid) ? sel.filter((o) => o !== card.oid) : [...sel, card.oid]
+        sel.includes(card.oid)
+          ? sel.filter((o) => o !== card.oid)
+          : sel.length < pending.count
+            ? [...sel, card.oid]
+            : sel
       )
       return
     }
@@ -777,7 +781,18 @@ function Prompt({ view, pending, targeting, sacrificing, choosingX, attackers, a
       </>
     )
   } else if (kind === 'discardCards') {
-    body = (
+    const need = Math.min(pending.count, pending.hand.length)
+    body = pending.optional ? (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — you may discard up to {pending.count} card(s) (
+          {discardSel.length}/{pending.count}){pending.draw ? `; if you do, draw ${pending.draw}` : ''}.
+        </span>
+        <button className="primary" onClick={() => choose({ discard: discardSel })}>
+          {discardSel.length ? 'Discard' : 'Decline'}
+        </button>
+      </>
+    ) : (
       <>
         <span>
           <b>{nameOf(pending.player)}</b> — discard {pending.count} card(s) ({discardSel.length}/
@@ -785,7 +800,7 @@ function Prompt({ view, pending, targeting, sacrificing, choosingX, attackers, a
         </span>
         <button
           className="primary"
-          disabled={discardSel.length !== Math.min(pending.count, pending.hand.length)}
+          disabled={discardSel.length !== need}
           onClick={() => choose({ discard: discardSel })}
         >
           Discard

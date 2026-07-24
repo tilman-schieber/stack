@@ -43,17 +43,26 @@ export const EXAMPLE_DECKS = [
   },
   {
     slug: 'pauper-madness-burn',
-    name: 'Mono-Red Madness Burn (Pauper)',
-    description: 'Aggressive burn with prowess, madness (Fiery Temper) and flashback loot.',
+    name: 'Mono-Red Madness (Pauper)',
+    description:
+      'Current Paupergeddon list: Guttersnipe + burn, loot into madness (Fiery Temper), Blood/Grab the Prize/Highway Robbery to draw, Sneaky Snacker recurs on your third draw, Fireblast for the kill.',
     cards: [
-      [16, 'Mountain'],
-      [4, 'Monastery Swiftspear'], // prowess, haste
-      [4, 'Mogg Fanatic'], // sacrifice: 1 damage
-      [2, 'Goblin Piker'], // vanilla beater
-      [4, 'Faithless Looting'], // draw 2 / discard 2 (madness enabler), flashback
+      // Creatures
+      [4, 'Guttersnipe'], // cast instant/sorcery -> 2 to each opponent
+      [4, 'Sneaky Snacker'], // returns from GY tapped on your third draw
+      [4, 'Voldaren Epicure'], // ETB 1 to each opponent + Blood token
+      // Artifacts
+      [4, 'Melded Moxite'], // ETB may discard -> draw 2; sac -> 2/2 Robot
+      // Instants & sorceries
       [4, 'Fiery Temper'], // 3 damage, madness {R}
-      [2, 'Firebolt'], // 2 damage, flashback
-      [4, 'Lightning Bolt']
+      [4, 'Fireblast'], // 4 damage; sac two Mountains
+      [4, 'Lava Dart'], // 1 damage; flashback (sac a Mountain)
+      [4, 'Lightning Bolt'], // 3 damage
+      [2, 'Faithless Looting'], // draw 2 / discard 2, flashback
+      [4, 'Grab the Prize'], // discard 1, draw 2, 2 to each opponent if nonland
+      [4, 'Highway Robbery'], // may discard -> draw 2
+      // Lands
+      [18, 'Mountain']
     ]
   },
   {

@@ -373,6 +373,92 @@ export const BEHAVIORS = {
         effect: [{ op: 'dealDamage', amount: 4, to: 'target0' }]
       }
     ]
+  },
+
+  // ---- Mono-Red Madness (Pauper) ----
+  // "Whenever you cast an instant or sorcery, deal 2 to each opponent."
+  Guttersnipe: {
+    triggered: [
+      {
+        trigger: { event: 'castSpell', filter: { controller: 'you', types: ['Instant', 'Sorcery'] } },
+        effect: [{ op: 'dealDamageEachOpponent', amount: 2 }]
+      }
+    ]
+  },
+  // ETB: 1 damage to each opponent + a Blood token.
+  'Voldaren Epicure': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        effect: [
+          { op: 'dealDamageEachOpponent', amount: 1 },
+          { op: 'createToken', count: 1, token: { name: 'Blood', types: ['Artifact'], colors: [] } }
+        ]
+      }
+    ]
+  },
+  // ETB: may discard a card; if you do, draw two. {3}, Sac: make a tapped 2/2 Robot.
+  'Melded Moxite': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        effect: [{ op: 'discard', amount: 1, optional: true, draw: 2 }]
+      }
+    ],
+    activated: [
+      {
+        cost: { mana: '{3}', sacrifice: 'self' },
+        effect: [
+          {
+            op: 'createToken',
+            count: 1,
+            token: { name: 'Robot', types: ['Creature'], subtypes: ['Robot'], colors: [], power: 2, toughness: 2, tapped: true }
+          }
+        ]
+      }
+    ]
+  },
+  // Alternative cost: sacrifice two Mountains instead of paying mana. 4 to any target.
+  Fireblast: {
+    spell: {
+      targets: [{ type: 'any' }],
+      alternativeCost: { sacrifice: { subtype: 'Mountain', count: 2 }, label: 'sac 2 Mountains' },
+      effect: [{ op: 'dealDamage', amount: 4, to: 'target0' }]
+    }
+  },
+  // 1 to any target; Flashback—Sacrifice a Mountain.
+  'Lava Dart': {
+    spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', amount: 1, to: 'target0' }] },
+    flashback: { sacrifice: { subtype: 'Mountain', count: 1 }, label: 'sac a Mountain' }
+  },
+  // Additional cost: discard a card. Draw two; if the discard wasn't a land, 2 to each opponent.
+  // (The discard is modelled on resolution rather than as a literal cast cost.)
+  'Grab the Prize': {
+    spell: {
+      effect: [
+        { op: 'discard', amount: 1, remember: true },
+        { op: 'draw', amount: 2 },
+        { op: 'dealDamageEachOpponent', amount: 2, condition: 'discardedNonland' }
+      ]
+    }
+  },
+  // "You may discard a card or sacrifice a land. If you do, draw two." Plot and the
+  // sacrifice-a-land alternative are not modelled — played as an optional discard-draw.
+  'Highway Robbery': {
+    spell: { effect: [{ op: 'discard', amount: 1, optional: true, draw: 2 }] }
+  },
+  // Recursion: when you draw your third card in a turn, return this from your
+  // graveyard to the battlefield tapped. (It's never hard-cast in mono-red.)
+  'Sneaky Snacker': { returnOnThirdDraw: true },
+  // Blood token: {1}, {T}, Discard a card, Sacrifice: draw a card. (Discard modelled
+  // as part of the effect, so it still enables madness.)
+  Blood: {
+    activated: [
+      {
+        cost: { mana: '{1}', tap: true, sacrifice: 'self' },
+        effect: [{ op: 'discard', amount: 1 }, { op: 'draw', amount: 1 }]
+      }
+    ]
   }
 }
 
@@ -403,7 +489,8 @@ export function loadBehavior(printed) {
     madness: authored.madness || null, // { cost } — cast when discarded
     mana: authored.mana || null, // colors a land can tap for, e.g. ['B','R']
     entersTapped: authored.entersTapped || false,
-    omen: authored.omen || null // alternate castable half (Omen/adventure) -> shuffles back
+    omen: authored.omen || null, // alternate castable half (Omen/adventure) -> shuffles back
+    returnOnThirdDraw: authored.returnOnThirdDraw || false // Sneaky Snacker-style recursion
   }
 }
 

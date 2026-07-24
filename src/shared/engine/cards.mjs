@@ -655,6 +655,76 @@ export const SAMPLE_CARDS = {
     colors: ['G'],
     oracle_text: "Return target creature or land card from a graveyard to its owner's hand. You gain 6 life."
   },
+  // ---- Mono-Red Madness (Pauper) ----
+  Guttersnipe: {
+    name: 'Guttersnipe',
+    mana_cost: '{2}{R}',
+    type_line: 'Creature — Goblin Shaman',
+    power: '2',
+    toughness: '2',
+    colors: ['R'],
+    oracle_text: 'Whenever you cast an instant or sorcery spell, this creature deals 2 damage to each opponent.'
+  },
+  'Sneaky Snacker': {
+    name: 'Sneaky Snacker',
+    mana_cost: '{U}{B}',
+    type_line: 'Creature — Faerie Rogue',
+    power: '2',
+    toughness: '1',
+    colors: ['U', 'B'],
+    keywords: ['Flying'],
+    oracle_text:
+      'Flying\nWhen you draw your third card in a turn, return this card from your graveyard to the battlefield tapped.'
+  },
+  'Voldaren Epicure': {
+    name: 'Voldaren Epicure',
+    mana_cost: '{R}',
+    type_line: 'Creature — Vampire',
+    power: '1',
+    toughness: '1',
+    colors: ['R'],
+    oracle_text: 'When this creature enters, it deals 1 damage to each opponent. Create a Blood token.'
+  },
+  'Melded Moxite': {
+    name: 'Melded Moxite',
+    mana_cost: '{1}{R}',
+    type_line: 'Artifact',
+    colors: ['R'],
+    oracle_text:
+      'When this artifact enters, you may discard a card. If you do, draw two cards.\n{3}, Sacrifice this artifact: Create a tapped 2/2 colorless Robot artifact creature token.'
+  },
+  Fireblast: {
+    name: 'Fireblast',
+    mana_cost: '{4}{R}{R}',
+    type_line: 'Instant',
+    colors: ['R'],
+    oracle_text: "You may sacrifice two Mountains rather than pay this spell's mana cost.\nFireblast deals 4 damage to any target."
+  },
+  'Lava Dart': {
+    name: 'Lava Dart',
+    mana_cost: '{R}',
+    type_line: 'Instant',
+    colors: ['R'],
+    keywords: ['Flashback'],
+    oracle_text: 'Lava Dart deals 1 damage to any target.\nFlashback—Sacrifice a Mountain.'
+  },
+  'Grab the Prize': {
+    name: 'Grab the Prize',
+    mana_cost: '{1}{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    oracle_text:
+      "As an additional cost to cast this spell, discard a card.\nDraw two cards. If the discarded card wasn't a land card, Grab the Prize deals 2 damage to each opponent."
+  },
+  'Highway Robbery': {
+    name: 'Highway Robbery',
+    mana_cost: '{1}{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    keywords: ['Plot'],
+    oracle_text: 'You may discard a card or sacrifice a land. If you do, draw two cards.\nPlot {1}{R}'
+  },
+
   // Nonbasic / artifact lands.
   'Vault of Whispers': { name: 'Vault of Whispers', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Drossforge Bridge': { name: 'Drossforge Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },

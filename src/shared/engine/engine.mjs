@@ -222,6 +222,7 @@ export class GameEngine {
           }
         }
         s.players[s.activePlayer].landsPlayed = 0
+        for (const p of s.players) p.drewThisTurn = 0 // draw-count triggers are per turn
         break // no priority; _pump advances
       }
       case 'draw': {
@@ -385,10 +386,19 @@ export class GameEngine {
   // Effect-driven discard (e.g. Faithless Looting). Discards the chosen cards
   // (routing madness cards to exile), then resumes the paused resolution.
   _applyDiscardCards(pending, answer) {
+    const max = Math.min(pending.count, pending.hand.length)
     const discard = (answer?.discard || []).slice(0, pending.count)
-    if (discard.length !== Math.min(pending.count, pending.hand.length))
+    if (pending.optional) {
+      if (discard.length > max) throw new Error(`discard at most ${pending.count} card(s)`)
+    } else if (discard.length !== max) {
       throw new Error(`must discard ${pending.count} card(s)`)
+    }
+    if (pending.remember && pending._source)
+      pending._source._discardedNonland = discard.some(
+        (oid) => !this.state.objects[oid].printed.types.includes('Land')
+      )
     for (const oid of discard) this._discardCard(pending.player, oid)
+    if (pending.draw && discard.length > 0) this.draw(pending.player, pending.draw)
     this._processMadness(() => this._resumeResolution())
   }
 
@@ -485,24 +495,46 @@ export class GameEngine {
       // Instants and cards with flash can be cast any time you have priority.
       const instantSpeed = p.types.includes('Instant') || p.keywords.includes('Flash')
       const canCastNow = instantSpeed || sorcerySpeed
-      if (canCastNow && this._canPay(pid, this._effectiveCost(pid, o))) {
+      if (canCastNow) {
         const targets = this._spellTargets(o)
         // A targeted spell needs a legal target to be cast (rule 601.2c). This
         // also gates counters (need a spell on the stack) and Auras (a creature).
-        if (targets.length && !targets.every((t) => this._legalTargetsExist(t))) continue
+        const targetsOk = !targets.length || targets.every((t) => this._legalTargetsExist(t))
         const addl = o.behavior.spell?.additionalCost
-        if (addl?.sacrifice && this._sacrificeCandidates(pid, addl.sacrifice).length === 0) continue
-        const xCost = p.manaCost.X || 0
-        actions.push({
-          type: 'cast',
-          oid,
-          label: p.name,
-          targets,
-          needsTargets: targets.length,
-          sacChoose: addl?.sacrifice || null,
-          hasX: xCost > 0,
-          maxX: xCost > 0 ? this._maxX(pid, o, xCost) : 0
-        })
+        const addlOk = !addl?.sacrifice || this._sacrificeCandidates(pid, addl.sacrifice).length > 0
+        if (targetsOk && addlOk) {
+          const xCost = p.manaCost.X || 0
+          if (this._canPay(pid, this._effectiveCost(pid, o))) {
+            actions.push({
+              type: 'cast',
+              oid,
+              label: p.name,
+              targets,
+              needsTargets: targets.length,
+              sacChoose: addl?.sacrifice || null,
+              hasX: xCost > 0,
+              maxX: xCost > 0 ? this._maxX(pid, o, xCost) : 0
+            })
+          }
+          // Alternative cost (e.g. Fireblast: sacrifice two Mountains instead of mana).
+          const alt = o.behavior.spell?.alternativeCost
+          if (
+            alt?.sacrifice &&
+            this._sacrificeCandidates(pid, alt.sacrifice).length >= (alt.sacrifice.count || 1)
+          ) {
+            actions.push({
+              type: 'cast',
+              oid,
+              altCost: true,
+              label: `${p.name} (${alt.label || 'alternative cost'})`,
+              targets,
+              needsTargets: targets.length,
+              sacChoose: null,
+              hasX: false,
+              maxX: 0
+            })
+          }
+        }
       }
       // Omen / adventure: the alternate castable half (sorcery speed).
       const om = o.behavior?.omen
@@ -520,7 +552,10 @@ export class GameEngine {
       if (!fb) continue
       const instantSpeed = o.printed.types.includes('Instant')
       if (!(instantSpeed || sorcerySpeed)) continue
-      if (!this._canPay(pid, parseManaCost(fb.cost))) continue
+      // Flashback cost may be mana, a sacrifice (e.g. Lava Dart), or both.
+      if (fb.cost && !this._canPay(pid, parseManaCost(fb.cost))) continue
+      if (fb.sacrifice && this._sacrificeCandidates(pid, fb.sacrifice).length < (fb.sacrifice.count || 1))
+        continue
       const targets = this._spellTargets(o)
       if (targets.length && !targets.every((t) => this._legalTargetsExist(t))) continue
       actions.push({ type: 'castFlashback', oid, targets, needsTargets: targets.length })
@@ -569,15 +604,24 @@ export class GameEngine {
       }
       case 'cast': {
         const o = s.objects[action.oid]
-        const xCost = o.printed.manaCost.X || 0
-        o.xValue = xCost ? action.x || 0 : 0
-        const cost = this._effectiveCost(pid, o)
-        this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost })
-        // Additional cost: sacrifice a permanent (e.g. Fanatical Offering).
-        const addl = o.behavior.spell?.additionalCost
-        if (addl?.sacrifice && action.sacrifice) {
-          const so = s.objects[action.sacrifice]
-          if (so && so.controller === pid && so.zoneName === 'battlefield') this._bury(so)
+        if (action.altCost) {
+          // Pay the alternative cost (e.g. Fireblast) instead of mana — auto-pick
+          // the required sacrifices.
+          o.xValue = 0
+          const alt = o.behavior.spell.alternativeCost
+          for (const so of this._sacrificeCandidates(pid, alt.sacrifice).slice(0, alt.sacrifice.count || 1))
+            this._bury(so)
+        } else {
+          const xCost = o.printed.manaCost.X || 0
+          o.xValue = xCost ? action.x || 0 : 0
+          const cost = this._effectiveCost(pid, o)
+          this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost })
+          // Additional cost: sacrifice a permanent (e.g. Fanatical Offering).
+          const addl = o.behavior.spell?.additionalCost
+          if (addl?.sacrifice && action.sacrifice) {
+            const so = s.objects[action.sacrifice]
+            if (so && so.controller === pid && so.zoneName === 'battlefield') this._bury(so)
+          }
         }
         moveObject(s, action.oid, 'stack') // clears transient status/controller
         o.controller = pid
@@ -588,7 +632,11 @@ export class GameEngine {
       }
       case 'castFlashback': {
         const o = s.objects[action.oid]
-        this._pay(pid, parseManaCost(o.behavior.flashback.cost))
+        const fb = o.behavior.flashback
+        if (fb.cost) this._pay(pid, parseManaCost(fb.cost))
+        if (fb.sacrifice)
+          for (const so of this._sacrificeCandidates(pid, fb.sacrifice).slice(0, fb.sacrifice.count || 1))
+            this._bury(so)
         moveObject(s, action.oid, 'stack')
         o.controller = pid
         o.targets = action.targets || []
@@ -658,11 +706,19 @@ export class GameEngine {
     return true
   }
 
-  // Permanents `pid` controls that match a sacrifice spec ({ types: [...] }).
+  // Permanents `pid` controls that match a sacrifice spec. A spec may use
+  // { types: [...] }, { type }, and/or { subtype } (e.g. { subtype: 'Mountain' }).
   _sacrificeCandidates(pid, spec) {
     return objectsIn(this.state, 'battlefield').filter(
-      (o) => o.controller === pid && (!spec.types || spec.types.some((t) => o.chars.types.includes(t)))
+      (o) => o.controller === pid && this._sacMatches(o, spec)
     )
+  }
+
+  _sacMatches(o, spec) {
+    if (spec.types && !spec.types.some((t) => o.chars.types.includes(t))) return false
+    if (spec.type && !o.chars.types.includes(spec.type)) return false
+    if (spec.subtype && !o.chars.subtypes.includes(spec.subtype)) return false
+    return true
   }
 
   _payActivationCost(pid, o, ab, action = {}) {
@@ -771,6 +827,7 @@ export class GameEngine {
     o.zoneName = 'battlefield'
     s.zones.battlefield.push(o.oid)
     this._enterBattlefield(o, controller)
+    if (def.tapped) o.status.tapped = true
   }
 
   // Shared entry point for a permanent arriving on the battlefield: fix control,
@@ -833,7 +890,16 @@ export class GameEngine {
         const hand = zone(s, 'hand', pid)
         const count = Math.min(e.amount, hand.length)
         if (count === 0) return false
-        s.pending = { kind: 'discardCards', player: pid, count, hand: [...hand] }
+        s.pending = {
+          kind: 'discardCards',
+          player: pid,
+          count,
+          hand: [...hand],
+          optional: !!e.optional, // "you may discard…"
+          draw: e.draw || 0, // draw this many if you discarded ("if you do, draw…")
+          remember: !!e.remember, // record non-land-ness for a later conditional
+          _source: source
+        }
         return true
       }
       case 'search': {
@@ -923,6 +989,25 @@ export class GameEngine {
             if (e.filter === 'creature' && !t.chars.types.includes('Creature')) continue
             if (e.excludeFlying && this._hasKW(t, 'Flying')) continue
             this._dealDamage(source, { obj: t }, e.amount)
+          }
+          break
+        }
+        case 'dealDamageEachOpponent': {
+          // Guttersnipe / Voldaren Epicure / Grab the Prize. A condition of
+          // 'discardedNonland' gates on what was discarded earlier this resolution.
+          if (e.condition === 'discardedNonland' && !source._discardedNonland) break
+          const amt = this._amount(source, e.amount)
+          for (const p of s.players)
+            if (p.id !== source.controller) this._dealDamage(source, { player: p.id }, amt)
+          break
+        }
+        case 'returnSelfTapped': {
+          // Sneaky Snacker: return the source from its graveyard to the battlefield tapped.
+          const o = s.objects[source.sourceOid]
+          if (o && o.zoneName === 'graveyard') {
+            moveObject(s, o.oid, 'battlefield')
+            this._enterBattlefield(o, o.owner)
+            o.status.tapped = true
           }
           break
         }
@@ -1587,6 +1672,7 @@ export class GameEngine {
     if (!filter) return true
     if (filter.another && subject.oid === watcher.oid) return false
     if (filter.type && !subject.chars.types.includes(filter.type)) return false
+    if (filter.types && !filter.types.some((t) => subject.chars.types.includes(t))) return false
     if (filter.noncreature && subject.chars.types.includes('Creature')) return false
     if (filter.controller === 'you' && subject.controller !== watcher.controller) return false
     if (filter.controller === 'opponent' && subject.controller === watcher.controller) return false
@@ -1597,13 +1683,33 @@ export class GameEngine {
 
   draw(pid, n = 1) {
     const s = this.state
+    const p = s.players[pid]
     for (let i = 0; i < n; i++) {
       const lib = zone(s, 'library', pid)
       if (lib.length === 0) {
-        s.players[pid].loses = true // drew from an empty library (SBA, rule 704.5c)
+        p.loses = true // drew from an empty library (SBA, rule 704.5c)
         continue
       }
       moveObject(s, lib[0], 'hand')
+      // Draw-count triggers (Sneaky Snacker: "when you draw your third card…").
+      p.drewThisTurn = (p.drewThisTurn || 0) + 1
+      if (p.drewThisTurn === 3) this._onThirdDraw(pid)
+    }
+  }
+
+  // Return graveyard cards with the returnOnThirdDraw ability to the battlefield
+  // tapped (queued as triggers, placed on the stack at the next priority).
+  _onThirdDraw(pid) {
+    const s = this.state
+    for (const oid of [...zone(s, 'graveyard', pid)]) {
+      if (s.objects[oid].behavior?.returnOnThirdDraw)
+        s.pendingTriggers.push({
+          controller: pid,
+          sourceOid: oid,
+          subjectOid: oid,
+          effect: [{ op: 'returnSelfTapped' }],
+          targetSpec: []
+        })
     }
   }
 
