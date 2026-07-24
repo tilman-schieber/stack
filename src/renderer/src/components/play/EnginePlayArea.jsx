@@ -185,7 +185,13 @@ export default function EnginePlayArea() {
   // Unifies player-initiated targeting (cast/activate) with engine-initiated
   // target choices (a triggered ability's `chooseTargets` decision).
   const engineTargeting = kind === 'chooseTargets'
-  const targeting = cast || (engineTargeting ? { targets: pending.targets, chosen: chooseSel } : null)
+  // Normalise so `targeting.targets` / `.chosen` work for both a player cast
+  // (specs live on cast.action.targets) and an engine-initiated target choice.
+  const targeting = cast
+    ? { targets: cast.action.targets, chosen: cast.chosen }
+    : engineTargeting
+      ? { targets: pending.targets, chosen: chooseSel }
+      : null
   const targetSlot = targeting ? targeting.targets[targeting.chosen.length] : null
   const wantsCreature = targetSlot && (targetSlot.type === 'creature' || targetSlot.type === 'any')
   const wantsPlayer = targetSlot && (targetSlot.type === 'player' || targetSlot.type === 'any')
