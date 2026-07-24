@@ -223,6 +223,28 @@ export const BEHAVIORS = {
       { trigger: { event: 'toGraveyard', self: true }, effect: [{ op: 'draw', amount: 1 }] }
     ]
   },
+  'Writhing Chrysalis': {
+    triggered: [
+      {
+        trigger: { event: 'dies', self: true },
+        effect: [
+          {
+            op: 'createToken',
+            count: 1,
+            token: { name: 'Phyrexian Horror', types: ['Creature'], subtypes: ['Phyrexian', 'Horror'], colors: ['R'], power: 3, toughness: 2 }
+          }
+        ]
+      }
+    ]
+  },
+  Lembas: {
+    activated: [
+      {
+        cost: { mana: '{2}', tap: true },
+        effect: [{ op: 'draw', amount: 1 }, { op: 'gainLife', amount: 2 }]
+      }
+    ]
+  },
   'Krark-Clan Shaman': {
     activated: [
       {

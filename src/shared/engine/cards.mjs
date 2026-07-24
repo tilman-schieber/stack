@@ -22,14 +22,18 @@ export function parseManaCost(str) {
     const s = raw.slice(1, -1)
     if (/^\d+$/.test(s)) cost.generic += Number(s)
     else if (s === 'X') cost.X = (cost.X || 0) + 1
-    else if (cost[s] != null) cost[s] += 1
-    // hybrid/Phyrexian left for a later milestone
+    else if (s.includes('/')) {
+      // Hybrid mana {B/R}: payable with either color. (Phyrexian / 2-hybrid not
+      // yet modelled — those symbols are ignored.)
+      const parts = s.split('/')
+      if (parts.every((p) => cost[p] != null)) (cost.hybrid ||= []).push(parts)
+    } else if (cost[s] != null) cost[s] += 1
   }
   return cost
 }
 
 export function manaValue(cost) {
-  return (cost.generic || 0) + cost.W + cost.U + cost.B + cost.R + cost.G + cost.C
+  return (cost.generic || 0) + cost.W + cost.U + cost.B + cost.R + cost.G + cost.C + (cost.hybrid?.length || 0)
 }
 
 const COLOR_WORD = { white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G' }
@@ -519,6 +523,22 @@ export const SAMPLE_CARDS = {
     type_line: 'Artifact',
     colors: [],
     oracle_text: 'When Ichor Wellspring enters the battlefield or is put into a graveyard, draw a card.'
+  },
+  'Writhing Chrysalis': {
+    name: 'Writhing Chrysalis',
+    mana_cost: '{1}{B/R}{B/R}',
+    type_line: 'Artifact Creature — Phyrexian',
+    power: '4',
+    toughness: '4',
+    colors: ['B', 'R'],
+    oracle_text: 'When Writhing Chrysalis dies, create a 3/2 red Phyrexian Horror creature token.'
+  },
+  Lembas: {
+    name: 'Lembas',
+    mana_cost: '{1}',
+    type_line: 'Artifact — Food',
+    colors: [],
+    oracle_text: '{2}, {T}: Draw a card. You gain 2 life.'
   },
   'Krark-Clan Shaman': {
     name: 'Krark-Clan Shaman',

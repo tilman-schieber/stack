@@ -125,5 +125,29 @@ section('Fanatical Offering: additional cost sacrifice, then draw 2')
   assert(zone(e.state, 'hand', 0).length === before + 2, 'drew from Offering (2) and Ichor (1), minus the cast')
 }
 
+section('hybrid mana: Writhing Chrysalis payable with B or R')
+{
+  const e = makeEngine()
+  const chrys = put(e, 0, 'Writhing Chrysalis', 'hand') // {1}{B/R}{B/R}
+  put(e, 0, 'Swamp', 'battlefield') // B
+  put(e, 0, 'Mountain', 'battlefield') // R
+  put(e, 0, 'Forest', 'battlefield') // generic
+  advanceToPriorityAt(e, 'main1')
+  assert(e.pending.actions.some((a) => a.type === 'cast' && a.oid === chrys.oid), 'castable with B + R + generic')
+}
+
+section('Writhing Chrysalis: dies -> 3/2 Phyrexian Horror token')
+{
+  const e = makeEngine()
+  const chrys = put(e, 0, 'Writhing Chrysalis', 'battlefield')
+  e._bury(chrys)
+  e._grantPriority() // place + then resolve the dies trigger
+  resolveAll(e)
+  const token = zone(e.state, 'battlefield')
+    .map((oid) => e.state.objects[oid])
+    .find((o) => o.token && o.controller === 0)
+  assert(token && `${token.chars.power}/${token.chars.toughness}` === '3/2', 'made a 3/2 token')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)

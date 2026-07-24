@@ -934,6 +934,16 @@ export class GameEngine {
         chosen.push(src.oid)
       }
     }
+    // Hybrid pips: each payable by a source producing any of its options.
+    for (const options of cost.hybrid || []) {
+      const cands = avail
+        .filter((s) => options.some((c) => s.colors.includes(c)))
+        .sort((a, b) => a.colors.length - b.colors.length)
+      if (!cands.length) return null
+      const src = cands[0]
+      avail.splice(avail.indexOf(src), 1)
+      chosen.push(src.oid)
+    }
     let generic = cost.generic || 0
     if (avail.length < generic) return null
     for (let i = 0; i < generic; i++) chosen.push(avail[i].oid)
