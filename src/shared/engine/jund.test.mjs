@@ -229,5 +229,37 @@ section('Nyxborn Hydra: X spell enters with X +1/+1 counters')
   assert(hydra.chars.keywords.includes('Reach') && hydra.chars.keywords.includes('Trample'), 'has reach and trample')
 }
 
+section('Sagu Wildling: creature (ETB gain 3) or its Omen half (Roost Seek)')
+{
+  // Creature half: cast it, gain 3 on ETB.
+  const e = makeEngine()
+  for (let i = 0; i < 5; i++) put(e, 0, 'Forest', 'battlefield')
+  const sagu = put(e, 0, 'Sagu Wildling', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  const life = e.state.players[0].life
+  const acts = e.pending.actions.filter((a) => a.oid === sagu.oid)
+  assert(acts.some((a) => a.type === 'cast') && acts.some((a) => a.type === 'castOmen'), 'both halves offered')
+  e.choose({ type: 'cast', oid: sagu.oid })
+  resolveAll(e)
+  assert(inZone(e, 0, 'battlefield', sagu.oid), 'creature resolved')
+  assert(e.state.players[0].life === life + 3, 'gained 3 on ETB')
+}
+{
+  // Omen half: Roost Seek tutors a basic to hand, then the card shuffles back.
+  const e = makeEngine()
+  put(e, 0, 'Forest', 'battlefield')
+  const sagu = put(e, 0, 'Sagu Wildling', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  const handBefore = hand(e, 0)
+  e.choose({ type: 'castOmen', oid: sagu.oid })
+  bothPass(e) // resolve -> search
+  assert(e.pending.kind === 'search', 'Roost Seek searches for a basic land')
+  e.choose({ pick: e.pending.cards[0] })
+  resolveAll(e)
+  // -1 (Sagu cast/omen leaves hand) +1 (fetched land) and Sagu shuffled into library
+  assert(inZone(e, 0, 'library', sagu.oid), 'the Omen card was shuffled into the library')
+  assert(hand(e, 0) === handBefore, 'net hand unchanged (Roost Seek left, a basic came in)')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)

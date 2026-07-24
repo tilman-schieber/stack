@@ -213,6 +213,7 @@ export default function EnginePlayArea() {
       choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: chosen, sacrifice: c.sac })
     else if (a.type === 'madness') choose({ cast: true, targets: chosen })
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: chosen })
+    else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: chosen })
     else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac, x: c.x })
   }
 
@@ -236,12 +237,24 @@ export default function EnginePlayArea() {
     else setCast(next)
   }
 
-  // Begin an activated ability: enter targeting if it needs a target, else fire.
-  function startActivate(a) {
+  // Begin any player action; open targeting/sacrifice/X sub-steps as needed.
+  function startAction(a) {
     setAbilityMenu(null)
-    if (a.needsTargets > 0 || a.sacChoose) setCast({ action: a, chosen: [], sac: null })
-    else choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
+    if (a.type === 'playLand') {
+      choose(a)
+      return
+    }
+    const needsSetup = a.needsTargets > 0 || a.sacChoose || a.hasX
+    if (needsSetup) {
+      setCast({ action: a, chosen: [], sac: null, x: null })
+      return
+    }
+    if (a.type === 'activate') choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
+    else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: [] })
+    else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: [] })
+    else choose({ type: 'cast', oid: a.oid })
   }
+  const startActivate = startAction
 
   // Cast a madness card: target if needed, else fire immediately.
   function onMadnessCast(m) {
@@ -250,7 +263,7 @@ export default function EnginePlayArea() {
   }
 
   // ---- click dispatch ----
-  function onHandCard(card, pid) {
+  function onHandCard(card, pid, ev) {
     if ((kind === 'discard' || kind === 'discardCards') && pid === pending.player) {
       setDiscardSel((sel) =>
         sel.includes(card.oid) ? sel.filter((o) => o !== card.oid) : [...sel, card.oid]
@@ -267,15 +280,13 @@ export default function EnginePlayArea() {
       )
       return
     }
-    if (targeting || needSac) return
+    if (targeting || needSac || needX) return
     if (kind === 'priority' && pid === pending.player) {
-      const a = actionFor(card.oid)
-      if (!a) return
-      if (a.type === 'playLand') choose(a)
-      else if (a.type === 'cast') {
-        if (a.needsTargets > 0 || a.sacChoose || a.hasX) setCast({ action: a, chosen: [], sac: null, x: null })
-        else choose({ type: 'cast', oid: a.oid })
-      }
+      const acts = pending.actions.filter(
+        (a) => a.oid === card.oid && ['cast', 'castOmen', 'castFlashback', 'playLand'].includes(a.type)
+      )
+      if (acts.length === 1) startAction(acts[0])
+      else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
     }
   }
 
@@ -384,7 +395,7 @@ export default function EnginePlayArea() {
                 (selecting ? 'selectable ' : '') +
                 (chosen ? 'chosen ' : '')
               }
-              onClick={() => onHandCard(c, p.id)}
+              onClick={(ev) => onHandCard(c, p.id, ev)}
               onZoom={setZoom}
             />
           )
@@ -571,8 +582,12 @@ export default function EnginePlayArea() {
         <div className="card-menu eng-ability-menu" style={{ left: abilityMenu.x, top: abilityMenu.y }}>
           <div className="menu-label">Choose ability</div>
           {abilityMenu.actions.map((a, i) => (
-            <button key={i} onClick={() => startActivate(a)}>
-              {a.loyalty != null ? (a.loyalty > 0 ? `+${a.loyalty}` : `${a.loyalty}`) + ' loyalty' : 'Activate'}
+            <button key={i} onClick={() => startAction(a)}>
+              {a.label
+                ? a.label
+                : a.loyalty != null
+                  ? (a.loyalty > 0 ? `+${a.loyalty}` : `${a.loyalty}`) + ' loyalty'
+                  : 'Activate'}
             </button>
           ))}
           <button className="eng-menu-cancel" onClick={() => setAbilityMenu(null)}>

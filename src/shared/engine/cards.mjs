@@ -535,6 +535,17 @@ export const SAMPLE_CARDS = {
     oracle_text:
       'Devoid. When you cast this spell, create two 0/1 colorless Eldrazi Spawn creature tokens. Reach. Whenever you sacrifice another Eldrazi, put a +1/+1 counter on this creature.'
   },
+  'Sagu Wildling': {
+    name: 'Sagu Wildling',
+    mana_cost: '{4}{G}',
+    type_line: 'Creature — Dragon',
+    power: '3',
+    toughness: '3',
+    colors: ['G'],
+    keywords: ['Flying'],
+    oracle_text:
+      'Flying. When this creature enters, you gain 3 life. // Roost Seek {G} Sorcery — Omen: Search your library for a basic land card, put it into your hand, then shuffle.'
+  },
   'Nyxborn Hydra': {
     name: 'Nyxborn Hydra',
     mana_cost: '{X}{G}',

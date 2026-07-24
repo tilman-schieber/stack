@@ -240,6 +240,14 @@ export const BEHAVIORS = {
       }
     ]
   },
+  'Sagu Wildling': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'gainLife', amount: 3 }] }],
+    omen: {
+      name: 'Roost Seek',
+      cost: '{G}',
+      effect: [{ op: 'search', filter: { supertype: 'Basic', type: 'Land' }, to: 'hand' }]
+    }
+  },
   // Cast as a creature that enters with X +1/+1 counters. (Bestow — casting it as
   // an Aura for {X}{G}{G} — is not yet modelled; it's played as a creature.)
   'Nyxborn Hydra': {
@@ -394,7 +402,8 @@ export function loadBehavior(printed) {
     flashback: authored.flashback || null, // { cost } — cast from the graveyard
     madness: authored.madness || null, // { cost } — cast when discarded
     mana: authored.mana || null, // colors a land can tap for, e.g. ['B','R']
-    entersTapped: authored.entersTapped || false
+    entersTapped: authored.entersTapped || false,
+    omen: authored.omen || null // alternate castable half (Omen/adventure) -> shuffles back
   }
 }
 

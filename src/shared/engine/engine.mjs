@@ -496,12 +496,20 @@ export class GameEngine {
         actions.push({
           type: 'cast',
           oid,
+          label: p.name,
           targets,
           needsTargets: targets.length,
           sacChoose: addl?.sacrifice || null,
           hasX: xCost > 0,
           maxX: xCost > 0 ? this._maxX(pid, o, xCost) : 0
         })
+      }
+      // Omen / adventure: the alternate castable half (sorcery speed).
+      const om = o.behavior?.omen
+      if (om && sorcerySpeed && this._canPay(pid, parseManaCost(om.cost))) {
+        const t = om.targets || []
+        if (!t.length || t.every((x) => this._legalTargetsExist(x)))
+          actions.push({ type: 'castOmen', oid, label: om.name, targets: t, needsTargets: t.length })
       }
     }
 
@@ -586,6 +594,17 @@ export class GameEngine {
         o.targets = action.targets || []
         o.spell = o.behavior.spell
         o.flashbackCast = true // exiled instead of the graveyard when it leaves
+        this._fireTriggers('castSpell', o)
+        break
+      }
+      case 'castOmen': {
+        const o = s.objects[action.oid]
+        this._pay(pid, parseManaCost(o.behavior.omen.cost))
+        moveObject(s, action.oid, 'stack')
+        o.controller = pid
+        o.targets = action.targets || []
+        o.spell = o.behavior.omen // the Omen half's effect
+        o.omenCast = true // shuffled into the library after resolving
         this._fireTriggers('castSpell', o)
         break
       }
@@ -708,11 +727,18 @@ export class GameEngine {
       if (i >= 0) st.splice(i, 1)
       delete s.objects[ctx.oid]
     } else if (o?.zoneName === 'stack') {
-      // The spell may already have been removed (e.g. countered). Flashback and
-      // madness spells are exiled instead of going to the graveyard.
-      moveObject(s, ctx.oid, o.flashbackCast || o.madnessCast ? 'exile' : 'graveyard')
+      // The spell may already have been removed (e.g. countered). An Omen half is
+      // shuffled into its owner's library; flashback/madness spells are exiled.
+      if (o.omenCast) {
+        moveObject(s, ctx.oid, 'library')
+        const lk = zoneKey('library', o.owner)
+        s.zones[lk] = s.rng.shuffle(s.zones[lk])
+      } else {
+        moveObject(s, ctx.oid, o.flashbackCast || o.madnessCast ? 'exile' : 'graveyard')
+      }
       o.flashbackCast = false
       o.madnessCast = false
+      o.omenCast = false
     }
   }
 
