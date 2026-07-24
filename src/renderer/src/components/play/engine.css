@@ -16,55 +16,49 @@
   font-size: 13px;
 }
 
-/* A seat: hand, panel, then battlefield + rail */
-.eng-seat {
+/* The table: a fixed-width status sidebar on the left, the play field on the
+   right. Most of the width is reserved for cards in play + hands. */
+.eng-table {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* ---- Left sidebar: per-player status + zones ---- */
+.eng-sidebar {
+  flex: 0 0 auto;
+  width: 214px;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  flex: 1 1 0;
+  background: #0e0f13;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
 }
-.eng-seat.top {
-  justify-content: flex-start;
-}
-.eng-seat.bottom {
-  flex-direction: column-reverse;
-}
-
-.eng-hand {
+.eng-status {
+  padding: 10px 12px;
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  padding: 8px 12px;
-  overflow-x: auto;
-  background: #101116;
-  min-height: 190px;
-  align-items: center;
 }
-/* Higher specificity than `.play-area.engine .board-card` so hand cards keep
-   their larger size (they carry both .board-card and .eng-hand-card). */
-.play-area.engine .eng-hand .eng-hand-card {
-  width: 130px;
-  height: 182px;
-  flex: 0 0 auto;
-  cursor: default;
+.eng-status + .eng-status {
+  border-top: 1px solid var(--border);
 }
-.eng-hand-card.playable {
-  cursor: pointer;
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.eng-status.active {
+  background: rgba(224, 165, 46, 0.06);
 }
-.eng-hand-card.selectable {
-  cursor: pointer;
-}
-
-/* Panel: name, life, mana, hand count */
-.eng-panel {
+.eng-status-name {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 4px 12px;
-  background: #14151a;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 14px;
+}
+.pp-active-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-left: 6px;
 }
 .eng-prio-dot {
   display: inline-block;
@@ -74,9 +68,14 @@
   background: #4caf50;
   margin-left: 6px;
 }
+.eng-status-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .eng-life {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 17px;
   padding: 2px 8px;
   border-radius: 6px;
 }
@@ -90,7 +89,9 @@
 }
 .eng-mana {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 3px;
+  min-height: 18px;
 }
 .eng-mana-pip {
   color: #1a1206;
@@ -100,19 +101,74 @@
   padding: 0 6px;
 }
 
-/* Battlefield + rail */
-.eng-body {
+/* Library / graveyard / exile side by side. */
+.eng-zones {
   display: flex;
-  flex: 1 1 0;
-  min-height: 0;
+  gap: 8px;
 }
+.eng-zones .rail-pile-card {
+  width: 56px;
+  height: 78px;
+}
+.eng-zones .rail-pile-label {
+  font-size: 10px;
+}
+
+/* ---- Centre: hands + battlefields ---- */
+.eng-center {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.eng-seat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 0;
+}
+/* Bottom player's battlefield sits above their hand (hand at the outer edge). */
+.eng-seat.bottom {
+  justify-content: flex-end;
+}
+
+.eng-hand {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  background: #101116;
+  min-height: 174px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+/* Higher specificity than `.play-area.engine .board-card` so hand cards keep
+   their larger size (they carry both .board-card and .eng-hand-card). */
+.play-area.engine .eng-hand .eng-hand-card {
+  width: 118px;
+  height: 165px;
+  flex: 0 0 auto;
+  cursor: default;
+}
+.eng-hand-card.playable {
+  cursor: pointer;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.eng-hand-card.selectable {
+  cursor: pointer;
+}
+
 .eng-battlefield {
   flex: 1 1 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px;
+  padding: 8px 12px;
   overflow: auto;
+}
+.eng-seat.top .eng-battlefield {
+  border-bottom: 1px solid var(--border);
 }
 .eng-lands,
 .eng-creatures,
@@ -125,63 +181,15 @@
 .eng-creatures {
   flex: 1 1 auto;
 }
-.eng-rail {
-  width: 122px;
-}
 
 /* Board card sizing in engine mode */
 .play-area.engine .board-card {
-  width: 108px;
-  height: 151px;
+  width: 100px;
+  height: 140px;
   cursor: default;
 }
 .play-area.engine .board-card.tapped {
-  margin: 0 22px; /* room for the rotation */
-}
-
-/* Land piles: same-named lands shown as an offset stack of cards */
-.eng-land-pile {
-  position: relative;
-  flex: 0 0 auto;
-}
-.eng-land-pile.stacked {
-  margin-right: 16px;
-  margin-bottom: 16px;
-}
-.eng-land-pile .board-card {
-  position: relative;
-  z-index: 3;
-}
-/* Two offset "cards" behind the top one to read as a stack. */
-.eng-land-pile.stacked::before,
-.eng-land-pile.stacked::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 5px;
-  background: #16171d;
-  border: 1px solid #000;
-  pointer-events: none;
-}
-.eng-land-pile.stacked::before {
-  transform: translate(7px, 7px);
-  z-index: 1;
-}
-.eng-land-pile.stacked::after {
-  transform: translate(14px, 14px);
-  z-index: 0;
-}
-.eng-pile-badge {
-  z-index: 4;
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  background: rgba(0, 0, 0, 0.82);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  border-radius: 8px;
-  padding: 1px 6px;
+  margin: 0 20px; /* room for the rotation */
 }
 .board-card.atk {
   outline: 3px solid #e0a52e;

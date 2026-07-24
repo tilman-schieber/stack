@@ -23,34 +23,6 @@ const cardImg = (c) => (c.cardId ? `card://${c.cardId}` : null)
 const isCreature = (c) => c.types?.includes('Creature')
 const isLand = (c) => c.types?.includes('Land')
 
-// A stack of same-named lands, shown compactly with an untapped/total badge.
-function LandPile({ pile, onZoom }) {
-  const untapped = pile.cards.filter((c) => !c.tapped).length
-  const total = pile.cards.length
-  const rep = pile.cards.find((c) => !c.tapped) || pile.cards[0]
-  return (
-    <div
-      className={'eng-land-pile' + (total > 1 ? ' stacked' : '')}
-      title={`${pile.name} — ${untapped}/${total} untapped`}
-      onContextMenu={(e) => {
-        e.preventDefault()
-        if (rep.cardId) onZoom(rep)
-      }}
-    >
-      <div className="board-card">
-        {rep.cardId ? (
-          <img src={cardImg(rep)} alt={pile.name} draggable={false} />
-        ) : (
-          <div className="cardback" />
-        )}
-      </div>
-      <span className="eng-pile-badge">
-        {untapped}/{total}
-      </span>
-    </div>
-  )
-}
-
 // One permanent / stack card, styled from play.css .board-card.
 // Right-click zooms (via onZoom); left-click acts (via onClick).
 function EngineCard({ card, className = '', onClick, onZoom, title }) {
@@ -375,39 +347,18 @@ export default function EnginePlayArea() {
   const top = view.players[1]
   const bottom = view.players[0]
 
-  const seat = (p, place) => (
-    <div className={'eng-seat ' + place} key={p.id}>
-      <div className="eng-hand" data-player={p.id}>
-        {p.hand.map((c) => {
-          const a = actionFor(c.oid)
-          const playable = kind === 'priority' && p.id === pending.player && !!a && a.type !== 'pass'
-          const selecting =
-            (kind === 'discard' || kind === 'discardCards' || kind === 'bottom') &&
-            p.id === pending.player
-          const chosen = discardSel.includes(c.oid) || bottomSel.includes(c.oid)
-          return (
-            <EngineCard
-              key={c.oid}
-              card={c}
-              className={
-                'eng-hand-card ' +
-                (playable ? 'playable ' : '') +
-                (selecting ? 'selectable ' : '') +
-                (chosen ? 'chosen ' : '')
-              }
-              onClick={(ev) => onHandCard(c, p.id, ev)}
-              onZoom={setZoom}
-            />
-          )
-        })}
+  // Player status + zones live in the left sidebar, one block per player.
+  const statusColumn = (p) => (
+    <div
+      className={'eng-status' + (view.activePlayer === p.id ? ' active' : '')}
+      key={p.id}
+    >
+      <div className="eng-status-name">
+        {p.name}
+        {view.activePlayer === p.id && <span className="pp-active-dot" title="Active player" />}
+        {view.priorityPlayer === p.id && <span className="eng-prio-dot" title="Has priority" />}
       </div>
-
-      <div className="eng-panel">
-        <span className="pp-name">
-          {p.name}
-          {view.activePlayer === p.id && <span className="pp-active-dot" title="Active player" />}
-          {view.priorityPlayer === p.id && <span className="eng-prio-dot" title="Has priority" />}
-        </span>
+      <div className="eng-status-stats">
         <span
           className={'eng-life ' + (targeting && wantsPlayer ? 'targetable' : '')}
           onClick={() => onPlayerTarget(p.id)}
@@ -415,84 +366,105 @@ export default function EnginePlayArea() {
         >
           ❤ {p.life}
         </span>
-        <ManaPool pool={p.manaPool} />
         <span className="eng-count" title="Cards in hand">
           ✋ {p.handCount}
         </span>
       </div>
-
-      <div className="eng-body">
-        <div className="battlefield eng-battlefield" data-player={p.id}>
-          {p.battlefield.length === 0 && <div className="bf-hint">No permanents</div>}
-          {(() => {
-            const byName = (a, b) => a.name.localeCompare(b.name)
-            const creatures = p.battlefield.filter(isCreature).sort(byName)
-            const lands = p.battlefield.filter(isLand).sort(byName)
-            const others = p.battlefield.filter((c) => !isCreature(c) && !isLand(c)).sort(byName)
-
-            const cardRow = (list, cls, key) =>
-              list.length ? (
-                <div className={cls} key={key}>
-                  {list.map((c) => (
-                    <EngineCard
-                      key={c.oid}
-                      card={c}
-                      className={bfClass(c, p.id)}
-                      onClick={(ev) => onBattlefieldCard(c, p.id, ev)}
-                      onZoom={setZoom}
-                      title={c.name + (c.keywords?.length ? ' — ' + c.keywords.join(', ') : '')}
-                    />
-                  ))}
-                </div>
-              ) : null
-
-            // Lands stacked into per-name piles.
-            const piles = []
-            for (const c of lands) {
-              const p0 = piles.find((x) => x.name === c.name)
-              if (p0) p0.cards.push(c)
-              else piles.push({ name: c.name, cards: [c] })
-            }
-            // While targeting a land, show lands individually so each is clickable.
-            const landsEl = lands.length
-              ? targeting && wantsLand
-                ? cardRow(lands, 'eng-lands', 'lands')
-                : (
-                    <div className="eng-lands" key="lands">
-                      {piles.map((pile) => (
-                        <LandPile key={pile.name} pile={pile} onZoom={setZoom} />
-                      ))}
-                    </div>
-                  )
-              : null
-
-            const creaturesEl = cardRow(creatures, 'eng-creatures', 'creatures')
-            const othersEl = cardRow(others, 'eng-others', 'others')
-            // Creatures front the centre line; other permanents behind them;
-            // lands at the player's outer edge.
-            const bands =
-              place === 'bottom'
-                ? [creaturesEl, othersEl, landsEl]
-                : [landsEl, othersEl, creaturesEl]
-            return bands.filter(Boolean)
-          })()}
-        </div>
-        <div className="right-rail eng-rail">
-          <Pile label="Library" count={p.libraryCount} faceDown />
-          <Pile
-            label="Graveyard"
-            count={p.graveyard.length}
-            topCard={p.graveyard[p.graveyard.length - 1]}
-            onOpen={() => setZoneView({ pid: p.id, zone: 'graveyard' })}
-          />
-          <Pile
-            label="Exile"
-            count={p.exile.length}
-            topCard={p.exile[p.exile.length - 1]}
-            onOpen={() => setZoneView({ pid: p.id, zone: 'exile' })}
-          />
-        </div>
+      <ManaPool pool={p.manaPool} />
+      <div className="eng-zones">
+        <Pile label="Library" count={p.libraryCount} faceDown />
+        <Pile
+          label="Graveyard"
+          count={p.graveyard.length}
+          topCard={p.graveyard[p.graveyard.length - 1]}
+          onOpen={() => setZoneView({ pid: p.id, zone: 'graveyard' })}
+        />
+        <Pile
+          label="Exile"
+          count={p.exile.length}
+          topCard={p.exile[p.exile.length - 1]}
+          onOpen={() => setZoneView({ pid: p.id, zone: 'exile' })}
+        />
       </div>
+    </div>
+  )
+
+  const handRow = (p) => (
+    <div className="eng-hand" data-player={p.id}>
+      {p.hand.map((c) => {
+        const a = actionFor(c.oid)
+        const playable = kind === 'priority' && p.id === pending.player && !!a && a.type !== 'pass'
+        const selecting =
+          (kind === 'discard' || kind === 'discardCards' || kind === 'bottom') &&
+          p.id === pending.player
+        const chosen = discardSel.includes(c.oid) || bottomSel.includes(c.oid)
+        return (
+          <EngineCard
+            key={c.oid}
+            card={c}
+            className={
+              'eng-hand-card ' +
+              (playable ? 'playable ' : '') +
+              (selecting ? 'selectable ' : '') +
+              (chosen ? 'chosen ' : '')
+            }
+            onClick={(ev) => onHandCard(c, p.id, ev)}
+            onZoom={setZoom}
+          />
+        )
+      })}
+    </div>
+  )
+
+  // A player's battlefield: creatures / other permanents / lands in bands, with
+  // creatures fronting the centre line and lands at the player's outer edge.
+  const battlefield = (p, place) => (
+    <div className="battlefield eng-battlefield" data-player={p.id}>
+      {p.battlefield.length === 0 && <div className="bf-hint">No permanents</div>}
+      {(() => {
+        const byName = (a, b) => a.name.localeCompare(b.name)
+        const creatures = p.battlefield.filter(isCreature).sort(byName)
+        const lands = p.battlefield.filter(isLand).sort(byName)
+        const others = p.battlefield.filter((c) => !isCreature(c) && !isLand(c)).sort(byName)
+
+        const cardRow = (list, cls, key) =>
+          list.length ? (
+            <div className={cls} key={key}>
+              {list.map((c) => (
+                <EngineCard
+                  key={c.oid}
+                  card={c}
+                  className={bfClass(c, p.id)}
+                  onClick={(ev) => onBattlefieldCard(c, p.id, ev)}
+                  onZoom={setZoom}
+                  title={c.name + (c.keywords?.length ? ' — ' + c.keywords.join(', ') : '')}
+                />
+              ))}
+            </div>
+          ) : null
+
+        // Lands are rendered individually (not piled) so their tapped state is
+        // always visible.
+        const landsEl = cardRow(lands, 'eng-lands', 'lands')
+        const creaturesEl = cardRow(creatures, 'eng-creatures', 'creatures')
+        const othersEl = cardRow(others, 'eng-others', 'others')
+        const bands =
+          place === 'bottom'
+            ? [creaturesEl, othersEl, landsEl]
+            : [landsEl, othersEl, creaturesEl]
+        return bands.filter(Boolean)
+      })()}
+    </div>
+  )
+
+  // A seat = one player's hand + battlefield. Hands sit at the outer edges
+  // (top player's above their board, bottom player's below), battlefields meet
+  // in the middle.
+  const seat = (p, place) => (
+    <div className={'eng-seat ' + place} key={p.id}>
+      {place === 'top' && handRow(p)}
+      {battlefield(p, place)}
+      {place === 'bottom' && handRow(p)}
     </div>
   )
 
@@ -527,8 +499,16 @@ export default function EnginePlayArea() {
         )}
       </div>
 
-      {seat(top, 'top')}
-      {seat(bottom, 'bottom')}
+      <div className="eng-table">
+        <div className="eng-sidebar">
+          {statusColumn(top)}
+          {statusColumn(bottom)}
+        </div>
+        <div className="eng-center">
+          {seat(top, 'top')}
+          {seat(bottom, 'bottom')}
+        </div>
+      </div>
 
       <StackOverlay
         stack={view.stack}
