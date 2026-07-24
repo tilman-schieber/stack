@@ -5,64 +5,46 @@
 // so real card art appears, while the engine enforces the rules by card name.
 
 export const EXAMPLE_DECKS = [
+  // ---- Pauper archetypes ----
   {
-    slug: 'example-red-aggro',
-    name: 'Goblins (example)',
-    description: 'Mono-red goblin aggro — a lord, sac-for-damage, firebreathing and burn.',
+    slug: 'pauper-jund-wildfire',
+    name: 'Jund Wildfire (Pauper)',
+    description: 'Artifact-sacrifice value: Cleansing Wildfire on your own artifact lands, Ichor Wellspring loops, and sac outlets.',
     cards: [
-      [14, 'Mountain'],
-      [2, 'Mogg Fanatic'], // sacrifice: 1 damage (activated ability)
-      [1, 'Chandra Nalaar'], // planeswalker: loyalty abilities
-      [3, 'Raging Goblin'], // haste
-      [3, 'Goblin Piker'], // vanilla 2/1
-      [3, 'Boggart Brute'], // menace 3/2
-      [2, 'Goblin King'], // lord: other Goblins get +1/+1 (layer 7d)
-      [2, 'Flametongue Kavu'], // ETB: 4 damage to target creature (targeted trigger)
-      [2, 'Dragon Fodder'], // create two 1/1 Goblin tokens
-      [2, 'Shivan Dragon'], // {R}: +1/+0 firebreathing (activated ability)
-      [1, 'Bonesplitter'], // Equipment: +2/+0, Equip {1}
-      [4, 'Lightning Bolt'],
-      [1, 'Lightning Strike']
+      // Creatures
+      [2, 'Nyxborn Hydra'],
+      [3, 'Krark-Clan Shaman'],
+      [4, 'Refurbished Familiar'],
+      [4, 'Writhing Chrysalis'],
+      [1, 'Sagu Wildling'],
+      // Artifacts
+      [2, 'Lembas'],
+      [3, 'Nihil Spellbomb'],
+      [4, 'Ichor Wellspring'],
+      // Instants
+      [1, 'Go for the Throat'],
+      [2, "Eviscerator's Insight"],
+      [4, 'Fanatical Offering'],
+      [3, 'Cast Down'],
+      [1, 'Pulse of Murasa'],
+      [1, 'Toxin Analysis'],
+      // Sorcery / enchantment
+      [4, 'Cleansing Wildfire'],
+      [1, 'Makeshift Munitions'],
+      // Lands
+      [4, 'Drossforge Bridge'],
+      [4, 'Slagwoods Bridge'],
+      [4, 'Twisted Landscape'],
+      [2, 'Vault of Whispers'],
+      [3, 'Swamp'],
+      [2, 'Forest'],
+      [1, 'Mountain']
     ]
   },
   {
-    slug: 'example-green-stompy',
-    name: 'Green Stompy (example)',
-    description: 'Mono-green fatties with ramp, trample, reach — and a combat trick.',
-    cards: [
-      [14, 'Forest'],
-      [4, 'Llanowar Elves'], // mana dork
-      [3, 'Grizzly Bears'], // vanilla 2/2
-      [3, 'Elvish Visionary'], // ETB: draw
-      [3, 'Servant of the Scale'], // enters with two +1/+1 counters (replacement)
-      [3, 'Rumbling Baloth'], // trample 4/4
-      [2, 'Giant Spider'], // reach 2/4
-      [2, 'Craw Wurm'], // vanilla 6/4
-      [2, 'Giant Growth'], // +3/+3 until end of turn
-      [2, 'Rancor'], // Aura: +2/+0 and trample
-      [2, 'Fog'] // prevent all combat damage this turn
-    ]
-  },
-  {
-    slug: 'pauper-blue-flyers',
-    name: 'Blue Flyers (Pauper)',
-    description: 'Mono-blue tempo — evasive fliers, counters and card selection (Faeries-lite).',
-    cards: [
-      [16, 'Island'],
-      [4, 'Faerie Seer'], // flying, ETB scry 2
-      [4, 'Wind Drake'], // 2/2 flying
-      [2, 'Snapping Drake'], // 3/3 flying
-      [4, 'Counterspell'],
-      [2, 'Cancel'],
-      [3, 'Preordain'],
-      [3, 'Serum Visions'],
-      [2, 'Divination']
-    ]
-  },
-  {
-    slug: 'pauper-red-madness-burn',
-    name: 'Red Madness Burn (Pauper)',
-    description: 'Mono-red burn with prowess, madness (Fiery Temper) and flashback loot.',
+    slug: 'pauper-madness-burn',
+    name: 'Mono-Red Madness Burn (Pauper)',
+    description: 'Aggressive burn with prowess, madness (Fiery Temper) and flashback loot.',
     cards: [
       [16, 'Mountain'],
       [4, 'Monastery Swiftspear'], // prowess, haste
@@ -75,30 +57,86 @@ export const EXAMPLE_DECKS = [
     ]
   },
   {
-    slug: 'example-white-skies',
-    name: 'White Skies (example)',
-    description: 'Anthem + evasion — Glorious Anthem and Levitation turn the team into fliers.',
+    slug: 'pauper-blue-faeries',
+    name: 'Mono-Blue Faeries (Pauper)',
+    description: 'Blue tempo — evasive fliers, counters and card selection. (Simplified: Ninjutsu / Spellstutter Sprite still to come.)',
     cards: [
-      [16, 'Plains'],
-      [4, 'Soul Warden'], // ETB lifegain
-      [4, 'White Knight'], // first strike, protection from black
-      [3, 'Fencing Ace'], // double strike
-      [4, 'Serra Angel'], // flying, vigilance
-      [3, 'Raise the Alarm'], // create two 1/1 Soldier tokens
-      [3, 'Glorious Anthem'], // creatures you control get +1/+1 (layer 7d)
-      [3, 'Levitation'] // creatures you control have flying (layer 6)
+      [16, 'Island'],
+      [4, 'Faerie Seer'], // flying, ETB scry 2
+      [4, 'Wind Drake'], // 2/2 flying
+      [2, 'Snapping Drake'], // 3/3 flying
+      [4, 'Counterspell'],
+      [2, 'Cancel'],
+      [3, 'Preordain'],
+      [3, 'Serum Visions'],
+      [2, 'Divination']
+    ]
+  },
+
+  // ---- Sample decks (mono-colour, showcase engine mechanics) ----
+  {
+    slug: 'sample-goblins',
+    name: 'Goblins (sample)',
+    description: 'Mono-red goblins — a lord, sac-for-damage, firebreathing, a planeswalker and burn.',
+    cards: [
+      [14, 'Mountain'],
+      [2, 'Mogg Fanatic'],
+      [1, 'Chandra Nalaar'],
+      [3, 'Raging Goblin'],
+      [3, 'Goblin Piker'],
+      [3, 'Boggart Brute'],
+      [2, 'Goblin King'],
+      [2, 'Flametongue Kavu'],
+      [2, 'Dragon Fodder'],
+      [2, 'Shivan Dragon'],
+      [1, 'Bonesplitter'],
+      [4, 'Lightning Bolt'],
+      [1, 'Lightning Strike']
     ]
   },
   {
-    slug: 'example-black-control',
-    name: 'Black Midrange (example)',
-    description: 'Removal-heavy black — deathtouch, lifelink fliers and card draw.',
+    slug: 'sample-green-stompy',
+    name: 'Green Stompy (sample)',
+    description: 'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog.',
+    cards: [
+      [14, 'Forest'],
+      [4, 'Llanowar Elves'],
+      [3, 'Grizzly Bears'],
+      [3, 'Elvish Visionary'],
+      [3, 'Servant of the Scale'],
+      [3, 'Rumbling Baloth'],
+      [2, 'Giant Spider'],
+      [2, 'Craw Wurm'],
+      [2, 'Giant Growth'],
+      [2, 'Rancor'],
+      [2, 'Fog']
+    ]
+  },
+  {
+    slug: 'sample-white-skies',
+    name: 'White Skies (sample)',
+    description: 'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers.',
+    cards: [
+      [16, 'Plains'],
+      [4, 'Soul Warden'],
+      [4, 'White Knight'],
+      [3, 'Fencing Ace'],
+      [4, 'Serra Angel'],
+      [3, 'Raise the Alarm'],
+      [3, 'Glorious Anthem'],
+      [3, 'Levitation']
+    ]
+  },
+  {
+    slug: 'sample-black-midrange',
+    name: 'Black Midrange (sample)',
+    description: 'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist and card draw.',
     cards: [
       [16, 'Swamp'],
-      [4, 'Walking Corpse'], // vanilla 2/2
-      [4, 'Typhoid Rats'], // deathtouch 1/1
-      [4, 'Vampire Nighthawk'], // flying, deathtouch, lifelink
-      [2, 'Blood Artist'], // dies-trigger lifegain
+      [4, 'Walking Corpse'],
+      [4, 'Typhoid Rats'],
+      [4, 'Vampire Nighthawk'],
+      [2, 'Blood Artist'],
       [4, 'Doom Blade'],
       [3, 'Murder'],
       [3, 'Sign in Blood']

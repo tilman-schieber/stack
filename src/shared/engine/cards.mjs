@@ -61,26 +61,29 @@ export function parseTypeLine(line) {
   return out
 }
 
-// Build the immutable base characteristics used by the engine.
+// Build the immutable base characteristics used by the engine. For adventure /
+// double-faced cards the "printed" permanent is the front face, so behaviors key
+// off the front-face name (e.g. "Sagu Wildling", not "Sagu Wildling // Roost Seek").
 export function printedFromScryfall(sf) {
-  const cost = parseManaCost(sf.mana_cost || '')
-  const t = parseTypeLine(sf.type_line || '')
-  const power = sf.power != null && sf.power !== '' ? Number(sf.power) : null
-  const toughness = sf.toughness != null && sf.toughness !== '' ? Number(sf.toughness) : null
+  const f = sf.card_faces?.[0] || sf
+  const cost = parseManaCost(f.mana_cost || '')
+  const t = parseTypeLine(f.type_line || '')
+  const power = f.power != null && f.power !== '' ? Number(f.power) : null
+  const toughness = f.toughness != null && f.toughness !== '' ? Number(f.toughness) : null
   return {
-    name: sf.name,
+    name: f.name || sf.name,
     manaCost: cost,
     manaValue: manaValue(cost),
     supertypes: t.supertypes,
     types: t.types,
     subtypes: t.subtypes,
-    colors: sf.colors || [],
+    colors: sf.colors || f.colors || [],
     keywords: sf.keywords || [],
     power,
     toughness,
-    loyalty: sf.loyalty != null ? Number(sf.loyalty) : null,
-    protections: parseProtections(sf.oracle_text),
-    oracleText: sf.oracle_text || ''
+    loyalty: f.loyalty != null ? Number(f.loyalty) : null,
+    protections: parseProtections(f.oracle_text || sf.oracle_text),
+    oracleText: f.oracle_text || sf.oracle_text || ''
   }
 }
 
