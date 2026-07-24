@@ -475,7 +475,15 @@ export class GameEngine {
         // A targeted spell needs a legal target to be cast (rule 601.2c). This
         // also gates counters (need a spell on the stack) and Auras (a creature).
         if (targets.length && !targets.every((t) => this._legalTargetsExist(t))) continue
-        actions.push({ type: 'cast', oid, targets, needsTargets: targets.length })
+        const addl = o.behavior.spell?.additionalCost
+        if (addl?.sacrifice && this._sacrificeCandidates(pid, addl.sacrifice).length === 0) continue
+        actions.push({
+          type: 'cast',
+          oid,
+          targets,
+          needsTargets: targets.length,
+          sacChoose: addl?.sacrifice || null
+        })
       }
     }
 
@@ -500,13 +508,15 @@ export class GameEngine {
         if (ab.manaAbility) return // mana abilities are paid automatically
         if (!this._canActivate(pid, o, ab)) return
         const targets = ab.targets || []
+        const sac = ab.cost?.sacrifice
         actions.push({
           type: 'activate',
           oid,
           ability: i,
           targets,
           needsTargets: targets.length,
-          loyalty: ab.loyalty // present for planeswalker loyalty abilities
+          loyalty: ab.loyalty, // present for planeswalker loyalty abilities
+          sacChoose: sac && sac !== 'self' ? sac : null // { types } to pick a sacrifice
         })
       })
     }
@@ -534,6 +544,12 @@ export class GameEngine {
       case 'cast': {
         const o = s.objects[action.oid]
         this._pay(pid, this._effectiveCost(pid, o))
+        // Additional cost: sacrifice a permanent (e.g. Fanatical Offering).
+        const addl = o.behavior.spell?.additionalCost
+        if (addl?.sacrifice && action.sacrifice) {
+          const so = s.objects[action.sacrifice]
+          if (so && so.controller === pid && so.zoneName === 'battlefield') this._bury(so)
+        }
         moveObject(s, action.oid, 'stack') // clears transient status/controller
         o.controller = pid
         o.targets = action.targets || []
@@ -555,7 +571,7 @@ export class GameEngine {
       case 'activate': {
         const o = s.objects[action.oid]
         const ab = o.behavior.activated[action.ability]
-        this._payActivationCost(pid, o, ab)
+        this._payActivationCost(pid, o, ab, action)
         // The ability exists on the stack independently of its source.
         const aoid = createAbility(s, {
           controller: pid,
@@ -596,11 +612,20 @@ export class GameEngine {
     }
     if (cost.mana && !this._canPay(pid, parseManaCost(cost.mana))) return false
     if (cost.payLife != null && this.state.players[pid].life <= cost.payLife) return false
-    // sacrifice: 'self' is always payable while the source is on the battlefield
+    // A sacrifice cost that isn't 'self' needs a permanent to sacrifice.
+    if (cost.sacrifice && cost.sacrifice !== 'self' && this._sacrificeCandidates(pid, cost.sacrifice).length === 0)
+      return false
     return true
   }
 
-  _payActivationCost(pid, o, ab) {
+  // Permanents `pid` controls that match a sacrifice spec ({ types: [...] }).
+  _sacrificeCandidates(pid, spec) {
+    return objectsIn(this.state, 'battlefield').filter(
+      (o) => o.controller === pid && (!spec.types || spec.types.some((t) => o.chars.types.includes(t)))
+    )
+  }
+
+  _payActivationCost(pid, o, ab, action = {}) {
     const s = this.state
     if (ab.oncePerTurn) (o.status.abilityUsed ||= []).push(ab)
     if (ab.loyalty != null) {
@@ -612,6 +637,10 @@ export class GameEngine {
     if (cost.tap) o.status.tapped = true
     if (cost.payLife != null) s.players[pid].life -= cost.payLife
     if (cost.sacrifice === 'self') this._bury(o)
+    else if (cost.sacrifice && action.sacrifice) {
+      const so = s.objects[action.sacrifice]
+      if (so && so.controller === pid && so.zoneName === 'battlefield') this._bury(so)
+    }
   }
 
   _resolveTop() {
@@ -713,7 +742,8 @@ export class GameEngine {
     if (o.printed.loyalty != null) o.status.counters.loyalty = o.printed.loyalty
     // An Aura enters attached to the permanent it targeted as it was cast.
     if (o.behavior?.enchant && o.targets?.[0]?.oid) o.status.attachedTo = o.targets[0].oid
-    this._fireTriggers('etb', o)
+    this._fireTriggers('etb', o) // alias of enters:battlefield
+    this._fireTriggers('enters:battlefield', o)
   }
 
   // ---- effects ---------------------------------------------------------
@@ -785,6 +815,16 @@ export class GameEngine {
         case 'gainLife':
           s.players[source.controller].life += e.amount
           break
+        case 'dealDamageEach': {
+          // Damage to each permanent matching a filter (e.g. every creature).
+          for (const oid of [...zone(s, 'battlefield')]) {
+            const t = s.objects[oid]
+            if (!t) continue
+            if (e.filter === 'creature' && !t.chars.types.includes('Creature')) continue
+            this._dealDamage(source, { obj: t }, e.amount)
+          }
+          break
+        }
         case 'loseLife':
           s.players[source.controller].life -= e.amount
           break
@@ -1323,12 +1363,29 @@ export class GameEngine {
     }
   }
 
-  // Move a permanent from the battlefield to its graveyard, firing dies (for
-  // creatures) and toGraveyard (any permanent, e.g. Ichor Wellspring) triggers.
+  // The single place a card changes zones. Fires general zone-change triggers —
+  // `leaves:<from>` before the move (so leave triggers "look back in time") and
+  // `enters:<to>` after — plus back-compat aliases (dies, toGraveyard, etb).
+  // Author new cards against enters:/leaves:<zone>; the aliases just map common
+  // cases so existing behaviors keep working.
+  _relocate(o, toZone, opts = {}) {
+    const from = o.zoneName
+    // Leave triggers fire before the move — the source and observers look back
+    // at the pre-move state (rule 603.6d/e).
+    if (from) {
+      if (from === 'battlefield') {
+        if (o.chars?.types?.includes('Creature') && toZone === 'graveyard') this._fireTriggers('dies', o)
+        if (toZone === 'graveyard') this._fireTriggers('toGraveyard', o)
+      }
+      this._fireTriggers('leaves:' + from, o)
+    }
+    moveObject(this.state, o.oid, toZone, opts)
+    this._fireTriggers('enters:' + toZone, o) // enter triggers see the new zone
+  }
+
+  // A permanent leaving the battlefield for the graveyard (death/sacrifice/destroy).
   _bury(o) {
-    if (o.chars.types.includes('Creature')) this._fireTriggers('dies', o)
-    this._fireTriggers('toGraveyard', o)
-    moveObject(this.state, o.oid, 'graveyard')
+    this._relocate(o, 'graveyard')
   }
 
   _matchFilter(filter, subject, watcher) {

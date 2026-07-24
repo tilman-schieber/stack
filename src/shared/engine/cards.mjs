@@ -520,6 +520,29 @@ export const SAMPLE_CARDS = {
     colors: [],
     oracle_text: 'When Ichor Wellspring enters the battlefield or is put into a graveyard, draw a card.'
   },
+  'Krark-Clan Shaman': {
+    name: 'Krark-Clan Shaman',
+    mana_cost: '{2}{R}',
+    type_line: 'Creature — Goblin',
+    power: '1',
+    toughness: '1',
+    colors: ['R'],
+    oracle_text: '{T}, Sacrifice an artifact: Krark-Clan Shaman deals 1 damage to each creature.'
+  },
+  'Makeshift Munitions': {
+    name: 'Makeshift Munitions',
+    mana_cost: '{1}{R}',
+    type_line: 'Enchantment',
+    colors: ['R'],
+    oracle_text: '{1}, Sacrifice an artifact or creature: Makeshift Munitions deals 1 damage to any target.'
+  },
+  'Fanatical Offering': {
+    name: 'Fanatical Offering',
+    mana_cost: '{1}{B}',
+    type_line: 'Instant',
+    colors: ['B'],
+    oracle_text: 'As an additional cost to cast this spell, sacrifice an artifact or creature. Draw two cards.'
+  },
   'Go for the Throat': {
     name: 'Go for the Throat',
     mana_cost: '{1}{B}',

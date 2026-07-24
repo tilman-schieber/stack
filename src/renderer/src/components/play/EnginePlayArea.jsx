@@ -185,33 +185,38 @@ export default function EnginePlayArea() {
   // Unifies player-initiated targeting (cast/activate) with engine-initiated
   // target choices (a triggered ability's `chooseTargets` decision).
   const engineTargeting = kind === 'chooseTargets'
+  // A cast/activate can require choosing a permanent to sacrifice (a cost) before
+  // its targets. While that's pending we're in "sacrifice" mode, not targeting.
+  const needSac = !!(cast && cast.action.sacChoose && !cast.sac)
   // Normalise so `targeting.targets` / `.chosen` work for both a player cast
   // (specs live on cast.action.targets) and an engine-initiated target choice.
-  const targeting = cast
-    ? { targets: cast.action.targets, chosen: cast.chosen }
-    : engineTargeting
-      ? { targets: pending.targets, chosen: chooseSel }
-      : null
+  const targeting = needSac
+    ? null
+    : cast
+      ? { targets: cast.action.targets, chosen: cast.chosen }
+      : engineTargeting
+        ? { targets: pending.targets, chosen: chooseSel }
+        : null
   const targetSlot = targeting ? targeting.targets[targeting.chosen.length] : null
   const wantsCreature = targetSlot && (targetSlot.type === 'creature' || targetSlot.type === 'any')
   const wantsPlayer = targetSlot && (targetSlot.type === 'player' || targetSlot.type === 'any')
   const wantsSpell = targetSlot && targetSlot.type === 'spell'
 
-  // Submit a player-initiated targeted action once all its targets are chosen.
-  function submit(action, chosen) {
-    if (action.type === 'activate')
-      choose({ type: 'activate', oid: action.oid, ability: action.ability, targets: chosen })
-    else if (action.type === 'madness') choose({ cast: true, targets: chosen })
-    else if (action.type === 'castFlashback')
-      choose({ type: 'castFlashback', oid: action.oid, targets: chosen })
-    else choose({ type: 'cast', oid: action.oid, targets: chosen })
+  // Fire the assembled cast/activate (with its chosen targets and sacrifice).
+  function finalizeCast(c, chosen) {
+    const a = c.action
+    if (a.type === 'activate')
+      choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: chosen, sacrifice: c.sac })
+    else if (a.type === 'madness') choose({ cast: true, targets: chosen })
+    else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: chosen })
+    else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac })
   }
 
   function addTarget(t) {
     const chosen = [...targeting.chosen, t]
     const done = chosen.length >= targeting.targets.length
     if (cast) {
-      if (done) submit(cast.action, chosen)
+      if (done) finalizeCast(cast, chosen)
       else setCast({ ...cast, chosen })
     } else {
       // engine chooseTargets
@@ -220,10 +225,17 @@ export default function EnginePlayArea() {
     }
   }
 
+  // Pick a permanent to sacrifice as part of a cost; then continue to targets.
+  function chooseSacrifice(card) {
+    const next = { ...cast, sac: card.oid }
+    if (next.action.targets.length === 0) finalizeCast(next, [])
+    else setCast(next)
+  }
+
   // Begin an activated ability: enter targeting if it needs a target, else fire.
   function startActivate(a) {
     setAbilityMenu(null)
-    if (a.needsTargets > 0) setCast({ action: a, chosen: [] })
+    if (a.needsTargets > 0 || a.sacChoose) setCast({ action: a, chosen: [], sac: null })
     else choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
   }
 
@@ -251,19 +263,25 @@ export default function EnginePlayArea() {
       )
       return
     }
-    if (targeting) return
+    if (targeting || needSac) return
     if (kind === 'priority' && pid === pending.player) {
       const a = actionFor(card.oid)
       if (!a) return
       if (a.type === 'playLand') choose(a)
       else if (a.type === 'cast') {
-        if (a.needsTargets > 0) setCast({ action: a, chosen: [] })
+        if (a.needsTargets > 0 || a.sacChoose) setCast({ action: a, chosen: [], sac: null })
         else choose({ type: 'cast', oid: a.oid })
       }
     }
   }
 
   function onBattlefieldCard(card, controllerPid, ev) {
+    // Choosing a permanent to sacrifice (a cost) — click one you control that matches.
+    if (needSac) {
+      if (controllerPid === pending.player && (cast.action.sacChoose.types || []).some((t) => card.types.includes(t)))
+        chooseSacrifice(card)
+      return
+    }
     if (targeting) {
       if (wantsCreature && isCreature(card)) addTarget({ kind: 'object', oid: card.oid })
       return
@@ -319,7 +337,9 @@ export default function EnginePlayArea() {
     if (card.blocking) cls.push('blk')
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
     if (targeting && wantsCreature && isCreature(card)) cls.push('targetable')
-    if (!targeting && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
+    if (needSac && controllerPid === pending.player && (cast.action.sacChoose.types || []).some((t) => card.types.includes(t)))
+      cls.push('targetable')
+    if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
       cls.push('activatable')
     if (kind === 'declareAttackers') {
       if (controllerPid === view.activePlayer && pending.eligible.includes(card.oid))
@@ -551,6 +571,7 @@ export default function EnginePlayArea() {
             ? { targets: targeting.targets, chosen: targeting.chosen, name: cast ? null : pending.name, cancelable: !!cast }
             : null
         }
+        sacrificing={needSac ? { types: cast.action.sacChoose.types } : null}
         attackers={attackers}
         attackTargetName={attackTargetName}
         blocks={blocks}
@@ -567,12 +588,21 @@ export default function EnginePlayArea() {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, targeting, attackers, attackTargetName, blocks, discardSel, bottomSel, error, choose, endGame, onMadnessCast, cancelCast }) {
+function Prompt({ view, pending, targeting, sacrificing, attackers, attackTargetName, blocks, discardSel, bottomSel, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
   let body = null
-  if (kind === 'mulligan') {
+  if (sacrificing) {
+    body = (
+      <>
+        <span>Choose {sacrificing.types.join(' or ').toLowerCase()} to sacrifice.</span>
+        <button className="mini" onClick={cancelCast}>
+          Cancel
+        </button>
+      </>
+    )
+  } else if (kind === 'mulligan') {
     body = (
       <>
         <span>

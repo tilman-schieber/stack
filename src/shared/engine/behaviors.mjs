@@ -223,6 +223,26 @@ export const BEHAVIORS = {
       { trigger: { event: 'toGraveyard', self: true }, effect: [{ op: 'draw', amount: 1 }] }
     ]
   },
+  'Krark-Clan Shaman': {
+    activated: [
+      {
+        cost: { tap: true, sacrifice: { types: ['Artifact'] } },
+        effect: [{ op: 'dealDamageEach', amount: 1, filter: 'creature' }]
+      }
+    ]
+  },
+  'Makeshift Munitions': {
+    activated: [
+      {
+        cost: { mana: '{1}', sacrifice: { types: ['Artifact', 'Creature'] } },
+        targets: [{ type: 'any' }],
+        effect: [{ op: 'dealDamage', amount: 1, to: 'target0' }]
+      }
+    ]
+  },
+  'Fanatical Offering': {
+    spell: { additionalCost: { sacrifice: { types: ['Artifact', 'Creature'] } }, effect: [{ op: 'draw', amount: 2 }] }
+  },
   'Go for the Throat': {
     spell: { targets: [{ type: 'creature' }], effect: [{ op: 'destroy', to: 'target0' }] }
   },
