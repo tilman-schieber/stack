@@ -7,7 +7,7 @@
 // Rule references are to MagicCompRules20260619.txt.
 
 import { createState, createObject, createAbility, zone, zoneKey, moveObject, objectsIn } from './state.mjs'
-import { manaAbilityColor } from './behaviors.mjs'
+import { manaAbilityColors } from './behaviors.mjs'
 import { isPermanent, parseManaCost } from './cards.mjs'
 import { recompute } from './layers.mjs'
 
@@ -707,6 +707,7 @@ export class GameEngine {
     o.controller = controller
     o.timestamp = ++this.state.tsCounter // for layer ordering (rule 613.7)
     if (o.printed.types.includes('Creature')) o.status.summoningSick = true
+    if (o.behavior?.entersTapped) o.status.tapped = true
     // Replacement effect: "enters with N counters" (applied before SBAs, so a
     // 0/0 that enters with +1/+1 counters survives).
     const ew = o.behavior?.entersWith
@@ -863,38 +864,42 @@ export class GameEngine {
 
   // ---- mana (rule 605 mana abilities resolve immediately) --------------
 
-  // Untapped sources the player can tap for one mana each, with the color.
+  // Untapped sources the player can tap for one mana each, with the colors each
+  // can produce (dual/any lands produce more than one).
   _manaSources(pid) {
     const s = this.state
     const out = []
     for (const o of objectsIn(s, 'battlefield')) {
       if (o.controller !== pid || o.status.tapped) continue
-      const color = manaAbilityColor(o)
-      if (!color) continue
+      const colors = manaAbilityColors(o)
+      if (!colors.length) continue
       // creatures with a {T} mana ability need no summoning sickness (haste ok)
       if (o.printed.types.includes('Creature') && !this._canTap(o)) continue
-      out.push({ oid: o.oid, color })
+      out.push({ oid: o.oid, colors })
     }
     return out
   }
 
-  // Greedy assignment: colored pips first from matching sources, then generic
-  // from anything left. Returns the source oids to tap, or null if unpayable.
+  // Assign colored pips to matching sources (most-constrained first), then pay
+  // generic from anything left. Returns source oids to tap, or null if unpayable.
   _planPayment(cost, sources) {
-    const byColor = { W: [], U: [], B: [], R: [], G: [], C: [] }
-    for (const src of sources) byColor[src.color]?.push(src.oid)
+    const avail = sources.map((s) => ({ oid: s.oid, colors: s.colors }))
     const chosen = []
     for (const c of ['W', 'U', 'B', 'R', 'G', 'C']) {
       let need = cost[c] || 0
       while (need-- > 0) {
-        if (!byColor[c].length) return null
-        chosen.push(byColor[c].pop())
+        const cands = avail
+          .filter((s) => s.colors.includes(c))
+          .sort((a, b) => a.colors.length - b.colors.length)
+        if (!cands.length) return null
+        const src = cands[0]
+        avail.splice(avail.indexOf(src), 1)
+        chosen.push(src.oid)
       }
     }
-    const rest = Object.values(byColor).flat()
     let generic = cost.generic || 0
-    if (rest.length < generic) return null
-    for (let i = 0; i < generic; i++) chosen.push(rest[i])
+    if (avail.length < generic) return null
+    for (let i = 0; i < generic; i++) chosen.push(avail[i].oid)
     return chosen
   }
 

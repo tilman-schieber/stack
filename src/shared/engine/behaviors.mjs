@@ -217,6 +217,11 @@ export const BEHAVIORS = {
   'Faerie Seer': {
     triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'scry', amount: 2 }] }]
   },
+  // Nonbasic lands: colors they tap for (+ enters-tapped for the bridges/filter).
+  'Vault of Whispers': { mana: ['B'] },
+  'Drossforge Bridge': { mana: ['B', 'R'], entersTapped: true },
+  'Slagwoods Bridge': { mana: ['R', 'G'], entersTapped: true },
+  'Twisted Landscape': { mana: ['C'], entersTapped: true },
   // Planeswalker: loyalty abilities are activated abilities with a loyalty cost.
   'Chandra Nalaar': {
     activated: [
@@ -258,26 +263,29 @@ export function loadBehavior(printed) {
     entersWith: authored.entersWith || null,
     enchant: authored.enchant || null, // Aura: what it can be attached to
     flashback: authored.flashback || null, // { cost } — cast from the graveyard
-    madness: authored.madness || null // { cost } — cast when discarded
+    madness: authored.madness || null, // { cost } — cast when discarded
+    mana: authored.mana || null, // colors a land can tap for, e.g. ['B','R']
+    entersTapped: authored.entersTapped || false
   }
 }
 
-// A mana ability the engine can tap for a single mana without using the stack.
-// Returns the color produced, or null. Covers basic lands (by subtype) and any
-// permanent whose behavior declares a manaAbility.
-export function manaAbilityColor(obj) {
+const BASIC_MANA = { Plains: 'W', Island: 'U', Swamp: 'B', Mountain: 'R', Forest: 'G' }
+
+// The colors a permanent can tap for as a mana ability (no stack). An array so
+// dual/any lands work. Covers basic lands (by subtype), authored land mana
+// (behavior.mana), and creature {T} mana abilities. Empty if none.
+export function manaAbilityColors(obj) {
   const p = obj.printed
-  if (p.types.includes('Land') && p.supertypes.includes('Basic')) {
-    for (const sub of p.subtypes) {
-      const c = { Plains: 'W', Island: 'U', Swamp: 'B', Mountain: 'R', Forest: 'G' }[sub]
-      if (c) return c
-    }
+  const out = []
+  if (p.types.includes('Land')) {
+    for (const sub of p.subtypes) if (BASIC_MANA[sub]) out.push(BASIC_MANA[sub]) // basic land types
+    for (const c of obj.behavior?.mana || []) out.push(c) // authored nonbasic mana
   }
   for (const a of obj.behavior?.activated || []) {
     if (a.manaAbility && a.cost?.tap) {
       const add = a.effect.find((e) => e.op === 'addMana')
-      if (add) return add.mana
+      if (add) out.push(add.mana)
     }
   }
-  return null
+  return [...new Set(out)]
 }

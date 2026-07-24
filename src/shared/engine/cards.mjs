@@ -512,5 +512,10 @@ export const SAMPLE_CARDS = {
     colors: ['U'],
     keywords: ['Flying'],
     oracle_text: 'When Faerie Seer enters the battlefield, scry 2.'
-  }
+  },
+  // Nonbasic / artifact lands.
+  'Vault of Whispers': { name: 'Vault of Whispers', mana_cost: '', type_line: 'Artifact Land', colors: [] },
+  'Drossforge Bridge': { name: 'Drossforge Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
+  'Slagwoods Bridge': { name: 'Slagwoods Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
+  'Twisted Landscape': { name: 'Twisted Landscape', mana_cost: '', type_line: 'Land', colors: [] }
 }
