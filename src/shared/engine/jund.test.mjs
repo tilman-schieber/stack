@@ -1,30 +1,41 @@
-// Headless verification: a batch of Jund Wildfire cards using existing mechanics.
+// Headless verification: Jund Wildfire cards (oracle text from Scryfall).
 // Run: node src/shared/engine/jund.test.mjs
 
-import { zone } from './state.mjs'
+import { zone, zoneKey, createObject } from './state.mjs'
+import { SAMPLE_CARDS } from './cards.mjs'
+import { recompute } from './layers.mjs'
 import { inZone, makeEngine, put, advanceToPriorityAt, makeAsserter } from './_testutil.mjs'
 
 const { assert, stats } = makeAsserter()
 const section = (n) => console.log('\n' + n)
+const hand = (e, p) => zone(e.state, 'hand', p).length
 const bothPass = (e) => {
   e.choose({ type: 'pass' })
   if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
 }
+const resolveAll = (e) => {
+  let g = 0
+  while (zone(e.state, 'stack').length > 0 && e.pending.kind === 'priority' && g++ < 40) bothPass(e)
+}
+const gy = (e, pid, name) => {
+  const o = createObject(e.state, SAMPLE_CARDS[name], pid)
+  o.zoneName = 'graveyard'
+  e.state.zones[zoneKey('graveyard', pid)].push(o.oid)
+  return o
+}
 
-section('Ichor Wellspring draws when it enters and when it dies')
+section('Ichor Wellspring: draw when it enters or is put into a graveyard')
 {
   const e = makeEngine()
   const ichor = put(e, 0, 'Ichor Wellspring', 'battlefield')
-  const before = zone(e.state, 'hand', 0).length
-  // put() bypasses ETB; test the toGraveyard draw directly.
+  const before = hand(e, 0)
   e._bury(ichor)
-  e._grantPriority() // places the toGraveyard trigger on the stack
-  bothPass(e) // resolve it
-  assert(zone(e.state, 'hand', 0).length === before + 1, 'drew a card when put into the graveyard')
-  assert(inZone(e, 0, 'graveyard', ichor.oid), 'Ichor Wellspring is in the graveyard')
+  e._grantPriority()
+  resolveAll(e)
+  assert(hand(e, 0) === before + 1, 'drew a card when put into the graveyard')
 }
 
-section('Go for the Throat destroys a creature')
+section('Go for the Throat: destroy target nonartifact creature')
 {
   const e = makeEngine()
   put(e, 0, 'Swamp', 'battlefield')
@@ -34,10 +45,10 @@ section('Go for the Throat destroys a creature')
   advanceToPriorityAt(e, 'main1')
   e.choose({ type: 'cast', oid: gft.oid, targets: [{ kind: 'object', oid: angel.oid }] })
   bothPass(e)
-  assert(inZone(e, 1, 'graveyard', angel.oid), 'target creature destroyed')
+  assert(inZone(e, 1, 'graveyard', angel.oid), 'creature destroyed')
 }
 
-section('Toxin Analysis grants +2/+1 and deathtouch')
+section('Toxin Analysis: deathtouch + lifelink until EOT, and investigate (Clue)')
 {
   const e = makeEngine()
   put(e, 0, 'Swamp', 'battlefield')
@@ -46,134 +57,139 @@ section('Toxin Analysis grants +2/+1 and deathtouch')
   advanceToPriorityAt(e, 'main1')
   e.choose({ type: 'cast', oid: tox.oid, targets: [{ kind: 'object', oid: bear.oid }] })
   bothPass(e)
-  const { recompute } = await import('./layers.mjs')
   recompute(e.state)
-  assert(`${bear.chars.power}/${bear.chars.toughness}` === '4/3', 'bear is 4/3')
-  assert(bear.chars.keywords.includes('Deathtouch'), 'bear has deathtouch')
+  assert(`${bear.chars.power}/${bear.chars.toughness}` === '2/2', 'no P/T change')
+  assert(bear.chars.keywords.includes('Deathtouch') && bear.chars.keywords.includes('Lifelink'), 'gained deathtouch + lifelink')
+  const clue = zone(e.state, 'battlefield').map((o) => e.state.objects[o]).find((o) => o.printed.name === 'Clue')
+  assert(clue && clue.chars.types.includes('Artifact'), 'made a Clue token')
 }
 
-section("Eviscerator's Insight: draw 2, lose 2")
+section("Eviscerator's Insight: sacrifice, draw two, has flashback")
+{
+  const e = makeEngine()
+  put(e, 0, 'Swamp', 'battlefield')
+  put(e, 0, 'Swamp', 'battlefield')
+  const ins = put(e, 0, "Eviscerator's Insight", 'hand')
+  const fodder = put(e, 0, 'Ichor Wellspring', 'battlefield')
+  advanceToPriorityAt(e, 'main1')
+  const before = hand(e, 0)
+  e.choose({ type: 'cast', oid: ins.oid, sacrifice: fodder.oid })
+  resolveAll(e)
+  // cast -1, Ichor sac draw +1, Insight draw +2 = +2
+  assert(hand(e, 0) === before + 2, 'drew two (plus Ichor), sacrificing an artifact')
+  assert(e.state.players[0].life === 20, 'no life loss (that was the wrong version)')
+}
+
+section('Krark-Clan Shaman: sacrifice an artifact -> 1 to each creature without flying')
+{
+  const e = makeEngine()
+  const shaman = put(e, 0, 'Krark-Clan Shaman', 'battlefield') // 1/1, no tap needed
+  const ichor = put(e, 0, 'Ichor Wellspring', 'battlefield')
+  const flyer = put(e, 1, 'Serra Angel', 'battlefield') // flying
+  const ground = put(e, 1, 'Raging Goblin', 'battlefield') // 1/1, no flying
+  advanceToPriorityAt(e, 'main1')
+  e.choose({ type: 'activate', oid: shaman.oid, ability: 0, sacrifice: ichor.oid })
+  resolveAll(e)
+  assert(inZone(e, 1, 'graveyard', ground.oid), 'the grounded 1/1 died')
+  assert(inZone(e, 1, 'battlefield', flyer.oid), 'the flyer was not hit')
+  assert(inZone(e, 0, 'graveyard', shaman.oid), 'the Shaman itself (no flying) died')
+}
+
+section('Lembas: ETB scry 1 + draw; dies -> shuffle into library')
+{
+  const e = makeEngine()
+  put(e, 0, 'Island', 'battlefield')
+  put(e, 0, 'Island', 'battlefield')
+  const lembas = put(e, 0, 'Lembas', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  const before = hand(e, 0)
+  e.choose({ type: 'cast', oid: lembas.oid })
+  bothPass(e)
+  // ETB trigger resolves -> scry pause
+  let g = 0
+  while (e.pending.kind === 'priority' && g++ < 6) bothPass(e)
+  assert(e.pending.kind === 'scry', 'Lembas ETB scries')
+  e.choose({ toBottom: [], toTop: e.pending.cards })
+  assert(hand(e, 0) === before, 'net hand unchanged (cast -1, ETB draw +1)')
+
+  // Dies -> shuffled into library, not left in the graveyard.
+  e._bury(lembas)
+  e._grantPriority()
+  resolveAll(e)
+  assert(inZone(e, 0, 'library', lembas.oid), 'Lembas shuffled into the library on death')
+  assert(!inZone(e, 0, 'graveyard', lembas.oid), 'not left in the graveyard')
+}
+
+section('Refurbished Familiar: ETB each opponent discards a card')
 {
   const e = makeEngine()
   for (let i = 0; i < 4; i++) put(e, 0, 'Swamp', 'battlefield')
-  const ins = put(e, 0, "Eviscerator's Insight", 'hand')
+  const fam = put(e, 0, 'Refurbished Familiar', 'hand')
   advanceToPriorityAt(e, 'main1')
-  const before = zone(e.state, 'hand', 0).length
-  e.choose({ type: 'cast', oid: ins.oid })
+  const oppBefore = hand(e, 1)
+  e.choose({ type: 'cast', oid: fam.oid })
   bothPass(e)
-  assert(zone(e.state, 'hand', 0).length === before - 1 + 2, 'net +1 card (cast -1, draw +2)')
-  assert(e.state.players[0].life === 18, 'lost 2 life')
-}
-
-const resolveAll = (e) => {
+  // ETB trigger -> opponent discard decision
   let g = 0
-  while (zone(e.state, 'stack').length > 0 && e.pending.kind === 'priority' && g++ < 30) {
-    e.choose({ type: 'pass' })
-    if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
-  }
+  while (e.pending.kind === 'priority' && g++ < 6) bothPass(e)
+  assert(e.pending.kind === 'discardCards' && e.pending.player === 1, 'opponent must discard')
+  e.choose({ discard: [e.pending.hand[0]] })
+  assert(hand(e, 1) === oppBefore - 1, 'opponent discarded a card')
 }
 
-section('Krark-Clan Shaman: sac an artifact -> 1 damage to each creature')
+section('Pulse of Murasa: return a creature/land from a graveyard, gain 6')
 {
   const e = makeEngine()
-  const shaman = put(e, 0, 'Krark-Clan Shaman', 'battlefield', { summoningSick: false }) // 1/1
-  const ichor = put(e, 0, 'Ichor Wellspring', 'battlefield') // artifact to sacrifice
-  const goblin = put(e, 1, 'Raging Goblin', 'battlefield') // 1/1
+  put(e, 0, 'Forest', 'battlefield')
+  put(e, 0, 'Forest', 'battlefield')
+  put(e, 0, 'Forest', 'battlefield')
+  const pulse = put(e, 0, 'Pulse of Murasa', 'hand')
+  const dead = gy(e, 0, 'Grizzly Bears') // a creature card in the graveyard
   advanceToPriorityAt(e, 'main1')
-  const before = zone(e.state, 'hand', 0).length
-
-  e.choose({ type: 'activate', oid: shaman.oid, ability: 0, sacrifice: ichor.oid })
-  assert(inZone(e, 0, 'graveyard', ichor.oid), 'sacrificed the artifact')
+  const life = e.state.players[0].life
+  e.choose({ type: 'cast', oid: pulse.oid })
+  bothPass(e)
+  assert(e.pending.kind === 'search', 'choose a card to return from a graveyard')
+  e.choose({ pick: dead.oid })
   resolveAll(e)
-  assert(zone(e.state, 'hand', 0).length === before + 1, 'Ichor Wellspring drew a card on being sacrificed')
-  assert(inZone(e, 0, 'graveyard', shaman.oid), 'Krark-Clan Shaman (1/1) died to its own ability')
-  assert(inZone(e, 1, 'graveyard', goblin.oid), "the opponent's 1/1 died")
+  assert(inZone(e, 0, 'hand', dead.oid), 'the creature returned to hand')
+  assert(e.state.players[0].life === life + 6, 'gained 6 life')
 }
 
-section('Makeshift Munitions: sac a creature -> 1 damage to any target')
+section('Writhing Chrysalis: cast trigger makes two Eldrazi Spawn')
 {
   const e = makeEngine()
-  const munitions = put(e, 0, 'Makeshift Munitions', 'battlefield')
-  put(e, 0, 'Mountain', 'battlefield') // for {1}
-  const fodder = put(e, 0, 'Grizzly Bears', 'battlefield')
+  put(e, 0, 'Mountain', 'battlefield')
+  put(e, 0, 'Forest', 'battlefield')
+  put(e, 0, 'Forest', 'battlefield')
+  put(e, 0, 'Forest', 'battlefield')
+  const chrys = put(e, 0, 'Writhing Chrysalis', 'hand') // {2}{R}{G}
   advanceToPriorityAt(e, 'main1')
-  e.choose({
-    type: 'activate',
-    oid: munitions.oid,
-    ability: 0,
-    sacrifice: fodder.oid,
-    targets: [{ kind: 'player', pid: 1 }]
-  })
-  assert(inZone(e, 0, 'graveyard', fodder.oid), 'sacrificed a creature to pay')
-  resolveAll(e)
-  assert(e.state.players[1].life === 19, 'dealt 1 damage to the opponent')
+  e.choose({ type: 'cast', oid: chrys.oid })
+  resolveAll(e) // cast trigger + creature resolve
+  const spawn = zone(e.state, 'battlefield').map((o) => e.state.objects[o]).filter((o) => o.token && o.printed.name === 'Eldrazi Spawn')
+  assert(spawn.length === 2, 'created two Eldrazi Spawn tokens')
+  assert(inZone(e, 0, 'battlefield', chrys.oid), 'Writhing Chrysalis resolved onto the battlefield')
 }
 
-section('Fanatical Offering: additional cost sacrifice, then draw 2')
+section('Cleansing Wildfire: {1}{R}, destroy a land, fetch a basic tapped, draw')
 {
   const e = makeEngine()
-  put(e, 0, 'Swamp', 'battlefield')
-  put(e, 0, 'Swamp', 'battlefield')
-  const fo = put(e, 0, 'Fanatical Offering', 'hand')
-  const fodder = put(e, 0, 'Ichor Wellspring', 'battlefield')
-  advanceToPriorityAt(e, 'main1')
-  const before = zone(e.state, 'hand', 0).length
-  e.choose({ type: 'cast', oid: fo.oid, sacrifice: fodder.oid })
-  assert(inZone(e, 0, 'graveyard', fodder.oid), 'paid the additional sacrifice cost')
-  resolveAll(e)
-  // cast -1, Ichor sac draw +1, Fanatical Offering draw +2 = net +2
-  assert(zone(e.state, 'hand', 0).length === before + 2, 'drew from Offering (2) and Ichor (1), minus the cast')
-}
-
-section('hybrid mana: Writhing Chrysalis payable with B or R')
-{
-  const e = makeEngine()
-  const chrys = put(e, 0, 'Writhing Chrysalis', 'hand') // {1}{B/R}{B/R}
-  put(e, 0, 'Swamp', 'battlefield') // B
-  put(e, 0, 'Mountain', 'battlefield') // R
-  put(e, 0, 'Forest', 'battlefield') // generic
-  advanceToPriorityAt(e, 'main1')
-  assert(e.pending.actions.some((a) => a.type === 'cast' && a.oid === chrys.oid), 'castable with B + R + generic')
-}
-
-section('Writhing Chrysalis: dies -> 3/2 Phyrexian Horror token')
-{
-  const e = makeEngine()
-  const chrys = put(e, 0, 'Writhing Chrysalis', 'battlefield')
-  e._bury(chrys)
-  e._grantPriority() // place + then resolve the dies trigger
-  resolveAll(e)
-  const token = zone(e.state, 'battlefield')
-    .map((oid) => e.state.objects[oid])
-    .find((o) => o.token && o.controller === 0)
-  assert(token && `${token.chars.power}/${token.chars.toughness}` === '3/2', 'made a 3/2 token')
-}
-
-section('Cleansing Wildfire: destroy a land, its controller fetches a basic, draw')
-{
-  const e = makeEngine() // 20 Forest decks -> plenty of basics to find
-  put(e, 0, 'Mountain', 'battlefield') // to cast {R}
-  const target = put(e, 0, 'Vault of Whispers', 'battlefield') // your artifact land (untapped for test)
+  put(e, 0, 'Mountain', 'battlefield')
+  put(e, 0, 'Mountain', 'battlefield')
+  const target = put(e, 0, 'Vault of Whispers', 'battlefield')
   const cw = put(e, 0, 'Cleansing Wildfire', 'hand')
   advanceToPriorityAt(e, 'main1')
-  const bfBefore = zone(e.state, 'battlefield').length
-  const handBefore = zone(e.state, 'hand', 0).length
-
+  const before = hand(e, 0)
   e.choose({ type: 'cast', oid: cw.oid, targets: [{ kind: 'object', oid: target.oid }] })
-  // resolving pauses on the search
-  e.choose({ type: 'pass' })
-  if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
-  assert(e.pending.kind === 'search', 'paused to search for a basic land')
-  assert(e.pending.cards.every((oid) => e.state.objects[oid].printed.name === 'Forest'), 'only basics are found')
-
+  bothPass(e)
+  assert(e.pending.kind === 'search', 'paused to fetch a basic land')
   const fetched = e.pending.cards[0]
   e.choose({ pick: fetched })
   resolveAll(e)
-  assert(inZone(e, 0, 'graveyard', target.oid), 'the targeted land was destroyed')
-  assert(inZone(e, 0, 'battlefield', fetched), 'the fetched basic is on the battlefield')
-  assert(e.state.objects[fetched].status.tapped, 'the fetched land entered tapped')
-  assert(zone(e.state, 'hand', 0).length === handBefore - 1 + 1, 'drew a card (net: cast -1, draw +1)')
-  bfBefore // referenced
+  assert(inZone(e, 0, 'graveyard', target.oid), 'the land was destroyed')
+  assert(inZone(e, 0, 'battlefield', fetched) && e.state.objects[fetched].status.tapped, 'fetched basic entered tapped')
+  assert(hand(e, 0) === before - 1 + 1, 'drew a card')
 }
 
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)

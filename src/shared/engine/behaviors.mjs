@@ -224,34 +224,51 @@ export const BEHAVIORS = {
     ]
   },
   'Writhing Chrysalis': {
+    // Cast trigger makes two Eldrazi Spawn. (The spawn's sacrifice-for-{C} mana
+    // ability and the "sacrifice another Eldrazi" counter trigger are approximated:
+    // the tokens are made, mana-from-sacrifice isn't modelled.)
     triggered: [
       {
-        trigger: { event: 'dies', self: true },
+        trigger: { event: 'castSpell', self: true },
         effect: [
           {
             op: 'createToken',
-            count: 1,
-            token: { name: 'Phyrexian Horror', types: ['Creature'], subtypes: ['Phyrexian', 'Horror'], colors: ['R'], power: 3, toughness: 2 }
+            count: 2,
+            token: { name: 'Eldrazi Spawn', types: ['Creature'], subtypes: ['Eldrazi', 'Spawn'], colors: [], power: 0, toughness: 1 }
           }
         ]
       }
     ]
   },
   Lembas: {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'scry', amount: 1 }, { op: 'draw', amount: 1 }] },
+      { trigger: { event: 'toGraveyard', self: true }, effect: [{ op: 'shuffleIntoLibrary', of: 'self' }] }
+    ],
     activated: [
+      { cost: { mana: '{2}', tap: true, sacrifice: 'self' }, effect: [{ op: 'gainLife', amount: 3 }] }
+    ]
+  },
+  'Refurbished Familiar': {
+    triggered: [
       {
-        cost: { mana: '{2}', tap: true },
-        effect: [{ op: 'draw', amount: 1 }, { op: 'gainLife', amount: 2 }]
+        trigger: { event: 'etb', self: true },
+        effect: [{ op: 'eachOpponentDiscards', drawIfEmpty: true }]
       }
     ]
   },
   'Krark-Clan Shaman': {
     activated: [
       {
-        cost: { tap: true, sacrifice: { types: ['Artifact'] } },
-        effect: [{ op: 'dealDamageEach', amount: 1, filter: 'creature' }]
+        cost: { sacrifice: { types: ['Artifact'] } },
+        effect: [{ op: 'dealDamageEach', amount: 1, filter: 'creature', excludeFlying: true }]
       }
     ]
+  },
+  // Investigate produces a Clue token; its sacrifice-to-draw ability is authored
+  // on the token by name.
+  Clue: {
+    activated: [{ cost: { mana: '{2}', sacrifice: 'self' }, effect: [{ op: 'draw', amount: 1 }] }]
   },
   'Makeshift Munitions': {
     activated: [
@@ -263,7 +280,13 @@ export const BEHAVIORS = {
     ]
   },
   'Fanatical Offering': {
-    spell: { additionalCost: { sacrifice: { types: ['Artifact', 'Creature'] } }, effect: [{ op: 'draw', amount: 2 }] }
+    spell: {
+      additionalCost: { sacrifice: { types: ['Artifact', 'Creature'] } },
+      effect: [
+        { op: 'draw', amount: 2 },
+        { op: 'createToken', count: 1, token: { name: 'Map', types: ['Artifact'], colors: [] } } // explore ability not modelled
+      ]
+    }
   },
   'Cleansing Wildfire': {
     spell: {
@@ -276,25 +299,32 @@ export const BEHAVIORS = {
     }
   },
   'Go for the Throat': {
-    spell: { targets: [{ type: 'creature' }], effect: [{ op: 'destroy', to: 'target0' }] }
+    spell: { targets: [{ type: 'creature', exclude: ['Artifact'] }], effect: [{ op: 'destroy', to: 'target0' }] }
   },
   'Cast Down': {
-    spell: { targets: [{ type: 'creature' }], effect: [{ op: 'destroy', to: 'target0' }] }
+    spell: { targets: [{ type: 'creature', excludeSuper: ['Legendary'] }], effect: [{ op: 'destroy', to: 'target0' }] }
   },
   'Toxin Analysis': {
     spell: {
       targets: [{ type: 'creature' }],
       effect: [
-        { op: 'pump', to: 'target0', power: 2, toughness: 1, duration: 'eot' },
-        { op: 'grantKeyword', to: 'target0', keyword: 'Deathtouch', duration: 'eot' }
+        { op: 'grantKeyword', to: 'target0', keyword: 'Deathtouch', duration: 'eot' },
+        { op: 'grantKeyword', to: 'target0', keyword: 'Lifelink', duration: 'eot' },
+        { op: 'createToken', count: 1, token: { name: 'Clue', types: ['Artifact'], colors: [] } } // Investigate
       ]
     }
   },
   "Eviscerator's Insight": {
-    spell: { effect: [{ op: 'draw', amount: 2 }, { op: 'loseLife', amount: 2 }] }
+    spell: { additionalCost: { sacrifice: { types: ['Artifact', 'Creature'] } }, effect: [{ op: 'draw', amount: 2 }] },
+    flashback: { cost: '{4}{B}' }
   },
   'Pulse of Murasa': {
-    spell: { effect: [{ op: 'gainLife', amount: 6 }] }
+    spell: {
+      effect: [
+        { op: 'returnFromGraveyard', filter: { types: ['Creature', 'Land'] } },
+        { op: 'gainLife', amount: 6 }
+      ]
+    }
   },
   // Nonbasic lands: colors they tap for (+ enters-tapped for the bridges/filter).
   'Vault of Whispers': { mana: ['B'] },

@@ -493,14 +493,14 @@ export const SAMPLE_CARDS = {
   },
   'Fiery Temper': {
     name: 'Fiery Temper',
-    mana_cost: '{1}{R}',
+    mana_cost: '{1}{R}{R}',
     type_line: 'Instant',
     colors: ['R'],
     oracle_text: 'Fiery Temper deals 3 damage to any target. Madness {R}'
   },
   'Basking Rootwalla': {
     name: 'Basking Rootwalla',
-    mana_cost: '{1}{G}',
+    mana_cost: '{G}',
     type_line: 'Creature — Lizard',
     power: '1',
     toughness: '1',
@@ -526,50 +526,65 @@ export const SAMPLE_CARDS = {
   },
   'Writhing Chrysalis': {
     name: 'Writhing Chrysalis',
-    mana_cost: '{1}{B/R}{B/R}',
-    type_line: 'Artifact Creature — Phyrexian',
-    power: '4',
-    toughness: '4',
-    colors: ['B', 'R'],
-    oracle_text: 'When Writhing Chrysalis dies, create a 3/2 red Phyrexian Horror creature token.'
+    mana_cost: '{2}{R}{G}',
+    type_line: 'Creature — Eldrazi Drone',
+    power: '2',
+    toughness: '3',
+    colors: [], // Devoid
+    keywords: ['Reach'],
+    oracle_text:
+      'Devoid. When you cast this spell, create two 0/1 colorless Eldrazi Spawn creature tokens. Reach. Whenever you sacrifice another Eldrazi, put a +1/+1 counter on this creature.'
   },
   Lembas: {
     name: 'Lembas',
-    mana_cost: '{1}',
+    mana_cost: '{2}',
     type_line: 'Artifact — Food',
     colors: [],
-    oracle_text: '{2}, {T}: Draw a card. You gain 2 life.'
+    oracle_text:
+      'When this artifact enters, scry 1, then draw a card. {2}, {T}, Sacrifice this artifact: You gain 3 life. When this artifact is put into a graveyard from the battlefield, its owner shuffles it into their library.'
   },
   'Krark-Clan Shaman': {
     name: 'Krark-Clan Shaman',
-    mana_cost: '{2}{R}',
-    type_line: 'Creature — Goblin',
+    mana_cost: '{R}',
+    type_line: 'Creature — Goblin Shaman',
     power: '1',
     toughness: '1',
     colors: ['R'],
-    oracle_text: '{T}, Sacrifice an artifact: Krark-Clan Shaman deals 1 damage to each creature.'
+    oracle_text: 'Sacrifice an artifact: This creature deals 1 damage to each creature without flying.'
   },
   'Makeshift Munitions': {
     name: 'Makeshift Munitions',
     mana_cost: '{1}{R}',
     type_line: 'Enchantment',
     colors: ['R'],
-    oracle_text: '{1}, Sacrifice an artifact or creature: Makeshift Munitions deals 1 damage to any target.'
+    oracle_text: '{1}, Sacrifice an artifact or creature: This enchantment deals 1 damage to any target.'
   },
   'Fanatical Offering': {
     name: 'Fanatical Offering',
     mana_cost: '{1}{B}',
     type_line: 'Instant',
     colors: ['B'],
-    oracle_text: 'As an additional cost to cast this spell, sacrifice an artifact or creature. Draw two cards.'
+    oracle_text:
+      'As an additional cost to cast this spell, sacrifice an artifact or creature. Draw two cards and create a Map token.'
+  },
+  'Refurbished Familiar': {
+    name: 'Refurbished Familiar',
+    mana_cost: '{3}{B}',
+    type_line: 'Artifact Creature — Zombie Rat',
+    power: '2',
+    toughness: '1',
+    colors: ['B'],
+    keywords: ['Flying', 'Affinity'],
+    oracle_text:
+      "Affinity for artifacts. Flying. When this creature enters, each opponent discards a card. For each opponent who can't, you draw a card."
   },
   'Cleansing Wildfire': {
     name: 'Cleansing Wildfire',
-    mana_cost: '{R}',
+    mana_cost: '{1}{R}',
     type_line: 'Sorcery',
     colors: ['R'],
     oracle_text:
-      "Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle. You draw a card."
+      'Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle. Draw a card.'
   },
   'Go for the Throat': {
     name: 'Go for the Throat',
@@ -590,21 +605,22 @@ export const SAMPLE_CARDS = {
     mana_cost: '{B}',
     type_line: 'Instant',
     colors: ['B'],
-    oracle_text: 'Target creature gets +2/+1 and gains deathtouch until end of turn.'
+    oracle_text: 'Target creature gains deathtouch and lifelink until end of turn. Investigate.'
   },
   "Eviscerator's Insight": {
     name: "Eviscerator's Insight",
-    mana_cost: '{3}{B}',
+    mana_cost: '{1}{B}',
     type_line: 'Instant',
     colors: ['B'],
-    oracle_text: 'You draw two cards and you lose 2 life.'
+    oracle_text:
+      'As an additional cost to cast this spell, sacrifice an artifact or creature. Draw two cards. Flashback {4}{B}'
   },
   'Pulse of Murasa': {
     name: 'Pulse of Murasa',
-    mana_cost: '{1}{G}',
+    mana_cost: '{2}{G}',
     type_line: 'Instant',
     colors: ['G'],
-    oracle_text: 'You gain 6 life.'
+    oracle_text: "Return target creature or land card from a graveyard to its owner's hand. You gain 6 life."
   },
   // Nonbasic / artifact lands.
   'Vault of Whispers': { name: 'Vault of Whispers', mana_cost: '', type_line: 'Artifact Land', colors: [] },

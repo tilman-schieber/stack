@@ -414,15 +414,22 @@ export class GameEngine {
     this._resumeResolution()
   }
 
-  // Is there at least one legal target for a target spec of the given type?
+  // Does a battlefield object satisfy a target spec (type + exclusions)?
+  _specMatches(spec, o) {
+    if (spec.type === 'creature' && !o.chars.types.includes('Creature')) return false
+    if (spec.type === 'land' && !o.chars.types.includes('Land')) return false
+    if (spec.exclude?.some((t) => o.chars.types.includes(t))) return false
+    if (spec.excludeSuper?.some((t) => o.chars.supertypes.includes(t))) return false
+    return true
+  }
+
+  // Is there at least one legal target for a target spec?
   _legalTargetsExist(spec) {
     const s = this.state
     if (spec.type === 'player' || spec.type === 'any') return true
-    if (spec.type === 'creature')
-      return objectsIn(s, 'battlefield').some((o) => o.chars.types.includes('Creature'))
-    if (spec.type === 'land')
-      return objectsIn(s, 'battlefield').some((o) => o.chars.types.includes('Land'))
     if (spec.type === 'spell') return zone(s, 'stack').length > 0
+    if (spec.type === 'creature' || spec.type === 'land')
+      return objectsIn(s, 'battlefield').some((o) => this._specMatches(spec, o))
     return true
   }
 
@@ -807,8 +814,30 @@ export class GameEngine {
           cards: [...matches],
           to: e.to || 'hand',
           tapped: !!e.tapped,
-          optional: e.optional !== false
+          optional: e.optional !== false,
+          shuffle: true
         }
+        return true
+      }
+      case 'eachOpponentDiscards': {
+        const opp = this._otherPlayer(source.controller)
+        const hand = zone(s, 'hand', opp)
+        if (hand.length === 0) {
+          if (e.drawIfEmpty) this.draw(source.controller, 1) // "for each who can't, draw"
+          return false
+        }
+        s.pending = { kind: 'discardCards', player: opp, count: 1, hand: [...hand] }
+        return true
+      }
+      case 'returnFromGraveyard': {
+        // Choose a matching card from any graveyard and return it to its owner's hand.
+        const pid = source.controller
+        const cards = []
+        for (const p of s.players)
+          for (const oid of zone(s, 'graveyard', p.id))
+            if (this._matchCardFilter(s.objects[oid], e.filter)) cards.push(oid)
+        if (cards.length === 0) return false
+        s.pending = { kind: 'search', player: pid, cards, to: 'hand', tapped: false, optional: e.optional === true, shuffle: false }
         return true
       }
       default:
@@ -843,6 +872,7 @@ export class GameEngine {
             const t = s.objects[oid]
             if (!t) continue
             if (e.filter === 'creature' && !t.chars.types.includes('Creature')) continue
+            if (e.excludeFlying && this._hasKW(t, 'Flying')) continue
             this._dealDamage(source, { obj: t }, e.amount)
           }
           break
@@ -901,6 +931,15 @@ export class GameEngine {
           for (let i = 0; i < (e.count || 1); i++) this._createToken(def, source.controller)
           break
         }
+        case 'shuffleIntoLibrary': {
+          const o = e.of === 'self' ? s.objects[source.sourceOid] : null
+          if (o) {
+            moveObject(s, o.oid, 'library')
+            const lk = zoneKey('library', o.owner)
+            s.zones[lk] = s.rng.shuffle(s.zones[lk])
+          }
+          break
+        }
         default:
           throw new Error(`unknown effect op ${e.op}`)
       }
@@ -923,6 +962,7 @@ export class GameEngine {
     const p = o.printed
     if (filter.supertype && !p.supertypes.includes(filter.supertype)) return false
     if (filter.type && !p.types.includes(filter.type)) return false
+    if (filter.types && !filter.types.some((t) => p.types.includes(t))) return false
     if (filter.subtype && !p.subtypes.includes(filter.subtype)) return false
     return true
   }
@@ -946,7 +986,7 @@ export class GameEngine {
         moveObject(s, pick, pending.to)
       }
     }
-    s.zones[zoneKey('library', pid)] = s.rng.shuffle(s.zones[zoneKey('library', pid)])
+    if (pending.shuffle) s.zones[zoneKey('library', pid)] = s.rng.shuffle(s.zones[zoneKey('library', pid)])
     this._resumeResolution()
   }
 
@@ -1418,7 +1458,11 @@ export class GameEngine {
   // a player would receive priority (see _putTriggersOnStack).
   _fireTriggers(event, subject) {
     const s = this.state
-    for (const oid of zone(s, 'battlefield')) {
+    const watchers = [...zone(s, 'battlefield')]
+    // A spell being cast can carry its own "when you cast this spell" triggers
+    // while it is on the stack (not the battlefield).
+    if (event === 'castSpell' && !watchers.includes(subject.oid)) watchers.push(subject.oid)
+    for (const oid of watchers) {
       const w = s.objects[oid]
       for (const ab of w.behavior?.triggered || []) {
         if (ab.trigger.event !== event) continue

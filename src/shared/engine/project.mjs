@@ -13,6 +13,7 @@ function cardView(o) {
     token: !!o.token,
     tokenDef: o.tokenDef || null,
     types: o.chars?.types || [],
+    supertypes: o.chars?.supertypes || [],
     power: o.chars?.power ?? null,
     toughness: o.chars?.toughness ?? null,
     keywords: o.chars?.keywords || [],
