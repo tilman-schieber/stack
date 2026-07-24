@@ -492,12 +492,15 @@ export class GameEngine {
         if (targets.length && !targets.every((t) => this._legalTargetsExist(t))) continue
         const addl = o.behavior.spell?.additionalCost
         if (addl?.sacrifice && this._sacrificeCandidates(pid, addl.sacrifice).length === 0) continue
+        const xCost = p.manaCost.X || 0
         actions.push({
           type: 'cast',
           oid,
           targets,
           needsTargets: targets.length,
-          sacChoose: addl?.sacrifice || null
+          sacChoose: addl?.sacrifice || null,
+          hasX: xCost > 0,
+          maxX: xCost > 0 ? this._maxX(pid, o, xCost) : 0
         })
       }
     }
@@ -558,7 +561,10 @@ export class GameEngine {
       }
       case 'cast': {
         const o = s.objects[action.oid]
-        this._pay(pid, this._effectiveCost(pid, o))
+        const xCost = o.printed.manaCost.X || 0
+        o.xValue = xCost ? action.x || 0 : 0
+        const cost = this._effectiveCost(pid, o)
+        this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost })
         // Additional cost: sacrifice a permanent (e.g. Fanatical Offering).
         const addl = o.behavior.spell?.additionalCost
         if (addl?.sacrifice && action.sacrifice) {
@@ -752,7 +758,7 @@ export class GameEngine {
     // Replacement effect: "enters with N counters" (applied before SBAs, so a
     // 0/0 that enters with +1/+1 counters survives).
     const ew = o.behavior?.entersWith
-    if (ew) o.status.counters[ew.counter] = (o.status.counters[ew.counter] || 0) + ew.amount
+    if (ew) o.status.counters[ew.counter] = (o.status.counters[ew.counter] || 0) + this._amount(o, ew.amount)
     // A planeswalker enters with loyalty counters equal to its printed loyalty.
     if (o.printed.loyalty != null) o.status.counters.loyalty = o.printed.loyalty
     // An Aura enters attached to the permanent it targeted as it was cast.
@@ -869,8 +875,9 @@ export class GameEngine {
         case 'dealDamage': {
           const t = this._resolveTargetRef(source, e.to)
           if (!t) break
-          if (t.kind === 'player') this._dealDamage(source, { player: t.pid }, e.amount)
-          else if (t.kind === 'object') this._dealDamage(source, { obj: t.obj }, e.amount)
+          const amt = this._amount(source, e.amount)
+          if (t.kind === 'player') this._dealDamage(source, { player: t.pid }, amt)
+          else if (t.kind === 'object') this._dealDamage(source, { obj: t.obj }, amt)
           break
         }
         case 'addMana':
@@ -1094,6 +1101,20 @@ export class GameEngine {
       cost.generic = Math.max(0, (cost.generic || 0) - artifacts)
     }
     return cost
+  }
+
+  // Largest X affordable for an X spell given current mana (X is generic).
+  _maxX(pid, o, xCost) {
+    const base = this._effectiveCost(pid, o)
+    const sources = this._manaSources(pid).length
+    const baseMv =
+      (base.generic || 0) + base.W + base.U + base.B + base.R + base.G + base.C + (base.hybrid?.length || 0)
+    return Math.max(0, Math.floor((sources - baseMv) / xCost))
+  }
+
+  // Resolve a numeric effect value that may be 'X' (the source's chosen X).
+  _amount(source, v) {
+    return v === 'X' ? source?.xValue || 0 : v
   }
 
   _canPay(pid, cost) {

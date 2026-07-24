@@ -212,5 +212,22 @@ section('Nihil Spellbomb: {T}, sac -> exile a graveyard; dies -> may pay {B} to 
   assert(zone(e.state, 'graveyard', 1).length === 0, "opponent's graveyard was exiled")
 }
 
+section('Nyxborn Hydra: X spell enters with X +1/+1 counters')
+{
+  const e = makeEngine()
+  for (let i = 0; i < 4; i++) put(e, 0, 'Forest', 'battlefield') // {X}{G}: pay G + X=3
+  const hydra = put(e, 0, 'Nyxborn Hydra', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  const cast = e.pending.actions.find((a) => a.type === 'cast' && a.oid === hydra.oid)
+  assert(cast && cast.hasX, 'offered as an X spell')
+  assert(cast.maxX === 3, 'max X is 3 with 4 lands (1 for {G})')
+
+  e.choose({ type: 'cast', oid: hydra.oid, x: 3 })
+  resolveAll(e)
+  recompute(e.state)
+  assert(`${hydra.chars.power}/${hydra.chars.toughness}` === '3/4', 'enters as a 3/4 (0/1 + three +1/+1)')
+  assert(hydra.chars.keywords.includes('Reach') && hydra.chars.keywords.includes('Trample'), 'has reach and trample')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)

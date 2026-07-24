@@ -144,6 +144,7 @@ export default function EnginePlayArea() {
   const [chooseSel, setChooseSel] = useState([]) // engine-initiated target choice
   const [scryBottom, setScryBottom] = useState([]) // scry: oids to put on the bottom
   const [zoneView, setZoneView] = useState(null) // { pid, zone } graveyard/exile viewer
+  const [xInput, setXInput] = useState(0) // X value being chosen for an X spell
 
   useEffect(() => {
     setCast(null)
@@ -157,6 +158,7 @@ export default function EnginePlayArea() {
     setScryBottom([])
     setAbilityMenu(null)
     setZoneView(null)
+    setXInput(0)
   }, [view])
 
   useEffect(() => {
@@ -185,12 +187,13 @@ export default function EnginePlayArea() {
   // Unifies player-initiated targeting (cast/activate) with engine-initiated
   // target choices (a triggered ability's `chooseTargets` decision).
   const engineTargeting = kind === 'chooseTargets'
-  // A cast/activate can require choosing a permanent to sacrifice (a cost) before
-  // its targets. While that's pending we're in "sacrifice" mode, not targeting.
-  const needSac = !!(cast && cast.action.sacChoose && !cast.sac)
+  // A cast can require choosing X, then a permanent to sacrifice (a cost), before
+  // its targets. While either is pending we're not yet in targeting mode.
+  const needX = !!(cast && cast.action.hasX && cast.x == null)
+  const needSac = !!(cast && cast.action.sacChoose && !cast.sac && !needX)
   // Normalise so `targeting.targets` / `.chosen` work for both a player cast
   // (specs live on cast.action.targets) and an engine-initiated target choice.
-  const targeting = needSac
+  const targeting = needX || needSac
     ? null
     : cast
       ? { targets: cast.action.targets, chosen: cast.chosen }
@@ -210,7 +213,7 @@ export default function EnginePlayArea() {
       choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: chosen, sacrifice: c.sac })
     else if (a.type === 'madness') choose({ cast: true, targets: chosen })
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: chosen })
-    else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac })
+    else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac, x: c.x })
   }
 
   function addTarget(t) {
@@ -270,7 +273,7 @@ export default function EnginePlayArea() {
       if (!a) return
       if (a.type === 'playLand') choose(a)
       else if (a.type === 'cast') {
-        if (a.needsTargets > 0 || a.sacChoose) setCast({ action: a, chosen: [], sac: null })
+        if (a.needsTargets > 0 || a.sacChoose || a.hasX) setCast({ action: a, chosen: [], sac: null, x: null })
         else choose({ type: 'cast', oid: a.oid })
       }
     }
@@ -588,6 +591,17 @@ export default function EnginePlayArea() {
             : null
         }
         sacrificing={needSac ? { types: cast.action.sacChoose.types } : null}
+        choosingX={
+          needX
+            ? {
+                value: xInput,
+                max: cast.action.maxX,
+                dec: () => setXInput((v) => Math.max(0, v - 1)),
+                inc: () => setXInput((v) => Math.min(cast.action.maxX, v + 1)),
+                confirm: () => setCast({ ...cast, x: xInput })
+              }
+            : null
+        }
         attackers={attackers}
         attackTargetName={attackTargetName}
         blocks={blocks}
@@ -604,12 +618,31 @@ export default function EnginePlayArea() {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, targeting, sacrificing, attackers, attackTargetName, blocks, discardSel, bottomSel, error, choose, endGame, onMadnessCast, cancelCast }) {
+function Prompt({ view, pending, targeting, sacrificing, choosingX, attackers, attackTargetName, blocks, discardSel, bottomSel, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
   let body = null
-  if (sacrificing) {
+  if (choosingX) {
+    body = (
+      <>
+        <span>Choose X (max {choosingX.max}):</span>
+        <button className="mini" onClick={choosingX.dec}>
+          −
+        </button>
+        <b style={{ fontSize: 18, minWidth: 24, textAlign: 'center' }}>{choosingX.value}</b>
+        <button className="mini" onClick={choosingX.inc}>
+          +
+        </button>
+        <button className="primary" onClick={choosingX.confirm}>
+          OK
+        </button>
+        <button className="mini" onClick={cancelCast}>
+          Cancel
+        </button>
+      </>
+    )
+  } else if (sacrificing) {
     body = (
       <>
         <span>Choose {sacrificing.types.join(' or ').toLowerCase()} to sacrifice.</span>

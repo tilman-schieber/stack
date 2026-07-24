@@ -535,6 +535,17 @@ export const SAMPLE_CARDS = {
     oracle_text:
       'Devoid. When you cast this spell, create two 0/1 colorless Eldrazi Spawn creature tokens. Reach. Whenever you sacrifice another Eldrazi, put a +1/+1 counter on this creature.'
   },
+  'Nyxborn Hydra': {
+    name: 'Nyxborn Hydra',
+    mana_cost: '{X}{G}',
+    type_line: 'Enchantment Creature — Hydra',
+    power: '0',
+    toughness: '1',
+    colors: ['G'],
+    keywords: ['Reach', 'Trample'],
+    oracle_text:
+      'Bestow {X}{G}{G}. Reach, trample. This permanent enters with X +1/+1 counters on it.'
+  },
   'Nihil Spellbomb': {
     name: 'Nihil Spellbomb',
     mana_cost: '{1}',

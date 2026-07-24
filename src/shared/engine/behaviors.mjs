@@ -240,6 +240,11 @@ export const BEHAVIORS = {
       }
     ]
   },
+  // Cast as a creature that enters with X +1/+1 counters. (Bestow — casting it as
+  // an Aura for {X}{G}{G} — is not yet modelled; it's played as a creature.)
+  'Nyxborn Hydra': {
+    entersWith: { counter: '+1/+1', amount: 'X' }
+  },
   'Nihil Spellbomb': {
     activated: [
       {
