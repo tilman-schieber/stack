@@ -734,6 +734,20 @@ function Prompt({ view, pending, targeting, sacrificing, attackers, attackTarget
         </button>
       </>
     )
+  } else if (kind === 'mayPay') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — pay {pending.cost}?
+        </span>
+        <button className="primary" disabled={!pending.canPay} onClick={() => choose({ pay: true })}>
+          Pay {pending.cost}
+        </button>
+        <button className="mini" onClick={() => choose({ pay: false })}>
+          Decline
+        </button>
+      </>
+    )
   } else if (kind === 'discardCards') {
     body = (
       <>

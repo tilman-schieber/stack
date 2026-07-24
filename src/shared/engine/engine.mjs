@@ -186,6 +186,9 @@ export class GameEngine {
         case 'search':
           this._applySearch(pending, answer)
           break
+        case 'mayPay':
+          this._applyMayPay(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -819,6 +822,19 @@ export class GameEngine {
         }
         return true
       }
+      case 'optionalPay': {
+        // "You may pay {cost}. If you do, <effect>." (e.g. Nihil Spellbomb.)
+        const pid = source.controller
+        s.pending = {
+          kind: 'mayPay',
+          player: pid,
+          cost: e.cost,
+          canPay: this._canPay(pid, parseManaCost(e.cost)),
+          _source: source,
+          _effect: e.effect
+        }
+        return true
+      }
       case 'eachOpponentDiscards': {
         const opp = this._otherPlayer(source.controller)
         const hand = zone(s, 'hand', opp)
@@ -940,6 +956,11 @@ export class GameEngine {
           }
           break
         }
+        case 'exileGraveyard': {
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'player') for (const oid of [...zone(s, 'graveyard', t.pid)]) moveObject(s, oid, 'exile')
+          break
+        }
         default:
           throw new Error(`unknown effect op ${e.op}`)
       }
@@ -965,6 +986,14 @@ export class GameEngine {
     if (filter.types && !filter.types.some((t) => p.types.includes(t))) return false
     if (filter.subtype && !p.subtypes.includes(filter.subtype)) return false
     return true
+  }
+
+  _applyMayPay(pending, answer) {
+    if (answer?.pay && pending.canPay) {
+      this._pay(pending.player, parseManaCost(pending.cost))
+      this._runEffects(pending._source, pending._effect)
+    }
+    this._resumeResolution()
   }
 
   // Move a searched card to its destination and shuffle the library.

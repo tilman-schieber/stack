@@ -535,6 +535,14 @@ export const SAMPLE_CARDS = {
     oracle_text:
       'Devoid. When you cast this spell, create two 0/1 colorless Eldrazi Spawn creature tokens. Reach. Whenever you sacrifice another Eldrazi, put a +1/+1 counter on this creature.'
   },
+  'Nihil Spellbomb': {
+    name: 'Nihil Spellbomb',
+    mana_cost: '{1}',
+    type_line: 'Artifact',
+    colors: [],
+    oracle_text:
+      "{T}, Sacrifice this artifact: Exile target player's graveyard. When this artifact is put into a graveyard from the battlefield, you may pay {B}. If you do, draw a card."
+  },
   Lembas: {
     name: 'Lembas',
     mana_cost: '{2}',

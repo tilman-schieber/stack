@@ -240,6 +240,21 @@ export const BEHAVIORS = {
       }
     ]
   },
+  'Nihil Spellbomb': {
+    activated: [
+      {
+        cost: { tap: true, sacrifice: 'self' },
+        targets: [{ type: 'player' }],
+        effect: [{ op: 'exileGraveyard', to: 'target0' }]
+      }
+    ],
+    triggered: [
+      {
+        trigger: { event: 'toGraveyard', self: true },
+        effect: [{ op: 'optionalPay', cost: '{B}', effect: [{ op: 'draw', amount: 1 }] }]
+      }
+    ]
+  },
   Lembas: {
     triggered: [
       { trigger: { event: 'etb', self: true }, effect: [{ op: 'scry', amount: 1 }, { op: 'draw', amount: 1 }] },

@@ -192,5 +192,25 @@ section('Cleansing Wildfire: {1}{R}, destroy a land, fetch a basic tapped, draw'
   assert(hand(e, 0) === before - 1 + 1, 'drew a card')
 }
 
+section('Nihil Spellbomb: {T}, sac -> exile a graveyard; dies -> may pay {B} to draw')
+{
+  const e = makeEngine()
+  const bomb = put(e, 0, 'Nihil Spellbomb', 'battlefield')
+  put(e, 0, 'Swamp', 'battlefield') // for the optional {B}
+  gy(e, 1, 'Grizzly Bears') // opponent graveyard cards to exile
+  gy(e, 1, 'Raging Goblin')
+  advanceToPriorityAt(e, 'main1')
+  const before = hand(e, 0)
+
+  e.choose({ type: 'activate', oid: bomb.oid, ability: 0, targets: [{ kind: 'player', pid: 1 }] })
+  assert(inZone(e, 0, 'graveyard', bomb.oid), 'sacrificed to the graveyard')
+  bothPass(e) // resolve the toGraveyard trigger -> may-pay decision
+  assert(e.pending.kind === 'mayPay' && e.pending.canPay, 'offered to pay {B} to draw')
+  e.choose({ pay: true })
+  assert(hand(e, 0) === before + 1, 'paid {B} and drew a card')
+  resolveAll(e) // resolve the exile-graveyard ability
+  assert(zone(e.state, 'graveyard', 1).length === 0, "opponent's graveyard was exiled")
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)
