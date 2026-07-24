@@ -611,10 +611,7 @@ export class GameEngine {
     if (cost.mana) this._pay(pid, parseManaCost(cost.mana))
     if (cost.tap) o.status.tapped = true
     if (cost.payLife != null) s.players[pid].life -= cost.payLife
-    if (cost.sacrifice === 'self') {
-      this._fireTriggers('dies', o) // sacrificing a creature counts as dying
-      moveObject(s, o.oid, 'graveyard')
-    }
+    if (cost.sacrifice === 'self') this._bury(o)
   }
 
   _resolveTop() {
@@ -794,7 +791,7 @@ export class GameEngine {
         case 'destroy': {
           const t = this._resolveTargetRef(source, e.to)
           if (t?.kind === 'object' && t.obj.zoneName === 'battlefield' && !this._hasKW(t.obj, 'Indestructible'))
-            moveObject(s, t.obj.oid, 'graveyard')
+            this._bury(t.obj)
           break
         }
         case 'counter': {
@@ -1188,8 +1185,7 @@ export class GameEngine {
         if (tough <= 0 || destroyed) {
           // Fire dies triggers while the creature is still on the battlefield
           // (leaves-the-battlefield abilities "look back in time").
-          this._fireTriggers('dies', o)
-          moveObject(s, o.oid, 'graveyard')
+          this._bury(o)
           repeat = true
         }
       }
@@ -1217,8 +1213,7 @@ export class GameEngine {
         if (group.length < 2) continue
         group.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
         for (const o of group.slice(1)) {
-          this._fireTriggers('dies', o)
-          moveObject(s, o.oid, 'graveyard')
+          this._bury(o)
           repeat = true
         }
       }
@@ -1326,6 +1321,14 @@ export class GameEngine {
         })
       }
     }
+  }
+
+  // Move a permanent from the battlefield to its graveyard, firing dies (for
+  // creatures) and toGraveyard (any permanent, e.g. Ichor Wellspring) triggers.
+  _bury(o) {
+    if (o.chars.types.includes('Creature')) this._fireTriggers('dies', o)
+    this._fireTriggers('toGraveyard', o)
+    moveObject(this.state, o.oid, 'graveyard')
   }
 
   _matchFilter(filter, subject, watcher) {

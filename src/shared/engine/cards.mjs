@@ -513,6 +513,48 @@ export const SAMPLE_CARDS = {
     keywords: ['Flying'],
     oracle_text: 'When Faerie Seer enters the battlefield, scry 2.'
   },
+  'Ichor Wellspring': {
+    name: 'Ichor Wellspring',
+    mana_cost: '{2}',
+    type_line: 'Artifact',
+    colors: [],
+    oracle_text: 'When Ichor Wellspring enters the battlefield or is put into a graveyard, draw a card.'
+  },
+  'Go for the Throat': {
+    name: 'Go for the Throat',
+    mana_cost: '{1}{B}',
+    type_line: 'Instant',
+    colors: ['B'],
+    oracle_text: 'Destroy target nonartifact creature.'
+  },
+  'Cast Down': {
+    name: 'Cast Down',
+    mana_cost: '{1}{B}',
+    type_line: 'Instant',
+    colors: ['B'],
+    oracle_text: 'Destroy target nonlegendary creature.'
+  },
+  'Toxin Analysis': {
+    name: 'Toxin Analysis',
+    mana_cost: '{B}',
+    type_line: 'Instant',
+    colors: ['B'],
+    oracle_text: 'Target creature gets +2/+1 and gains deathtouch until end of turn.'
+  },
+  "Eviscerator's Insight": {
+    name: "Eviscerator's Insight",
+    mana_cost: '{3}{B}',
+    type_line: 'Instant',
+    colors: ['B'],
+    oracle_text: 'You draw two cards and you lose 2 life.'
+  },
+  'Pulse of Murasa': {
+    name: 'Pulse of Murasa',
+    mana_cost: '{1}{G}',
+    type_line: 'Instant',
+    colors: ['G'],
+    oracle_text: 'You gain 6 life.'
+  },
   // Nonbasic / artifact lands.
   'Vault of Whispers': { name: 'Vault of Whispers', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Drossforge Bridge': { name: 'Drossforge Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },

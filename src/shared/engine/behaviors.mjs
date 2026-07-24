@@ -217,6 +217,33 @@ export const BEHAVIORS = {
   'Faerie Seer': {
     triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'scry', amount: 2 }] }]
   },
+  'Ichor Wellspring': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'draw', amount: 1 }] },
+      { trigger: { event: 'toGraveyard', self: true }, effect: [{ op: 'draw', amount: 1 }] }
+    ]
+  },
+  'Go for the Throat': {
+    spell: { targets: [{ type: 'creature' }], effect: [{ op: 'destroy', to: 'target0' }] }
+  },
+  'Cast Down': {
+    spell: { targets: [{ type: 'creature' }], effect: [{ op: 'destroy', to: 'target0' }] }
+  },
+  'Toxin Analysis': {
+    spell: {
+      targets: [{ type: 'creature' }],
+      effect: [
+        { op: 'pump', to: 'target0', power: 2, toughness: 1, duration: 'eot' },
+        { op: 'grantKeyword', to: 'target0', keyword: 'Deathtouch', duration: 'eot' }
+      ]
+    }
+  },
+  "Eviscerator's Insight": {
+    spell: { effect: [{ op: 'draw', amount: 2 }, { op: 'loseLife', amount: 2 }] }
+  },
+  'Pulse of Murasa': {
+    spell: { effect: [{ op: 'gainLife', amount: 6 }] }
+  },
   // Nonbasic lands: colors they tap for (+ enters-tapped for the bridges/filter).
   'Vault of Whispers': { mana: ['B'] },
   'Drossforge Bridge': { mana: ['B', 'R'], entersTapped: true },
