@@ -201,6 +201,7 @@ export default function EnginePlayArea() {
   const wantsCreature = targetSlot && (targetSlot.type === 'creature' || targetSlot.type === 'any')
   const wantsPlayer = targetSlot && (targetSlot.type === 'player' || targetSlot.type === 'any')
   const wantsSpell = targetSlot && targetSlot.type === 'spell'
+  const wantsLand = targetSlot && targetSlot.type === 'land'
 
   // Fire the assembled cast/activate (with its chosen targets and sacrifice).
   function finalizeCast(c, chosen) {
@@ -284,6 +285,7 @@ export default function EnginePlayArea() {
     }
     if (targeting) {
       if (wantsCreature && isCreature(card)) addTarget({ kind: 'object', oid: card.oid })
+      else if (wantsLand && isLand(card)) addTarget({ kind: 'object', oid: card.oid })
       return
     }
     // Activate an ability of a permanent you control. If it has more than one
@@ -337,6 +339,7 @@ export default function EnginePlayArea() {
     if (card.blocking) cls.push('blk')
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
     if (targeting && wantsCreature && isCreature(card)) cls.push('targetable')
+    if (targeting && wantsLand && isLand(card)) cls.push('targetable')
     if (needSac && controllerPid === pending.player && (cast.action.sacChoose.types || []).some((t) => card.types.includes(t)))
       cls.push('targetable')
     if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
@@ -436,13 +439,18 @@ export default function EnginePlayArea() {
               if (p0) p0.cards.push(c)
               else piles.push({ name: c.name, cards: [c] })
             }
-            const landsEl = lands.length ? (
-              <div className="eng-lands" key="lands">
-                {piles.map((pile) => (
-                  <LandPile key={pile.name} pile={pile} onZoom={setZoom} />
-                ))}
-              </div>
-            ) : null
+            // While targeting a land, show lands individually so each is clickable.
+            const landsEl = lands.length
+              ? targeting && wantsLand
+                ? cardRow(lands, 'eng-lands', 'lands')
+                : (
+                    <div className="eng-lands" key="lands">
+                      {piles.map((pile) => (
+                        <LandPile key={pile.name} pile={pile} onZoom={setZoom} />
+                      ))}
+                    </div>
+                  )
+              : null
 
             const creaturesEl = cardRow(creatures, 'eng-creatures', 'creatures')
             const othersEl = cardRow(others, 'eng-others', 'others')
@@ -514,6 +522,14 @@ export default function EnginePlayArea() {
         onItem={onStackItem}
         onZoom={setZoom}
       />
+
+      {kind === 'search' && (
+        <SearchOverlay
+          pending={pending}
+          onPick={(oid) => choose({ pick: oid })}
+          onNone={() => choose({ pick: null })}
+        />
+      )}
 
       {kind === 'scry' && (
         <ScryOverlay
@@ -803,6 +819,40 @@ function ZoneViewer({ title, cards, flashbackFor, onFlashback, onZoom, onClose }
               )
             })}
           </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Library search: pick one card (deduped by name), or take nothing if optional.
+function SearchOverlay({ pending, onPick, onNone }) {
+  const unique = []
+  const seen = new Set()
+  for (const c of pending.cards) {
+    if (!seen.has(c.name)) {
+      seen.add(c.name)
+      unique.push(c)
+    }
+  }
+  return (
+    <div className="eng-scry">
+      <div className="eng-scry-panel">
+        <div className="eng-scry-title">
+          Search your library — choose a card{pending.optional ? ' (or take nothing)' : ''}
+        </div>
+        <div className="eng-scry-cards">
+          {unique.map((c) => (
+            <div className="eng-scry-card" key={c.oid} onClick={() => onPick(c.oid)} title={c.name}>
+              {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
+              <div className="eng-scry-dest">{c.name}</div>
+            </div>
+          ))}
+        </div>
+        {pending.optional && (
+          <button className="mini" onClick={onNone}>
+            Take nothing
+          </button>
         )}
       </div>
     </div>

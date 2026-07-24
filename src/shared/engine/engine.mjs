@@ -183,6 +183,9 @@ export class GameEngine {
         case 'madness':
           this._applyMadness(pending, answer)
           break
+        case 'search':
+          this._applySearch(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -417,6 +420,8 @@ export class GameEngine {
     if (spec.type === 'player' || spec.type === 'any') return true
     if (spec.type === 'creature')
       return objectsIn(s, 'battlefield').some((o) => o.chars.types.includes('Creature'))
+    if (spec.type === 'land')
+      return objectsIn(s, 'battlefield').some((o) => o.chars.types.includes('Land'))
     if (spec.type === 'spell') return zone(s, 'stack').length > 0
     return true
   }
@@ -789,6 +794,23 @@ export class GameEngine {
         s.pending = { kind: 'discardCards', player: pid, count, hand: [...hand] }
         return true
       }
+      case 'search': {
+        // A player searches their library for a card matching a filter.
+        const pid = this._resolvePlayerRef(source, e.by || 'controller')
+        const matches = zone(s, 'library', pid).filter((oid) =>
+          this._matchCardFilter(s.objects[oid], e.filter)
+        )
+        if (matches.length === 0) return false // nothing to find
+        s.pending = {
+          kind: 'search',
+          player: pid,
+          cards: [...matches],
+          to: e.to || 'hand',
+          tapped: !!e.tapped,
+          optional: e.optional !== false
+        }
+        return true
+      }
       default:
         this._runEffects(source, [e])
         return false
@@ -883,6 +905,49 @@ export class GameEngine {
           throw new Error(`unknown effect op ${e.op}`)
       }
     }
+  }
+
+  // Resolve a player reference in an effect: 'controller' or 'target<i>' (the
+  // controller of that target).
+  _resolvePlayerRef(source, ref) {
+    if (ref?.startsWith?.('target')) {
+      const t = source.targets?.[Number(ref.slice('target'.length))]
+      if (t?.kind === 'player') return t.pid
+      if (t?.oid) return this.state.objects[t.oid]?.controller ?? source.controller
+    }
+    return source.controller
+  }
+
+  _matchCardFilter(o, filter) {
+    if (!filter) return true
+    const p = o.printed
+    if (filter.supertype && !p.supertypes.includes(filter.supertype)) return false
+    if (filter.type && !p.types.includes(filter.type)) return false
+    if (filter.subtype && !p.subtypes.includes(filter.subtype)) return false
+    return true
+  }
+
+  // Move a searched card to its destination and shuffle the library.
+  _applySearch(pending, answer) {
+    const s = this.state
+    const pid = pending.player
+    const pick = answer?.pick
+    if (pick && pending.cards.includes(pick)) {
+      if (pending.to === 'battlefield') {
+        const lib = s.zones[zoneKey('library', pid)]
+        const i = lib.indexOf(pick)
+        if (i >= 0) lib.splice(i, 1)
+        const o = s.objects[pick]
+        o.zoneName = 'battlefield'
+        s.zones.battlefield.push(o.oid)
+        this._enterBattlefield(o, pid)
+        if (pending.tapped) o.status.tapped = true
+      } else {
+        moveObject(s, pick, pending.to)
+      }
+    }
+    s.zones[zoneKey('library', pid)] = s.rng.shuffle(s.zones[zoneKey('library', pid)])
+    this._resumeResolution()
   }
 
   _resolveTargetRef(source, ref) {

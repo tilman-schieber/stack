@@ -149,5 +149,32 @@ section('Writhing Chrysalis: dies -> 3/2 Phyrexian Horror token')
   assert(token && `${token.chars.power}/${token.chars.toughness}` === '3/2', 'made a 3/2 token')
 }
 
+section('Cleansing Wildfire: destroy a land, its controller fetches a basic, draw')
+{
+  const e = makeEngine() // 20 Forest decks -> plenty of basics to find
+  put(e, 0, 'Mountain', 'battlefield') // to cast {R}
+  const target = put(e, 0, 'Vault of Whispers', 'battlefield') // your artifact land (untapped for test)
+  const cw = put(e, 0, 'Cleansing Wildfire', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  const bfBefore = zone(e.state, 'battlefield').length
+  const handBefore = zone(e.state, 'hand', 0).length
+
+  e.choose({ type: 'cast', oid: cw.oid, targets: [{ kind: 'object', oid: target.oid }] })
+  // resolving pauses on the search
+  e.choose({ type: 'pass' })
+  if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+  assert(e.pending.kind === 'search', 'paused to search for a basic land')
+  assert(e.pending.cards.every((oid) => e.state.objects[oid].printed.name === 'Forest'), 'only basics are found')
+
+  const fetched = e.pending.cards[0]
+  e.choose({ pick: fetched })
+  resolveAll(e)
+  assert(inZone(e, 0, 'graveyard', target.oid), 'the targeted land was destroyed')
+  assert(inZone(e, 0, 'battlefield', fetched), 'the fetched basic is on the battlefield')
+  assert(e.state.objects[fetched].status.tapped, 'the fetched land entered tapped')
+  assert(zone(e.state, 'hand', 0).length === handBefore - 1 + 1, 'drew a card (net: cast -1, draw +1)')
+  bfBefore // referenced
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)

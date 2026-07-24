@@ -265,6 +265,16 @@ export const BEHAVIORS = {
   'Fanatical Offering': {
     spell: { additionalCost: { sacrifice: { types: ['Artifact', 'Creature'] } }, effect: [{ op: 'draw', amount: 2 }] }
   },
+  'Cleansing Wildfire': {
+    spell: {
+      targets: [{ type: 'land' }],
+      effect: [
+        { op: 'search', by: 'target0', filter: { supertype: 'Basic', type: 'Land' }, to: 'battlefield', tapped: true },
+        { op: 'destroy', to: 'target0' },
+        { op: 'draw', amount: 1 }
+      ]
+    }
+  },
   'Go for the Throat': {
     spell: { targets: [{ type: 'creature' }], effect: [{ op: 'destroy', to: 'target0' }] }
   },

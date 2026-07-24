@@ -563,6 +563,14 @@ export const SAMPLE_CARDS = {
     colors: ['B'],
     oracle_text: 'As an additional cost to cast this spell, sacrifice an artifact or creature. Draw two cards.'
   },
+  'Cleansing Wildfire': {
+    name: 'Cleansing Wildfire',
+    mana_cost: '{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    oracle_text:
+      "Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle. You draw a card."
+  },
   'Go for the Throat': {
     name: 'Go for the Throat',
     mana_cost: '{1}{B}',
