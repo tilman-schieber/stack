@@ -117,6 +117,7 @@ export default function EnginePlayArea() {
   const [scryBottom, setScryBottom] = useState([]) // scry: oids to put on the bottom
   const [zoneView, setZoneView] = useState(null) // { pid, zone } graveyard/exile viewer
   const [xInput, setXInput] = useState(0) // X value being chosen for an X spell
+  const [ninjutsu, setNinjutsu] = useState(null) // pending ninjutsu action awaiting an attacker
 
   useEffect(() => {
     setCast(null)
@@ -131,6 +132,7 @@ export default function EnginePlayArea() {
     setAbilityMenu(null)
     setZoneView(null)
     setXInput(0)
+    setNinjutsu(null)
   }, [view])
 
   useEffect(() => {
@@ -186,6 +188,7 @@ export default function EnginePlayArea() {
     else if (a.type === 'madness') choose({ cast: true, targets: chosen })
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: chosen })
     else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: chosen })
+    else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: chosen })
     else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac, x: c.x })
   }
 
@@ -212,8 +215,15 @@ export default function EnginePlayArea() {
   // Begin any player action; open targeting/sacrifice/X sub-steps as needed.
   function startAction(a) {
     setAbilityMenu(null)
-    if (a.type === 'playLand') {
-      choose(a)
+    if (a.type === 'playLand' || a.type === 'plot') {
+      choose(a.type === 'plot' ? { type: 'plot', oid: a.oid } : a)
+      return
+    }
+    if (a.type === 'ninjutsu') {
+      // Return an unblocked attacker; if there's only one choice, act immediately,
+      // otherwise let the player click which attacker to return.
+      if (a.returns.length === 1) choose({ type: 'ninjutsu', oid: a.oid, returned: a.returns[0] })
+      else setNinjutsu(a)
       return
     }
     const needsSetup = a.needsTargets > 0 || a.sacChoose || a.hasX
@@ -224,6 +234,7 @@ export default function EnginePlayArea() {
     if (a.type === 'activate') choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
     else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: [] })
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: [] })
+    else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: [] })
     else choose({ type: 'cast', oid: a.oid })
   }
   const startActivate = startAction
@@ -259,7 +270,9 @@ export default function EnginePlayArea() {
     if (targeting || needSac || needX) return
     if (kind === 'priority' && pid === pending.player) {
       const acts = pending.actions.filter(
-        (a) => a.oid === card.oid && ['cast', 'castOmen', 'castFlashback', 'playLand'].includes(a.type)
+        (a) =>
+          a.oid === card.oid &&
+          ['cast', 'castOmen', 'castFlashback', 'playLand', 'plot', 'ninjutsu'].includes(a.type)
       )
       if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
@@ -267,6 +280,12 @@ export default function EnginePlayArea() {
   }
 
   function onBattlefieldCard(card, controllerPid, ev) {
+    // Ninjutsu: click which of your unblocked attackers to return to hand.
+    if (ninjutsu) {
+      if (ninjutsu.returns.includes(card.oid))
+        choose({ type: 'ninjutsu', oid: ninjutsu.oid, returned: card.oid })
+      return
+    }
     // Choosing a permanent to sacrifice (a cost) — click one you control that matches.
     if (needSac) {
       if (controllerPid === pending.player && (cast.action.sacChoose.types || []).some((t) => card.types.includes(t)))
@@ -327,6 +346,7 @@ export default function EnginePlayArea() {
     const cls = []
     if (card.attacking) cls.push('atk')
     if (card.blocking) cls.push('blk')
+    if (ninjutsu && ninjutsu.returns.includes(card.oid)) cls.push('targetable')
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
     if (targeting && wantsCreature && isCreature(card)) cls.push('targetable')
     if (targeting && wantsLand && isLand(card)) cls.push('targetable')
@@ -545,15 +565,16 @@ export default function EnginePlayArea() {
         <ZoneViewer
           title={`${view.players[zoneView.pid].name}'s ${zoneView.zone}`}
           cards={view.players[zoneView.pid][zoneView.zone]}
-          flashbackFor={(oid) =>
+          castableFor={(oid) =>
             kind === 'priority' && zoneView.pid === pending.player
-              ? pending.actions?.find((a) => a.type === 'castFlashback' && a.oid === oid)
+              ? pending.actions?.find(
+                  (a) => (a.type === 'castFlashback' || a.type === 'castPlotted') && a.oid === oid
+                )
               : null
           }
-          onFlashback={(a) => {
+          onCast={(a) => {
             setZoneView(null)
-            if (a.needsTargets > 0) setCast({ action: a, chosen: [] })
-            else choose({ type: 'castFlashback', oid: a.oid, targets: [] })
+            startAction(a)
           }}
           onZoom={setZoom}
           onClose={() => setZoneView(null)}
@@ -606,6 +627,8 @@ export default function EnginePlayArea() {
         blocks={blocks}
         discardSel={discardSel}
         bottomSel={bottomSel}
+        ninjutsu={ninjutsu}
+        cancelNinjutsu={() => setNinjutsu(null)}
         error={error}
         choose={choose}
         endGame={endGame}
@@ -617,12 +640,21 @@ export default function EnginePlayArea() {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, targeting, sacrificing, choosingX, attackers, attackTargetName, blocks, discardSel, bottomSel, error, choose, endGame, onMadnessCast, cancelCast }) {
+function Prompt({ view, pending, targeting, sacrificing, choosingX, attackers, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
   let body = null
-  if (choosingX) {
+  if (ninjutsu) {
+    body = (
+      <>
+        <span>Ninjutsu — click an unblocked attacker to return to hand.</span>
+        <button className="mini" onClick={cancelNinjutsu}>
+          Cancel
+        </button>
+      </>
+    )
+  } else if (choosingX) {
     body = (
       <>
         <span>Choose X (max {choosingX.max}):</span>
@@ -841,9 +873,10 @@ function Prompt({ view, pending, targeting, sacrificing, choosingX, attackers, a
   )
 }
 
-// Graveyard / exile viewer. Cards with a flashback cast available are highlighted
-// and clickable.
-function ZoneViewer({ title, cards, flashbackFor, onFlashback, onZoom, onClose }) {
+// Graveyard / exile viewer. Cards with a castable option (flashback from the
+// graveyard, or a plotted card in exile) are highlighted and clickable.
+function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose }) {
+  const castLabel = (a) => (a.type === 'castPlotted' ? 'Plotted' : 'Flashback')
   return (
     <div className="eng-zoneviewer" onClick={onClose}>
       <div className="eng-zoneviewer-panel" onClick={(e) => e.stopPropagation()}>
@@ -858,20 +891,20 @@ function ZoneViewer({ title, cards, flashbackFor, onFlashback, onZoom, onClose }
         ) : (
           <div className="eng-zoneviewer-grid">
             {cards.map((c) => {
-              const fb = flashbackFor(c.oid)
+              const fb = castableFor(c.oid)
               return (
                 <div
                   key={c.oid}
                   className={'eng-zoneviewer-card' + (fb ? ' castable' : '')}
-                  onClick={() => fb && onFlashback(fb)}
+                  onClick={() => fb && onCast(fb)}
                   onContextMenu={(e) => {
                     e.preventDefault()
                     if (c.cardId) onZoom(c)
                   }}
-                  title={fb ? `Flashback: ${c.name}` : c.name}
+                  title={fb ? `${castLabel(fb)}: ${c.name}` : c.name}
                 >
                   {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
-                  {fb && <span className="eng-zoneviewer-fb">Flashback</span>}
+                  {fb && <span className="eng-zoneviewer-fb">{castLabel(fb)}</span>}
                 </div>
               )
             })}

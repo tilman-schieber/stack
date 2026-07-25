@@ -68,17 +68,20 @@ export const EXAMPLE_DECKS = [
   {
     slug: 'pauper-blue-faeries',
     name: 'Mono-Blue Faeries (Pauper)',
-    description: 'Blue tempo — evasive fliers, counters and card selection. (Simplified: Ninjutsu / Spellstutter Sprite still to come.)',
+    description:
+      'Blue tempo — evasive fliers, Ninjutsu (return an unblocked attacker, swap in Ninja of the Deep Hours), counters and card selection. (Spellstutter Sprite still to come.)',
     cards: [
-      [16, 'Island'],
-      [4, 'Faerie Seer'], // flying, ETB scry 2
+      [20, 'Island'],
+      [4, 'Faerie Seer'], // 1/1 flying, ETB scry 2 — cheap evasive ninjutsu enabler
+      [4, 'Ninja of the Deep Hours'], // Ninjutsu {1}{U}; combat damage -> draw
       [4, 'Wind Drake'], // 2/2 flying
-      [2, 'Snapping Drake'], // 3/3 flying
+      [4, 'Snapping Drake'], // 3/2 flying
+      [4, 'Prodigal Sorcerer'], // {T}: ping 1
       [4, 'Counterspell'],
-      [2, 'Cancel'],
-      [3, 'Preordain'],
-      [3, 'Serum Visions'],
-      [2, 'Divination']
+      [4, 'Cancel'],
+      [4, 'Preordain'],
+      [4, 'Serum Visions'],
+      [4, 'Divination']
     ]
   },
 
@@ -86,7 +89,7 @@ export const EXAMPLE_DECKS = [
   {
     slug: 'sample-goblins',
     name: 'Goblins (sample)',
-    description: 'Mono-red goblins — a lord, sac-for-damage, firebreathing, a planeswalker and burn.',
+    description: 'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker and burn.',
     cards: [
       [14, 'Mountain'],
       [2, 'Mogg Fanatic'],
@@ -97,10 +100,10 @@ export const EXAMPLE_DECKS = [
       [2, 'Goblin King'],
       [2, 'Flametongue Kavu'],
       [2, 'Dragon Fodder'],
+      [2, 'Empty the Warrens'], // Storm: two Goblins, plus a copy per earlier spell
       [2, 'Shivan Dragon'],
       [1, 'Bonesplitter'],
-      [4, 'Lightning Bolt'],
-      [1, 'Lightning Strike']
+      [4, 'Lightning Bolt']
     ]
   },
   {

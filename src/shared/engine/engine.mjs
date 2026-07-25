@@ -223,6 +223,7 @@ export class GameEngine {
         }
         s.players[s.activePlayer].landsPlayed = 0
         for (const p of s.players) p.drewThisTurn = 0 // draw-count triggers are per turn
+        s.spellsCastThisTurn = 0 // storm count is per turn
         break // no priority; _pump advances
       }
       case 'draw': {
@@ -543,6 +544,35 @@ export class GameEngine {
         if (!t.length || t.every((x) => this._legalTargetsExist(x)))
           actions.push({ type: 'castOmen', oid, label: om.name, targets: t, needsTargets: t.length })
       }
+      // Plot (702.170): a special action, sorcery-speed, that exiles the card.
+      const plt = o.behavior?.plot
+      if (plt && sorcerySpeed && this._canPay(pid, parseManaCost(plt.cost)))
+        actions.push({ type: 'plot', oid, label: `Plot ${p.name}` })
+      // Ninjutsu (702.49): swap this in for an unblocked attacker you control, in
+      // the priority window after blockers are declared.
+      const nin = o.behavior?.ninjutsu
+      if (nin && s.combat && s.step === 'declareBlockers' && this._canPay(pid, parseManaCost(nin.cost))) {
+        const returns = s.combat.attackers.filter((aoid) => {
+          const a = s.objects[aoid]
+          return a && a.controller === pid && a.status.attacking && !a.status.blocked
+        })
+        if (returns.length) actions.push({ type: 'ninjutsu', oid, label: `Ninjutsu ${p.name}`, returns })
+      }
+    }
+
+    // Plotted cards: cast from exile for free on a later turn (702.170d).
+    for (const oid of zone(s, 'exile', pid)) {
+      const o = s.objects[oid]
+      if (!o.plotted || o.plottedTurn >= s.turnNumber || !sorcerySpeed) continue
+      const targets = this._spellTargets(o)
+      if (targets.length && !targets.every((t) => this._legalTargetsExist(t))) continue
+      actions.push({
+        type: 'castPlotted',
+        oid,
+        label: `${o.printed.name} (plotted)`,
+        targets,
+        needsTargets: targets.length
+      })
     }
 
     // Flashback: cast a spell from your graveyard for its flashback cost.
@@ -627,7 +657,8 @@ export class GameEngine {
         o.controller = pid
         o.targets = action.targets || []
         o.spell = o.behavior.spell
-        this._fireTriggers('castSpell', o) // prowess etc.
+        this._countSpellCast(o)
+        this._fireTriggers('castSpell', o) // prowess, storm, Guttersnipe etc.
         break
       }
       case 'castFlashback': {
@@ -642,6 +673,7 @@ export class GameEngine {
         o.targets = action.targets || []
         o.spell = o.behavior.spell
         o.flashbackCast = true // exiled instead of the graveyard when it leaves
+        this._countSpellCast(o)
         this._fireTriggers('castSpell', o)
         break
       }
@@ -653,6 +685,7 @@ export class GameEngine {
         o.targets = action.targets || []
         o.spell = o.behavior.omen // the Omen half's effect
         o.omenCast = true // shuffled into the library after resolving
+        this._countSpellCast(o)
         this._fireTriggers('castSpell', o)
         break
       }
@@ -670,9 +703,59 @@ export class GameEngine {
         zone(s, 'stack').push(aoid.oid)
         break
       }
+      case 'plot': {
+        // Special action (116.2k / 702.170): pay the plot cost, exile the card, and
+        // mark it plotted so it can be cast for free on a later turn.
+        const o = s.objects[action.oid]
+        this._pay(pid, parseManaCost(o.behavior.plot.cost))
+        moveObject(s, action.oid, 'exile')
+        o.plotted = true
+        o.plottedTurn = s.turnNumber
+        break
+      }
+      case 'castPlotted': {
+        // Cast a plotted card from exile without paying its mana cost (702.170d).
+        const o = s.objects[action.oid]
+        o.plotted = false
+        o.xValue = 0
+        moveObject(s, action.oid, 'stack')
+        o.controller = pid
+        o.targets = action.targets || []
+        o.spell = o.behavior.spell
+        this._countSpellCast(o)
+        this._fireTriggers('castSpell', o)
+        break
+      }
+      case 'ninjutsu': {
+        // 702.49: return an unblocked attacker to hand; put this from hand onto the
+        // battlefield tapped and attacking the same defender.
+        const ninja = s.objects[action.oid]
+        this._pay(pid, parseManaCost(ninja.behavior.ninjutsu.cost))
+        const returned = s.objects[action.returned]
+        const target = returned.status.attackingTarget
+        // Remove the returned creature from combat, then bounce it.
+        s.combat.attackers = s.combat.attackers.filter((oid) => oid !== returned.oid)
+        moveObject(s, returned.oid, 'hand')
+        // The ninja enters from hand tapped and attacking the same target.
+        moveObject(s, action.oid, 'battlefield')
+        this._enterBattlefield(ninja, pid)
+        ninja.status.tapped = true
+        ninja.status.attacking = true
+        ninja.status.attackingTarget = target
+        s.combat.attackers.push(ninja.oid)
+        break
+      }
       default:
         throw new Error(`unknown action ${action.type}`)
     }
+  }
+
+  // Storm counting (702.40): record how many spells were cast before this one
+  // this turn, then count this cast.
+  _countSpellCast(o) {
+    const s = this.state
+    s.spellsCastThisTurn = (s.spellsCastThisTurn || 0) + 1
+    o._stormCount = s.spellsCastThisTurn - 1
   }
 
   // Can `pid` currently pay ability `ab`'s activation cost with source `o`?
@@ -1065,6 +1148,25 @@ export class GameEngine {
           for (let i = 0; i < (e.count || 1); i++) this._createToken(def, source.controller)
           break
         }
+        case 'stormCopy': {
+          // Storm (702.40): put a copy of the storm spell on the stack for each
+          // other spell cast before it this turn. Copies keep the original's
+          // targets (retargeting the copies is not offered) and cease to exist
+          // after resolving (they resolve as effect-only abilities).
+          const spell = s.objects[source.sourceOid]
+          if (!spell || !spell.spell) break
+          const n = spell._stormCount || 0
+          for (let i = 0; i < n; i++) {
+            const copy = createAbility(s, {
+              controller: source.controller,
+              sourceOid: source.sourceOid,
+              effect: spell.spell.effect,
+              targets: spell.targets || []
+            })
+            zone(s, 'stack').push(copy.oid)
+          }
+          break
+        }
         case 'shuffleIntoLibrary': {
           const o = e.of === 'self' ? s.objects[source.sourceOid] : null
           if (o) {
@@ -1451,6 +1553,9 @@ export class GameEngine {
     if (opts.combat && s.prevent.some((p) => p.type === 'allCombat')) return
     if (target.player != null) {
       s.players[target.player].life -= amount
+      // "Whenever this creature deals combat damage to a player" (Ninja of the Deep Hours).
+      if (opts.combat && source?.chars?.types?.includes('Creature'))
+        this._fireTriggers('dealsCombatDamageToPlayer', source)
     } else if (target.obj) {
       // Protection prevents damage from sources of the protected color.
       const prot = target.obj.chars?.protections || []

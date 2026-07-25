@@ -725,6 +725,43 @@ export const SAMPLE_CARDS = {
     oracle_text: 'You may discard a card or sacrifice a land. If you do, draw two cards.\nPlot {1}{R}'
   },
 
+  // Storm / Ninjutsu / Plot demos.
+  Grapeshot: {
+    name: 'Grapeshot',
+    mana_cost: '{1}{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    keywords: ['Storm'],
+    oracle_text: 'Grapeshot deals 1 damage to any target.\nStorm'
+  },
+  'Empty the Warrens': {
+    name: 'Empty the Warrens',
+    mana_cost: '{3}{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    keywords: ['Storm'],
+    oracle_text: 'Create two 1/1 red Goblin creature tokens.\nStorm'
+  },
+  'Weather the Storm': {
+    name: 'Weather the Storm',
+    mana_cost: '{1}{G}',
+    type_line: 'Instant',
+    colors: ['G'],
+    keywords: ['Storm'],
+    oracle_text: 'You gain 3 life.\nStorm'
+  },
+  'Ninja of the Deep Hours': {
+    name: 'Ninja of the Deep Hours',
+    mana_cost: '{3}{U}',
+    type_line: 'Creature — Human Ninja',
+    power: '2',
+    toughness: '2',
+    colors: ['U'],
+    keywords: ['Ninjutsu'],
+    oracle_text:
+      'Ninjutsu {1}{U}\nWhenever this creature deals combat damage to a player, you may draw a card.'
+  },
+
   // Nonbasic / artifact lands.
   'Vault of Whispers': { name: 'Vault of Whispers', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Drossforge Bridge': { name: 'Drossforge Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },

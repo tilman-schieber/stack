@@ -442,10 +442,39 @@ export const BEHAVIORS = {
       ]
     }
   },
-  // "You may discard a card or sacrifice a land. If you do, draw two." Plot and the
-  // sacrifice-a-land alternative are not modelled — played as an optional discard-draw.
+  // "You may discard a card or sacrifice a land. If you do, draw two." Plot {1}{R}.
+  // (The sacrifice-a-land alternative is not modelled — played as an optional discard-draw.)
   'Highway Robbery': {
-    spell: { effect: [{ op: 'discard', amount: 1, optional: true, draw: 2 }] }
+    spell: { effect: [{ op: 'discard', amount: 1, optional: true, draw: 2 }] },
+    plot: { cost: '{1}{R}' }
+  },
+  // ---- Storm (702.40): copy the spell for each other spell cast before it this turn ----
+  Grapeshot: {
+    spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', amount: 1, to: 'target0' }] },
+    triggered: [{ trigger: { event: 'castSpell', self: true }, effect: [{ op: 'stormCopy' }] }]
+  },
+  'Empty the Warrens': {
+    spell: {
+      effect: [
+        {
+          op: 'createToken',
+          count: 2,
+          token: { name: 'Goblin', types: ['Creature'], subtypes: ['Goblin'], colors: ['R'], power: 1, toughness: 1 }
+        }
+      ]
+    },
+    triggered: [{ trigger: { event: 'castSpell', self: true }, effect: [{ op: 'stormCopy' }] }]
+  },
+  'Weather the Storm': {
+    spell: { effect: [{ op: 'gainLife', amount: 3 }] },
+    triggered: [{ trigger: { event: 'castSpell', self: true }, effect: [{ op: 'stormCopy' }] }]
+  },
+  // ---- Ninjutsu (702.49): swap an unblocked attacker for this from hand ----
+  'Ninja of the Deep Hours': {
+    ninjutsu: { cost: '{1}{U}' },
+    triggered: [
+      { trigger: { event: 'dealsCombatDamageToPlayer', self: true }, effect: [{ op: 'draw', amount: 1 }] }
+    ]
   },
   // Recursion: when you draw your third card in a turn, return this from your
   // graveyard to the battlefield tapped. (It's never hard-cast in mono-red.)
@@ -490,7 +519,9 @@ export function loadBehavior(printed) {
     mana: authored.mana || null, // colors a land can tap for, e.g. ['B','R']
     entersTapped: authored.entersTapped || false,
     omen: authored.omen || null, // alternate castable half (Omen/adventure) -> shuffles back
-    returnOnThirdDraw: authored.returnOnThirdDraw || false // Sneaky Snacker-style recursion
+    returnOnThirdDraw: authored.returnOnThirdDraw || false, // Sneaky Snacker-style recursion
+    ninjutsu: authored.ninjutsu || null, // { cost } — swap in for an unblocked attacker
+    plot: authored.plot || null // { cost } — exile from hand, cast free on a later turn
   }
 }
 
