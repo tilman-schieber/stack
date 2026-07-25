@@ -773,9 +773,78 @@ export const SAMPLE_CARDS = {
       'Ninjutsu {1}{U}\nWhenever this creature deals combat damage to a player, you may draw a card.'
   },
 
+  // ---- Grixis Affinity ----
+  'Blood Fountain': {
+    name: 'Blood Fountain',
+    mana_cost: '{B}',
+    type_line: 'Artifact',
+    colors: ['B'],
+    oracle_text:
+      'When this artifact enters, create a Blood token.\n{3}{B}, {T}, Sacrifice this artifact: Return up to two target creature cards from your graveyard to your hand.'
+  },
+  'Myr Enforcer': {
+    name: 'Myr Enforcer',
+    mana_cost: '{7}',
+    type_line: 'Artifact Creature — Myr',
+    power: '4',
+    toughness: '4',
+    colors: [],
+    keywords: ['Affinity'],
+    oracle_text: 'Affinity for artifacts'
+  },
+  'Utrom Monitor': {
+    name: 'Utrom Monitor',
+    mana_cost: '{4}{U}',
+    type_line: 'Artifact Creature — Utrom Scientist',
+    power: '3',
+    toughness: '3',
+    colors: ['U'],
+    keywords: ['Flying', 'Affinity'],
+    oracle_text: 'Affinity for artifacts\nFlying'
+  },
+  'Kenku Artificer': {
+    name: 'Kenku Artificer',
+    mana_cost: '{2}{U}',
+    type_line: 'Creature — Bird Artificer',
+    power: '1',
+    toughness: '1',
+    colors: ['U'],
+    oracle_text:
+      'When this creature enters, put three +1/+1 counters on up to one target noncreature artifact. That artifact becomes a 0/0 Homunculus artifact creature with flying.'
+  },
+  Thoughtcast: {
+    name: 'Thoughtcast',
+    mana_cost: '{4}{U}',
+    type_line: 'Sorcery',
+    colors: ['U'],
+    keywords: ['Affinity'],
+    oracle_text: 'Affinity for artifacts\nDraw two cards.'
+  },
+  'Galvanic Blast': {
+    name: 'Galvanic Blast',
+    mana_cost: '{R}',
+    type_line: 'Instant',
+    colors: ['R'],
+    keywords: ['Metalcraft'],
+    oracle_text:
+      'Galvanic Blast deals 2 damage to any target.\nMetalcraft — Galvanic Blast deals 4 damage instead if you control three or more artifacts.'
+  },
+  "Reckoner's Bargain": {
+    name: "Reckoner's Bargain",
+    mana_cost: '{1}{B}',
+    type_line: 'Instant',
+    colors: ['B'],
+    oracle_text:
+      "As an additional cost to cast this spell, sacrifice an artifact or creature.\nYou gain life equal to the sacrificed permanent's mana value. Draw two cards."
+  },
+
   // Nonbasic / artifact lands.
   'Vault of Whispers': { name: 'Vault of Whispers', mana_cost: '', type_line: 'Artifact Land', colors: [] },
+  'Seat of the Synod': { name: 'Seat of the Synod', mana_cost: '', type_line: 'Artifact Land', colors: [] },
+  'Great Furnace': { name: 'Great Furnace', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Drossforge Bridge': { name: 'Drossforge Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Slagwoods Bridge': { name: 'Slagwoods Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
+  'Silverbluff Bridge': { name: 'Silverbluff Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
+  'Mistvault Bridge': { name: 'Mistvault Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Twisted Landscape': { name: 'Twisted Landscape', mana_cost: '', type_line: 'Land', colors: [] }
 }

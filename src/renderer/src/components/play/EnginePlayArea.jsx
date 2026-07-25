@@ -179,6 +179,9 @@ export default function EnginePlayArea() {
   const wantsPlayer = targetSlot && (targetSlot.type === 'player' || targetSlot.type === 'any')
   const wantsSpell = targetSlot && targetSlot.type === 'spell'
   const wantsLand = targetSlot && targetSlot.type === 'land'
+  const wantsArtifact = targetSlot && targetSlot.type === 'artifact'
+  const matchesArtifact = (c) =>
+    wantsArtifact && c.types?.includes('Artifact') && !(targetSlot.noncreature && c.types?.includes('Creature'))
 
   // Fire the assembled cast/activate (with its chosen targets and sacrifice).
   function finalizeCast(c, chosen) {
@@ -295,6 +298,7 @@ export default function EnginePlayArea() {
     if (targeting) {
       if (wantsCreature && isCreature(card)) addTarget({ kind: 'object', oid: card.oid })
       else if (wantsLand && isLand(card)) addTarget({ kind: 'object', oid: card.oid })
+      else if (matchesArtifact(card)) addTarget({ kind: 'object', oid: card.oid })
       return
     }
     // Activate an ability of a permanent you control. If it has more than one
@@ -350,6 +354,7 @@ export default function EnginePlayArea() {
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
     if (targeting && wantsCreature && isCreature(card)) cls.push('targetable')
     if (targeting && wantsLand && isLand(card)) cls.push('targetable')
+    if (targeting && matchesArtifact(card)) cls.push('targetable')
     if (needSac && controllerPid === pending.player && (cast.action.sacChoose.types || []).some((t) => card.types.includes(t)))
       cls.push('targetable')
     if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')

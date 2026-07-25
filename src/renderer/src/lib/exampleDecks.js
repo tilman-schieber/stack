@@ -9,35 +9,66 @@ export const EXAMPLE_DECKS = [
   {
     slug: 'pauper-jund-wildfire',
     name: 'Jund Wildfire (Pauper)',
-    description: 'Artifact-sacrifice value: Cleansing Wildfire on your own artifact lands, Ichor Wellspring loops, and sac outlets.',
+    description:
+      'Paupergeddon Summer 2026 winner (Jan Plachý). Artifact-sacrifice value: Cleansing Wildfire on your own artifact lands, Ichor Wellspring loops, Writhing Chrysalis for Eldrazi Spawn mana, and sac outlets.',
     cards: [
       // Creatures
-      [2, 'Nyxborn Hydra'],
+      [4, 'Writhing Chrysalis'],
       [3, 'Krark-Clan Shaman'],
       [4, 'Refurbished Familiar'],
-      [4, 'Writhing Chrysalis'],
-      [1, 'Sagu Wildling'],
+      [2, 'Nyxborn Hydra'],
       // Artifacts
-      [2, 'Lembas'],
+      [3, 'Ichor Wellspring'],
+      [3, 'Lembas'],
       [3, 'Nihil Spellbomb'],
-      [4, 'Ichor Wellspring'],
+      [1, 'Blood Fountain'],
       // Instants
-      [1, 'Go for the Throat'],
-      [2, "Eviscerator's Insight"],
+      [2, 'Toxin Analysis'],
+      [4, 'Cast Down'],
       [4, 'Fanatical Offering'],
-      [3, 'Cast Down'],
+      [2, "Eviscerator's Insight"],
       [1, 'Pulse of Murasa'],
-      [1, 'Toxin Analysis'],
-      // Sorcery / enchantment
+      // Sorcery
       [4, 'Cleansing Wildfire'],
-      [1, 'Makeshift Munitions'],
       // Lands
+      [4, 'Twisted Landscape'],
       [4, 'Drossforge Bridge'],
       [4, 'Slagwoods Bridge'],
-      [4, 'Twisted Landscape'],
       [2, 'Vault of Whispers'],
       [3, 'Swamp'],
-      [2, 'Forest'],
+      [1, 'Mountain'],
+      [2, 'Forest']
+    ]
+  },
+  {
+    slug: 'pauper-grixis-affinity',
+    name: 'Grixis Affinity (Pauper)',
+    description:
+      'The most-played archetype at Paupergeddon Summer 2026 (list: Antonio Picardi). Cheap artifacts power out Myr Enforcer / Utrom Monitor via affinity, Kenku Artificer animates a spare artifact, Galvanic Blast + metalcraft and Reckoner’s Bargain close.',
+    cards: [
+      // Creatures
+      [4, 'Refurbished Familiar'],
+      [4, 'Myr Enforcer'],
+      [3, 'Krark-Clan Shaman'],
+      [2, 'Kenku Artificer'],
+      [3, 'Utrom Monitor'],
+      // Artifacts / enchantment
+      [4, 'Ichor Wellspring'],
+      [3, 'Nihil Spellbomb'],
+      [2, 'Blood Fountain'],
+      [1, 'Makeshift Munitions'],
+      // Instants / sorceries
+      [4, 'Galvanic Blast'],
+      [4, "Reckoner's Bargain"],
+      [3, 'Toxin Analysis'],
+      [4, 'Thoughtcast'],
+      // Lands
+      [2, 'Silverbluff Bridge'],
+      [4, 'Mistvault Bridge'],
+      [4, 'Vault of Whispers'],
+      [2, 'Great Furnace'],
+      [2, 'Seat of the Synod'],
+      [4, 'Drossforge Bridge'],
       [1, 'Mountain']
     ]
   },
@@ -65,11 +96,13 @@ export const EXAMPLE_DECKS = [
       [18, 'Mountain']
     ]
   },
+
+  // ---- Sample decks (showcase engine mechanics; not tuned to the metagame) ----
   {
-    slug: 'pauper-blue-faeries',
-    name: 'Mono-Blue Faeries (Pauper)',
+    slug: 'sample-faeries',
+    name: 'Mono-Blue Faeries (sample)',
     description:
-      'Blue tempo — evasive fliers, Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker), counters and card selection.',
+      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count) and Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker), plus counters and card selection.',
     cards: [
       [20, 'Island'],
       [4, 'Faerie Seer'], // 1/1 flying Faerie, ETB scry 2 — enabler + Spellstutter fuel
@@ -84,8 +117,6 @@ export const EXAMPLE_DECKS = [
       [4, 'Divination']
     ]
   },
-
-  // ---- Sample decks (mono-colour, showcase engine mechanics) ----
   {
     slug: 'sample-goblins',
     name: 'Goblins (sample)',

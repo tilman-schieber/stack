@@ -432,6 +432,8 @@ export class GameEngine {
   _specMatches(spec, o) {
     if (spec.type === 'creature' && !o.chars.types.includes('Creature')) return false
     if (spec.type === 'land' && !o.chars.types.includes('Land')) return false
+    if (spec.type === 'artifact' && !o.chars.types.includes('Artifact')) return false
+    if (spec.noncreature && o.chars.types.includes('Creature')) return false
     if (spec.exclude?.some((t) => o.chars.types.includes(t))) return false
     if (spec.excludeSuper?.some((t) => o.chars.supertypes.includes(t))) return false
     return true
@@ -442,7 +444,7 @@ export class GameEngine {
     const s = this.state
     if (spec.type === 'player' || spec.type === 'any') return true
     if (spec.type === 'spell') return zone(s, 'stack').length > 0
-    if (spec.type === 'creature' || spec.type === 'land')
+    if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact')
       return objectsIn(s, 'battlefield').some((o) => this._specMatches(spec, o))
     return true
   }
@@ -646,11 +648,15 @@ export class GameEngine {
           o.xValue = xCost ? action.x || 0 : 0
           const cost = this._effectiveCost(pid, o)
           this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost })
-          // Additional cost: sacrifice a permanent (e.g. Fanatical Offering).
+          // Additional cost: sacrifice a permanent (e.g. Fanatical Offering,
+          // Reckoner's Bargain — which then pays off the sacrifice's mana value).
           const addl = o.behavior.spell?.additionalCost
           if (addl?.sacrifice && action.sacrifice) {
             const so = s.objects[action.sacrifice]
-            if (so && so.controller === pid && so.zoneName === 'battlefield') this._bury(so)
+            if (so && so.controller === pid && so.zoneName === 'battlefield') {
+              o._sacrificedMV = so.printed.manaValue
+              this._bury(so)
+            }
           }
         }
         moveObject(s, action.oid, 'stack') // clears transient status/controller
@@ -1050,7 +1056,9 @@ export class GameEngine {
         case 'dealDamage': {
           const t = this._resolveTargetRef(source, e.to)
           if (!t) break
-          const amt = this._amount(source, e.amount)
+          // Metalcraft (Galvanic Blast): a higher amount if you control 3+ artifacts.
+          let amt = this._amount(source, e.amount)
+          if (e.metalcraft && this._artifactCount(source.controller) >= 3) amt = e.metalcraft
           if (t.kind === 'player') this._dealDamage(source, { player: t.pid }, amt)
           else if (t.kind === 'object') this._dealDamage(source, { obj: t.obj }, amt)
           break
@@ -1062,7 +1070,7 @@ export class GameEngine {
           this.draw(source.controller, e.amount || 1)
           break
         case 'gainLife':
-          s.players[source.controller].life += e.amount
+          s.players[source.controller].life += this._amount(source, e.amount)
           break
         case 'dealDamageEach': {
           // Damage to each permanent matching a filter (e.g. every creature).
@@ -1150,6 +1158,25 @@ export class GameEngine {
         case 'createToken': {
           const def = e.token
           for (let i = 0; i < (e.count || 1); i++) this._createToken(def, source.controller)
+          break
+        }
+        case 'animate': {
+          // Kenku Artificer: put +1/+1 counters on a noncreature artifact and turn
+          // it into a creature (a floating layer-4/6/7b effect + real counters).
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object') {
+            const o = t.obj
+            s.continuous.push({
+              timestamp: ++s.tsCounter,
+              targets: [o.oid],
+              addTypes: e.addTypes || [],
+              addSubtypes: e.addSubtypes || [],
+              setPT: e.basePower != null ? { power: e.basePower, toughness: e.baseToughness } : null,
+              grantKeywords: e.keywords || [],
+              duration: e.duration || 'permanent'
+            })
+            if (e.counters) o.status.counters['+1/+1'] = (o.status.counters['+1/+1'] || 0) + e.counters
+          }
           break
         }
         case 'stormCopy': {
@@ -1329,9 +1356,19 @@ export class GameEngine {
     return Math.max(0, Math.floor((sources - baseMv) / xCost))
   }
 
-  // Resolve a numeric effect value that may be 'X' (the source's chosen X).
+  // Resolve a numeric effect value that may be 'X' (the source's chosen X) or
+  // 'sacrificedMV' (the mana value of a permanent sacrificed to cast the source).
   _amount(source, v) {
-    return v === 'X' ? source?.xValue || 0 : v
+    if (v === 'X') return source?.xValue || 0
+    if (v === 'sacrificedMV') return source?._sacrificedMV || 0
+    return v
+  }
+
+  // Number of artifacts a player controls (affinity / metalcraft).
+  _artifactCount(pid) {
+    return objectsIn(this.state, 'battlefield').filter(
+      (o) => o.controller === pid && o.chars.types.includes('Artifact')
+    ).length
   }
 
   _canPay(pid, cost) {
@@ -1520,21 +1557,22 @@ export class GameEngine {
         // Blocked but all blockers gone: only trample leaks through.
         if (this._hasKW(atk, 'Trample')) this._dealDamage(atk, tgt, power, { combat: true })
       } else {
+        // Multiple blockers (509.2 / 510.1c): assign damage down the blocker
+        // order, at least lethal to each before moving on. Any leftover goes to
+        // the last blocker (or, with trample, over the top to the target).
         let remaining = power
         const trample = this._hasKW(atk, 'Trample')
         const deathtouch = this._hasKW(atk, 'Deathtouch')
-        for (const blkOid of blockers) {
-          const b = s.objects[blkOid]
+        for (let i = 0; i < blockers.length; i++) {
+          const b = s.objects[blockers[i]]
           const lethal = deathtouch ? 1 : Math.max(1, b.chars.toughness - b.status.damage)
-          if (trample) {
-            const assign = Math.min(remaining, lethal)
-            this._dealDamage(atk, { obj: b }, assign, { combat: true })
-            remaining -= assign
-          } else {
-            this._dealDamage(atk, { obj: b }, remaining, { combat: true }) // dump the rest here
-            remaining = 0
-            break
-          }
+          const isLast = i === blockers.length - 1
+          // Trample assigns only lethal per blocker; without trample the last
+          // blocker soaks the remainder (damage can't be sent to the player).
+          const assign = trample || !isLast ? Math.min(remaining, lethal) : remaining
+          this._dealDamage(atk, { obj: b }, assign, { combat: true })
+          remaining -= assign
+          if (remaining <= 0) break
         }
         if (trample && remaining > 0) this._dealDamage(atk, tgt, remaining, { combat: true })
       }

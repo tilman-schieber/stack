@@ -293,6 +293,65 @@ export const BEHAVIORS = {
       }
     ]
   },
+  // ---- Grixis Affinity + Jund Wildfire staples ----
+  // Blood Fountain: ETB make a Blood token; sac to return up to two creature cards.
+  'Blood Fountain': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        effect: [{ op: 'createToken', count: 1, token: { name: 'Blood', types: ['Artifact'], colors: [] } }]
+      }
+    ],
+    activated: [
+      {
+        cost: { mana: '{3}{B}', tap: true, sacrifice: 'self' },
+        effect: [
+          { op: 'returnFromGraveyard', filter: { types: ['Creature'] }, optional: true },
+          { op: 'returnFromGraveyard', filter: { types: ['Creature'] }, optional: true }
+        ]
+      }
+    ]
+  },
+  // Affinity spells (cost reduction derived from the "affinity for artifacts" text).
+  Thoughtcast: { spell: { effect: [{ op: 'draw', amount: 2 }] } },
+  // Metalcraft: 2 damage, or 4 if you control 3+ artifacts.
+  'Galvanic Blast': {
+    spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', amount: 2, metalcraft: 4, to: 'target0' }] }
+  },
+  // Sacrifice an artifact/creature: gain life = its mana value, draw two.
+  "Reckoner's Bargain": {
+    spell: {
+      additionalCost: { sacrifice: { types: ['Artifact', 'Creature'] } },
+      effect: [{ op: 'gainLife', amount: 'sacrificedMV' }, { op: 'draw', amount: 2 }]
+    }
+  },
+  // Kenku Artificer: animate a noncreature artifact you control into a 3/3 flyer
+  // (base 0/0 + three +1/+1 counters), via a layer-4/6/7b continuous effect.
+  'Kenku Artificer': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        targets: [{ type: 'artifact', noncreature: true }],
+        effect: [
+          {
+            op: 'animate',
+            to: 'target0',
+            addTypes: ['Creature'],
+            addSubtypes: ['Homunculus'],
+            basePower: 0,
+            baseToughness: 0,
+            keywords: ['Flying'],
+            counters: 3
+          }
+        ]
+      }
+    ]
+  },
+  // Eldrazi Spawn token (from Writhing Chrysalis): sacrifice for {C}. Modelled as a
+  // manually-activated ability (so it isn't auto-sacrificed to pay for other spells).
+  'Eldrazi Spawn': {
+    activated: [{ cost: { sacrifice: 'self' }, effect: [{ op: 'addMana', mana: 'C' }] }]
+  },
   // Investigate produces a Clue token; its sacrifice-to-draw ability is authored
   // on the token by name.
   Clue: {
@@ -356,8 +415,12 @@ export const BEHAVIORS = {
   },
   // Nonbasic lands: colors they tap for (+ enters-tapped for the bridges/filter).
   'Vault of Whispers': { mana: ['B'] },
+  'Seat of the Synod': { mana: ['U'] },
+  'Great Furnace': { mana: ['R'] },
   'Drossforge Bridge': { mana: ['B', 'R'], entersTapped: true },
   'Slagwoods Bridge': { mana: ['R', 'G'], entersTapped: true },
+  'Silverbluff Bridge': { mana: ['U', 'R'], entersTapped: true },
+  'Mistvault Bridge': { mana: ['U', 'B'], entersTapped: true },
   'Twisted Landscape': { mana: ['C'], entersTapped: true },
   // Planeswalker: loyalty abilities are activated abilities with a loyalty cost.
   'Chandra Nalaar': {

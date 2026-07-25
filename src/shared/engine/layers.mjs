@@ -52,6 +52,7 @@ export function recompute(state) {
 
   // Collect continuous effects (from static abilities + floating effects) into
   // their layers.
+  const layer4 = [] // add types/subtypes (e.g. Kenku Artificer animating an artifact)
   const layer6 = []
   const layer7b = []
   const layer7d = []
@@ -65,12 +66,22 @@ export function recompute(state) {
   }
   for (const f of state.continuous) {
     const e = { floating: f, timestamp: f.timestamp }
+    if (f.addTypes || f.addSubtypes) layer4.push(e)
     if (f.grantKeywords) layer6.push(e)
     if (f.setPT) layer7b.push(e)
     if (f.modifyPT) layer7d.push(e)
   }
 
   const byTimestamp = (a, b) => a.timestamp - b.timestamp
+
+  // Layer 4 — add types / subtypes (turning an artifact into a creature, etc.).
+  for (const e of layer4.sort(byTimestamp)) {
+    for (const o of bf) {
+      if (!effTargets(e, o)) continue
+      for (const t of e.floating.addTypes || []) if (!o.chars.types.includes(t)) o.chars.types.push(t)
+      for (const t of e.floating.addSubtypes || []) if (!o.chars.subtypes.includes(t)) o.chars.subtypes.push(t)
+    }
+  }
 
   // Layer 6 — grant keywords.
   for (const e of layer6.sort(byTimestamp)) {
@@ -81,11 +92,14 @@ export function recompute(state) {
     }
   }
 
-  // Layer 7b — set base P/T.
+  // Layer 7b — set base P/T. A targeted floating effect (an animate) establishes
+  // P/T even on a permanent that had none; a static "set" only affects things that
+  // already have P/T.
   for (const e of layer7b.sort(byTimestamp)) {
     const pt = e.ability?.setPT || e.floating?.setPT
     for (const o of bf) {
-      if (!effTargets(e, o) || o.chars.power == null) continue
+      if (!effTargets(e, o)) continue
+      if (o.chars.power == null && !e.floating) continue
       o.chars.power = pt.power
       o.chars.toughness = pt.toughness
     }
