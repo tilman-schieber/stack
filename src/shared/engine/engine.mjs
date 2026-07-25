@@ -1106,8 +1106,12 @@ export class GameEngine {
         case 'counter': {
           const t = this._resolveTargetRef(source, e.to)
           // Remove the target spell from the stack to its owner's graveyard.
-          if (t?.kind === 'object' && t.obj.zoneName === 'stack')
+          // Spellstutter Sprite: only if its mana value <= Faeries you control.
+          if (t?.kind === 'object' && t.obj.zoneName === 'stack') {
+            if (e.maxMv === 'faeries' && (t.obj.printed.manaValue || 0) > this._faerieCount(source.controller))
+              break
             moveObject(s, t.obj.oid, 'graveyard')
+          }
           break
         }
         case 'pump': {
@@ -1820,5 +1824,12 @@ export class GameEngine {
 
   _otherPlayer(pid) {
     return pid === 0 ? 1 : 0
+  }
+
+  // Number of Faerie creatures a player controls (Spellstutter Sprite's X).
+  _faerieCount(pid) {
+    return objectsIn(this.state, 'battlefield').filter(
+      (o) => o.controller === pid && o.chars.types.includes('Creature') && o.chars.subtypes.includes('Faerie')
+    ).length
   }
 }

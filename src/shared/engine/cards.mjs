@@ -750,6 +750,17 @@ export const SAMPLE_CARDS = {
     keywords: ['Storm'],
     oracle_text: 'You gain 3 life.\nStorm'
   },
+  'Spellstutter Sprite': {
+    name: 'Spellstutter Sprite',
+    mana_cost: '{1}{U}',
+    type_line: 'Creature — Faerie Wizard',
+    power: '1',
+    toughness: '1',
+    colors: ['U'],
+    keywords: ['Flying', 'Flash'],
+    oracle_text:
+      'Flash\nFlying\nWhen this creature enters, counter target spell with mana value X or less, where X is the number of Faeries you control.'
+  },
   'Ninja of the Deep Hours': {
     name: 'Ninja of the Deep Hours',
     mana_cost: '{3}{U}',

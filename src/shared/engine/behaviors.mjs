@@ -469,6 +469,17 @@ export const BEHAVIORS = {
     spell: { effect: [{ op: 'gainLife', amount: 3 }] },
     triggered: [{ trigger: { event: 'castSpell', self: true }, effect: [{ op: 'stormCopy' }] }]
   },
+  // Flash flyer; ETB counters a spell with mana value <= the number of Faeries
+  // you control (counted on resolution; fizzles if the target's MV is too high).
+  'Spellstutter Sprite': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        targets: [{ type: 'spell' }],
+        effect: [{ op: 'counter', to: 'target0', maxMv: 'faeries' }]
+      }
+    ]
+  },
   // ---- Ninjutsu (702.49): swap an unblocked attacker for this from hand ----
   'Ninja of the Deep Hours': {
     ninjutsu: { cost: '{1}{U}' },

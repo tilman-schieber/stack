@@ -69,14 +69,14 @@ export const EXAMPLE_DECKS = [
     slug: 'pauper-blue-faeries',
     name: 'Mono-Blue Faeries (Pauper)',
     description:
-      'Blue tempo — evasive fliers, Ninjutsu (return an unblocked attacker, swap in Ninja of the Deep Hours), counters and card selection. (Spellstutter Sprite still to come.)',
+      'Blue tempo — evasive fliers, Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker), counters and card selection.',
     cards: [
       [20, 'Island'],
-      [4, 'Faerie Seer'], // 1/1 flying, ETB scry 2 — cheap evasive ninjutsu enabler
+      [4, 'Faerie Seer'], // 1/1 flying Faerie, ETB scry 2 — enabler + Spellstutter fuel
+      [4, 'Spellstutter Sprite'], // flash 1/1 flying Faerie; ETB counters by Faerie count
       [4, 'Ninja of the Deep Hours'], // Ninjutsu {1}{U}; combat damage -> draw
       [4, 'Wind Drake'], // 2/2 flying
       [4, 'Snapping Drake'], // 3/2 flying
-      [4, 'Prodigal Sorcerer'], // {T}: ping 1
       [4, 'Counterspell'],
       [4, 'Cancel'],
       [4, 'Preordain'],
