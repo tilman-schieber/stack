@@ -110,6 +110,25 @@ section('Plot: exile from hand, then cast free on a later turn')
   assert(zone(e.state, 'hand', 0).length === handBefore, 'declined the discard, drew nothing (no mana paid)')
 }
 
+section('Highway Robbery: sacrifice a land instead of discarding, then draw two')
+{
+  const e = makeEngine()
+  put(e, 0, 'Mountain', 'battlefield')
+  put(e, 0, 'Mountain', 'battlefield')
+  const spare = put(e, 0, 'Mountain', 'battlefield') // the land to sacrifice
+  const robbery = put(e, 0, 'Highway Robbery', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  const handBefore = zone(e.state, 'hand', 0).length
+  e.choose({ type: 'cast', oid: robbery.oid })
+  resolveAll(e)
+  assert(e.pending.kind === 'discardCards' && e.pending.orSacrificeLand, 'offers discard-or-sacrifice-a-land')
+  e.choose({ sacLand: spare.oid })
+  resolveAll(e)
+  assert(inZone(e, 0, 'graveyard', spare.oid), 'the land was sacrificed instead of a card')
+  // -Robbery (cast) + 2 (draw) = handBefore + 1
+  assert(zone(e.state, 'hand', 0).length === handBefore + 1, 'drew two cards')
+}
+
 section('Ninjutsu: swap an unblocked attacker for the ninja, tapped and attacking')
 {
   const e = makeEngine()

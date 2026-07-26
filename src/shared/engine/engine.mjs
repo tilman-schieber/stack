@@ -387,6 +387,17 @@ export class GameEngine {
   // Effect-driven discard (e.g. Faithless Looting). Discards the chosen cards
   // (routing madness cards to exile), then resumes the paused resolution.
   _applyDiscardCards(pending, answer) {
+    // Highway Robbery's alternative: sacrifice a land instead of discarding; either
+    // way "you did," so the draw follows.
+    if (pending.orSacrificeLand && answer?.sacLand) {
+      const land = this.state.objects[answer.sacLand]
+      if (land?.controller === pending.player && land.zoneName === 'battlefield' && land.chars.types.includes('Land')) {
+        this._sacrifice(land)
+        if (pending.draw) this.draw(pending.player, pending.draw)
+        this._processMadness(() => this._resumeResolution())
+        return
+      }
+    }
     const max = Math.min(pending.count, pending.hand.length)
     const discard = (answer?.discard || []).slice(0, pending.count)
     if (pending.optional) {
@@ -999,7 +1010,12 @@ export class GameEngine {
         const pid = source.controller
         const hand = zone(s, 'hand', pid)
         const count = Math.min(e.amount, hand.length)
-        if (count === 0) return false
+        // "…or sacrifice a land" (Highway Robbery): the option stays open even with
+        // an empty hand, as long as the player controls a land to sacrifice.
+        const canSacLand =
+          !!e.orSacrificeLand &&
+          objectsIn(s, 'battlefield').some((o) => o.controller === pid && o.chars.types.includes('Land'))
+        if (count === 0 && !canSacLand) return false
         s.pending = {
           kind: 'discardCards',
           player: pid,
@@ -1008,6 +1024,7 @@ export class GameEngine {
           optional: !!e.optional, // "you may discard…"
           draw: e.draw || 0, // draw this many if you discarded ("if you do, draw…")
           remember: !!e.remember, // record non-land-ness for a later conditional
+          orSacrificeLand: canSacLand, // may sacrifice a land instead of discarding
           _source: source
         }
         return true

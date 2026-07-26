@@ -510,9 +510,8 @@ export const BEHAVIORS = {
     }
   },
   // "You may discard a card or sacrifice a land. If you do, draw two." Plot {1}{R}.
-  // (The sacrifice-a-land alternative is not modelled — played as an optional discard-draw.)
   'Highway Robbery': {
-    spell: { effect: [{ op: 'discard', amount: 1, optional: true, draw: 2 }] },
+    spell: { effect: [{ op: 'discard', amount: 1, optional: true, draw: 2, orSacrificeLand: true }] },
     plot: { cost: '{1}{R}' }
   },
   // ---- Storm (702.40): copy the spell for each other spell cast before it this turn ----

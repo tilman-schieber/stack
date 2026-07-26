@@ -298,6 +298,11 @@ export default function EnginePlayArea() {
   }
 
   function onBattlefieldCard(card, controllerPid, ev) {
+    // Highway Robbery: sacrifice a land instead of discarding (click your land).
+    if (kind === 'discardCards' && pending.orSacrificeLand && controllerPid === pending.player && isLand(card)) {
+      choose({ sacLand: card.oid })
+      return
+    }
     // Ninjutsu: click which of your unblocked attackers to return to hand.
     if (ninjutsu) {
       if (ninjutsu.returns.includes(card.oid))
@@ -371,6 +376,8 @@ export default function EnginePlayArea() {
     if (targeting && wantsLand && isLand(card)) cls.push('targetable')
     if (targeting && matchesArtifact(card)) cls.push('targetable')
     if (needSac && controllerPid === pending.player && (cast.action.sacChoose.types || []).some((t) => card.types.includes(t)))
+      cls.push('targetable')
+    if (kind === 'discardCards' && pending.orSacrificeLand && controllerPid === pending.player && isLand(card))
       cls.push('targetable')
     if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
       cls.push('activatable')
@@ -850,7 +857,9 @@ function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, 
       <>
         <span>
           <b>{nameOf(pending.player)}</b> — you may discard up to {pending.count} card(s) (
-          {discardSel.length}/{pending.count}){pending.draw ? `; if you do, draw ${pending.draw}` : ''}.
+          {discardSel.length}/{pending.count})
+          {pending.orSacrificeLand ? ' or click a land to sacrifice' : ''}
+          {pending.draw ? `; if you do, draw ${pending.draw}` : ''}.
         </span>
         <button className="primary" onClick={() => choose({ discard: discardSel })}>
           {discardSel.length ? 'Discard' : 'Decline'}
