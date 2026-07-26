@@ -375,9 +375,21 @@ export const BEHAVIORS = {
       additionalCost: { sacrifice: { types: ['Artifact', 'Creature'] } },
       effect: [
         { op: 'draw', amount: 2 },
-        { op: 'createToken', count: 1, token: { name: 'Map', types: ['Artifact'], colors: [] } } // explore ability not modelled
+        { op: 'createToken', count: 1, token: { name: 'Map', types: ['Artifact'], colors: [] } }
       ]
     }
+  },
+  // Map token (from Fanatical Offering): {1}, {T}, Sacrifice: target creature you
+  // control explores. Sorcery-speed. Its explore ability is authored on the token.
+  Map: {
+    activated: [
+      {
+        cost: { mana: '{1}', tap: true, sacrifice: 'self' },
+        sorcerySpeed: true,
+        targets: [{ type: 'creature' }],
+        effect: [{ op: 'explore', to: 'target0' }]
+      }
+    ]
   },
   'Cleansing Wildfire': {
     spell: {

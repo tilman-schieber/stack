@@ -77,6 +77,8 @@ export function projectGame(engine) {
   let pending = state.pending
   if (pending?.kind === 'scry' || pending?.kind === 'search')
     pending = { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])) }
+  else if (pending?.kind === 'explore')
+    pending = { ...pending, card: cardView(state.objects[pending.card]) }
 
   return {
     turnNumber: state.turnNumber,

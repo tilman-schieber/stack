@@ -177,6 +177,9 @@ export class GameEngine {
         case 'scry':
           this._applyScry(pending, answer)
           break
+        case 'explore':
+          this._applyExplore(pending, answer)
+          break
         case 'discardCards':
           this._applyDiscardCards(pending, answer)
           break
@@ -412,6 +415,13 @@ export class GameEngine {
     for (const oid of discard) this._discardCard(pending.player, oid)
     if (pending.draw && discard.length > 0) this.draw(pending.player, pending.draw)
     this._processMadness(() => this._resumeResolution())
+  }
+
+  // Finish an explore (nonland branch): `bin` puts the revealed card into the
+  // graveyard; otherwise it stays on top of the library. Then resume resolution.
+  _applyExplore(pending, answer) {
+    if (answer?.bin) moveObject(this.state, pending.card, 'graveyard')
+    this._resumeResolution()
   }
 
   // Resolve a scry/surveil: `toBottom` go to the bottom of the library (or the
@@ -1079,6 +1089,24 @@ export class GameEngine {
             if (this._matchCardFilter(s.objects[oid], e.filter)) cards.push(oid)
         if (cards.length === 0) return false
         s.pending = { kind: 'search', player: pid, cards, to: 'hand', tapped: false, optional: e.optional === true, shuffle: false }
+        return true
+      }
+      case 'explore': {
+        // 701.40: reveal the top card of your library. A land goes to your hand;
+        // otherwise the exploring creature gets a +1/+1 counter and you choose to
+        // leave the card on top or put it in your graveyard (a paused decision).
+        const t = this._resolveTargetRef(source, e.to)
+        const pid = source.controller
+        const lib = zone(s, 'library', pid)
+        if (lib.length === 0) return false
+        const topOid = lib[0]
+        if (s.objects[topOid].printed.types.includes('Land')) {
+          moveObject(s, topOid, 'hand')
+          return false
+        }
+        if (t?.kind === 'object' && t.obj.zoneName === 'battlefield')
+          t.obj.status.counters['+1/+1'] = (t.obj.status.counters['+1/+1'] || 0) + 1
+        s.pending = { kind: 'explore', player: pid, card: topOid }
         return true
       }
       default:

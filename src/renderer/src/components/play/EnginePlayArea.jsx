@@ -837,6 +837,21 @@ function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, 
         </button>
       </>
     )
+  } else if (kind === 'explore') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> explored — revealed <b>{pending.card?.name}</b> (nonland). Keep it on
+          top of your library or bin it?
+        </span>
+        <button className="primary" onClick={() => choose({ bin: false })}>
+          Keep on top
+        </button>
+        <button className="mini" onClick={() => choose({ bin: true })}>
+          Graveyard
+        </button>
+      </>
+    )
   } else if (kind === 'mayPay') {
     body = (
       <>

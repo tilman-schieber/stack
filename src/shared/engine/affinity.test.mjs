@@ -3,7 +3,7 @@
 // Spawn mana, Kenku Artificer animation, and multi-blocker damage assignment.
 // Run: node src/shared/engine/affinity.test.mjs
 
-import { zone } from './state.mjs'
+import { zone, zoneKey } from './state.mjs'
 import { recompute } from './layers.mjs'
 import { inZone, makeEngine, put, advanceToPriorityAt, combat, makeAsserter } from './_testutil.mjs'
 
@@ -160,6 +160,47 @@ section('Kenku Artificer: animate a noncreature artifact into a 3/3 flyer')
   assert(wellspring.chars.types.includes('Creature'), 'the Wellspring became a creature')
   assert(`${wellspring.chars.power}/${wellspring.chars.toughness}` === '3/3', '0/0 + three +1/+1 = 3/3')
   assert(wellspring.chars.keywords.includes('Flying'), 'and has flying')
+}
+
+section('Explore (Map token): a nonland on top gives a +1/+1 counter, then keep or bin')
+{
+  const e = makeEngine()
+  put(e, 0, 'Mountain', 'battlefield')
+  const bear = put(e, 0, 'Grizzly Bears', 'battlefield') // the creature that explores
+  e._createToken({ name: 'Map', types: ['Artifact'], colors: [] }, 0)
+  const bolt = put(e, 0, 'Lightning Bolt', 'library') // a nonland to reveal
+  const lib = e.state.zones[zoneKey('library', 0)]
+  lib.splice(lib.indexOf(bolt.oid), 1)
+  lib.unshift(bolt.oid) // put it on top
+  advanceToPriorityAt(e, 'main1')
+  const map = named(e, 0, 'battlefield', 'Map')
+  const act = e.pending.actions.find((a) => a.type === 'activate' && a.oid === map.oid)
+  assert(!!act, 'Map offers its sacrifice-to-explore ability (sorcery speed)')
+  e.choose({ type: 'activate', oid: map.oid, ability: act.ability, targets: [{ kind: 'object', oid: bear.oid }] })
+  resolveAll(e)
+  assert(e.pending.kind === 'explore', 'a nonland reveal pauses for the keep/bin choice')
+  assert((bear.status.counters['+1/+1'] || 0) === 1, 'the exploring creature got a +1/+1 counter')
+  e.choose({ bin: true })
+  resolveAll(e)
+  assert(inZone(e, 0, 'graveyard', bolt.oid), 'chose to bin the revealed nonland')
+  assert(!inZone(e, 0, 'battlefield', map.oid), 'the Map sacrificed itself to explore')
+}
+
+section('Explore (Map token): a land on top goes to hand — no counter, no choice')
+{
+  const e = makeEngine() // library is all Forest (lands)
+  put(e, 0, 'Mountain', 'battlefield')
+  const bear = put(e, 0, 'Grizzly Bears', 'battlefield')
+  e._createToken({ name: 'Map', types: ['Artifact'], colors: [] }, 0)
+  advanceToPriorityAt(e, 'main1')
+  const map = named(e, 0, 'battlefield', 'Map')
+  const handBefore = zone(e.state, 'hand', 0).length
+  const act = e.pending.actions.find((a) => a.type === 'activate' && a.oid === map.oid)
+  e.choose({ type: 'activate', oid: map.oid, ability: act.ability, targets: [{ kind: 'object', oid: bear.oid }] })
+  resolveAll(e)
+  assert(e.pending.kind !== 'explore', 'a land reveal resolves with no choice')
+  assert(zone(e.state, 'hand', 0).length === handBefore + 1, 'the revealed land went to hand')
+  assert((bear.status.counters['+1/+1'] || 0) === 0, 'no counter when a land is revealed')
 }
 
 section('Multi-blocker: a 4/4 assigns lethal to each of two 2/2 blockers')
