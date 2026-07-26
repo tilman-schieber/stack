@@ -290,6 +290,13 @@ export const SAMPLE_CARDS = {
   },
   Murder: { name: 'Murder', mana_cost: '{1}{B}{B}', type_line: 'Instant', colors: ['B'] },
   Cancel: { name: 'Cancel', mana_cost: '{1}{U}{U}', type_line: 'Instant', colors: ['U'] },
+  Snap: {
+    name: 'Snap',
+    mana_cost: '{1}{U}',
+    type_line: 'Instant',
+    colors: ['U'],
+    oracle_text: 'Return target creature to its owner’s hand. Untap up to two lands.'
+  },
   'Sign in Blood': {
     name: 'Sign in Blood',
     mana_cost: '{B}{B}',

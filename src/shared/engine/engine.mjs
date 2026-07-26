@@ -642,7 +642,7 @@ export class GameEngine {
           o.xValue = 0
           const alt = o.behavior.spell.alternativeCost
           for (const so of this._sacrificeCandidates(pid, alt.sacrifice).slice(0, alt.sacrifice.count || 1))
-            this._bury(so)
+            this._sacrifice(so)
         } else {
           const xCost = o.printed.manaCost.X || 0
           o.xValue = xCost ? action.x || 0 : 0
@@ -655,7 +655,7 @@ export class GameEngine {
             const so = s.objects[action.sacrifice]
             if (so && so.controller === pid && so.zoneName === 'battlefield') {
               o._sacrificedMV = so.printed.manaValue
-              this._bury(so)
+              this._sacrifice(so)
             }
           }
         }
@@ -673,7 +673,7 @@ export class GameEngine {
         if (fb.cost) this._pay(pid, parseManaCost(fb.cost))
         if (fb.sacrifice)
           for (const so of this._sacrificeCandidates(pid, fb.sacrifice).slice(0, fb.sacrifice.count || 1))
-            this._bury(so)
+            this._sacrifice(so)
         moveObject(s, action.oid, 'stack')
         o.controller = pid
         o.targets = action.targets || []
@@ -821,10 +821,10 @@ export class GameEngine {
     if (cost.mana) this._pay(pid, parseManaCost(cost.mana))
     if (cost.tap) o.status.tapped = true
     if (cost.payLife != null) s.players[pid].life -= cost.payLife
-    if (cost.sacrifice === 'self') this._bury(o)
+    if (cost.sacrifice === 'self') this._sacrifice(o)
     else if (cost.sacrifice && action.sacrifice) {
       const so = s.objects[action.sacrifice]
-      if (so && so.controller === pid && so.zoneName === 'battlefield') this._bury(so)
+      if (so && so.controller === pid && so.zoneName === 'battlefield') this._sacrifice(so)
     }
   }
 
@@ -1109,6 +1109,33 @@ export class GameEngine {
           const t = this._resolveTargetRef(source, e.to)
           if (t?.kind === 'object' && t.obj.zoneName === 'battlefield' && !this._hasKW(t.obj, 'Indestructible'))
             this._bury(t.obj)
+          break
+        }
+        case 'bounce': {
+          // Return a permanent to its owner's hand (Snap, and general bounce).
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield') this._relocate(t.obj, 'hand')
+          break
+        }
+        case 'untapLands': {
+          // Untap up to N lands the controller controls (Snap's "untap two lands").
+          let n = e.amount || 0
+          for (const o of objectsIn(s, 'battlefield')) {
+            if (n <= 0) break
+            if (o.controller === source.controller && o.chars.types.includes('Land') && o.status.tapped) {
+              o.status.tapped = false
+              n--
+            }
+          }
+          break
+        }
+        case 'addCounter': {
+          // Put counters on a permanent (e.g. Writhing Chrysalis growing itself).
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield') {
+            const kind = e.counter || '+1/+1'
+            t.obj.status.counters[kind] = (t.obj.status.counters[kind] || 0) + (e.amount || 1)
+          }
           break
         }
         case 'counter': {
@@ -1810,9 +1837,17 @@ export class GameEngine {
     this._fireTriggers('enters:' + toZone, o) // enter triggers see the new zone
   }
 
-  // A permanent leaving the battlefield for the graveyard (death/sacrifice/destroy).
+  // A permanent leaving the battlefield for the graveyard (death/destroy).
   _bury(o) {
     this._relocate(o, 'graveyard')
+  }
+
+  // A permanent sacrificed (as a cost or effect). Distinct from destroy/other
+  // deaths: fires the `sacrifice` event first — e.g. Writhing Chrysalis grows
+  // "whenever you sacrifice another Eldrazi" — then buries it (dies/toGraveyard).
+  _sacrifice(o) {
+    this._fireTriggers('sacrifice', o)
+    this._bury(o)
   }
 
   _matchFilter(filter, subject, watcher) {
@@ -1821,6 +1856,7 @@ export class GameEngine {
     if (filter.type && !subject.chars.types.includes(filter.type)) return false
     if (filter.types && !filter.types.some((t) => subject.chars.types.includes(t))) return false
     if (filter.noncreature && subject.chars.types.includes('Creature')) return false
+    if (filter.subtype && !subject.chars.subtypes.includes(filter.subtype)) return false
     if (filter.controller === 'you' && subject.controller !== watcher.controller) return false
     if (filter.controller === 'opponent' && subject.controller === watcher.controller) return false
     return true

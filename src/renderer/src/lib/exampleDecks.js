@@ -102,7 +102,7 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-faeries',
     name: 'Mono-Blue Faeries (sample)',
     description:
-      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count) and Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker), plus counters and card selection.',
+      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker) and Snap (bounce + untap two lands for tempo), plus counters and card selection.',
     cards: [
       [20, 'Island'],
       [4, 'Faerie Seer'], // 1/1 flying Faerie, ETB scry 2 — enabler + Spellstutter fuel
@@ -111,7 +111,7 @@ export const EXAMPLE_DECKS = [
       [4, 'Wind Drake'], // 2/2 flying
       [4, 'Snapping Drake'], // 3/2 flying
       [4, 'Counterspell'],
-      [4, 'Cancel'],
+      [4, 'Snap'], // bounce a creature, untap two lands — tempo
       [4, 'Preordain'],
       [4, 'Serum Visions'],
       [4, 'Divination']

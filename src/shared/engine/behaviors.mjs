@@ -224,9 +224,9 @@ export const BEHAVIORS = {
     ]
   },
   'Writhing Chrysalis': {
-    // Cast trigger makes two Eldrazi Spawn. (The spawn's sacrifice-for-{C} mana
-    // ability and the "sacrifice another Eldrazi" counter trigger are approximated:
-    // the tokens are made, mana-from-sacrifice isn't modelled.)
+    // Cast trigger makes two 0/1 Eldrazi Spawn (each sacrifices for {C} — that mana
+    // ability is authored on the token by name). Sacrificing another Eldrazi (e.g.
+    // a Spawn for mana) grows this creature with a +1/+1 counter.
     triggered: [
       {
         trigger: { event: 'castSpell', self: true },
@@ -237,6 +237,10 @@ export const BEHAVIORS = {
             token: { name: 'Eldrazi Spawn', types: ['Creature'], subtypes: ['Eldrazi', 'Spawn'], colors: [], power: 0, toughness: 1 }
           }
         ]
+      },
+      {
+        trigger: { event: 'sacrifice', filter: { controller: 'you', subtype: 'Eldrazi', another: true } },
+        effect: [{ op: 'addCounter', counter: '+1/+1', amount: 1, to: 'self' }]
       }
     ]
   },
@@ -531,6 +535,17 @@ export const BEHAVIORS = {
   'Weather the Storm': {
     spell: { effect: [{ op: 'gainLife', amount: 3 }] },
     triggered: [{ trigger: { event: 'castSpell', self: true }, effect: [{ op: 'stormCopy' }] }]
+  },
+  // Tempo bounce: return target creature to its owner's hand, then untap up to two
+  // lands you control (a free spell if the untap pays for itself).
+  Snap: {
+    spell: {
+      targets: [{ type: 'creature' }],
+      effect: [
+        { op: 'bounce', to: 'target0' },
+        { op: 'untapLands', amount: 2 }
+      ]
+    }
   },
   // Flash flyer; ETB counters a spell with mana value <= the number of Faeries
   // you control (counted on resolution; fizzles if the target's MV is too high).

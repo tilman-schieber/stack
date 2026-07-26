@@ -110,6 +110,38 @@ section('Eldrazi Spawn: sacrifice for {C}')
   assert(!inZone(e, 0, 'battlefield', spawn.oid), 'the Spawn was sacrificed')
 }
 
+section('Writhing Chrysalis: sacrificing another Eldrazi grows it with a +1/+1 counter')
+{
+  const e = makeEngine()
+  const chrys = put(e, 0, 'Writhing Chrysalis', 'battlefield')
+  e._createToken(
+    { name: 'Eldrazi Spawn', types: ['Creature'], subtypes: ['Eldrazi', 'Spawn'], colors: [], power: 0, toughness: 1 },
+    0
+  )
+  advanceToPriorityAt(e, 'main1')
+  const spawn = named(e, 0, 'battlefield', 'Eldrazi Spawn')
+  const act = e.pending.actions.find((a) => a.type === 'activate' && a.oid === spawn.oid)
+  e.choose({ type: 'activate', oid: spawn.oid, ability: act.ability, targets: [] }) // sac the Spawn for {C}
+  resolveAll(e) // the sacrifice trigger goes on the stack and resolves
+  recompute(e.state)
+  assert((chrys.status.counters['+1/+1'] || 0) === 1, 'Chrysalis gained a +1/+1 counter from the sacrifice')
+  assert(chrys.chars.power === 3 && chrys.chars.toughness === 4, 'Chrysalis is now 3/4')
+}
+
+section('Writhing Chrysalis: does NOT trigger when a non-Eldrazi is sacrificed')
+{
+  const e = makeEngine()
+  const chrys = put(e, 0, 'Writhing Chrysalis', 'battlefield')
+  const mogg = put(e, 0, 'Mogg Fanatic', 'battlefield') // sacrifices itself — a Goblin, not an Eldrazi
+  advanceToPriorityAt(e, 'main1')
+  const act = e.pending.actions.find((a) => a.type === 'activate' && a.oid === mogg.oid)
+  e.choose({ type: 'activate', oid: mogg.oid, ability: act.ability, targets: [{ kind: 'player', pid: 1 }] })
+  resolveAll(e)
+  recompute(e.state)
+  assert(!inZone(e, 0, 'battlefield', mogg.oid), 'Mogg Fanatic sacrificed itself')
+  assert((chrys.status.counters['+1/+1'] || 0) === 0, 'no counter — the sacrifice was not an Eldrazi')
+}
+
 section('Kenku Artificer: animate a noncreature artifact into a 3/3 flyer')
 {
   const e = makeEngine()
