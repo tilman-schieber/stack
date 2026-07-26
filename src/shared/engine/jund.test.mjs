@@ -261,5 +261,44 @@ section('Sagu Wildling: creature (ETB gain 3) or its Omen half (Roost Seek)')
   assert(hand(e, 0) === handBefore, 'net hand unchanged (Roost Seek left, a basic came in)')
 }
 
+section('Bestow: Nyxborn Hydra cast as an Aura gives the creature +X/+X and reach & trample')
+{
+  const e = makeEngine()
+  for (let i = 0; i < 4; i++) put(e, 0, 'Forest', 'battlefield') // {X}{G}{G} with X=2 = 4 mana
+  const bear = put(e, 0, 'Grizzly Bears', 'battlefield') // 2/2
+  const hydra = put(e, 0, 'Nyxborn Hydra', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  const bestow = e.pending.actions.find((a) => a.type === 'castBestow' && a.oid === hydra.oid)
+  assert(!!bestow, 'Bestow is offered as a cast option')
+  assert(bestow.maxX === 2, 'maxX = 4 sources − 2 fixed (GG) = 2')
+  e.choose({ type: 'castBestow', oid: hydra.oid, x: 2, targets: [{ kind: 'object', oid: bear.oid }] })
+  resolveAll(e)
+  recompute(e.state)
+  assert(hydra.status.attachedTo === bear.oid, 'the Hydra entered attached to the Bears')
+  assert(!hydra.chars.types.includes('Creature'), 'while bestowed it is not a creature')
+  assert((hydra.status.counters['+1/+1'] || 0) === 2, 'it entered with X = 2 +1/+1 counters')
+  assert(`${bear.chars.power}/${bear.chars.toughness}` === '4/4', 'the Bears gets +2/+2 (one per counter)')
+  assert(bear.chars.keywords.includes('Reach') && bear.chars.keywords.includes('Trample'), 'plus reach & trample')
+}
+
+section('Bestow: when the enchanted creature leaves, the Hydra becomes a creature')
+{
+  const e = makeEngine()
+  for (let i = 0; i < 4; i++) put(e, 0, 'Forest', 'battlefield')
+  const bear = put(e, 0, 'Grizzly Bears', 'battlefield')
+  const hydra = put(e, 0, 'Nyxborn Hydra', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  e.choose({ type: 'castBestow', oid: hydra.oid, x: 2, targets: [{ kind: 'object', oid: bear.oid }] })
+  resolveAll(e)
+  bear.status.damage = 99 // lethal — SBA will bury it
+  e._checkSBA()
+  recompute(e.state)
+  assert(!inZone(e, 0, 'battlefield', bear.oid), 'the Bears died')
+  assert(inZone(e, 0, 'battlefield', hydra.oid), 'the Hydra stayed on the battlefield (did not go to the graveyard)')
+  assert(!hydra.bestowed && hydra.status.attachedTo == null, 'it came unattached')
+  assert(hydra.chars.types.includes('Creature'), 'and is a creature again')
+  assert(`${hydra.chars.power}/${hydra.chars.toughness}` === '2/3', 'a 2/3 (0/1 base + its two +1/+1 counters)')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)

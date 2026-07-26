@@ -252,10 +252,20 @@ export const BEHAVIORS = {
       effect: [{ op: 'search', filter: { supertype: 'Basic', type: 'Land' }, to: 'hand' }]
     }
   },
-  // Cast as a creature that enters with X +1/+1 counters. (Bestow — casting it as
-  // an Aura for {X}{G}{G} — is not yet modelled; it's played as a creature.)
+  // Cast as a creature ({X}{G}) that enters with X +1/+1 counters, or for its Bestow
+  // cost ({X}{G}{G}) as an Aura on a creature. While bestowed it's not a creature and
+  // the enchanted creature gets +1/+1 per +1/+1 counter on the Hydra (i.e. +X/+X) plus
+  // reach & trample; it becomes a creature again if it comes unattached.
   'Nyxborn Hydra': {
-    entersWith: { counter: '+1/+1', amount: 'X' }
+    entersWith: { counter: '+1/+1', amount: 'X' },
+    bestow: { cost: '{X}{G}{G}' },
+    static: [
+      {
+        affects: { scope: 'attached' },
+        modifyPTPerCounter: '+1/+1',
+        grantKeywords: ['Reach', 'Trample']
+      }
+    ]
   },
   'Nihil Spellbomb': {
     activated: [
@@ -621,7 +631,8 @@ export function loadBehavior(printed) {
     omen: authored.omen || null, // alternate castable half (Omen/adventure) -> shuffles back
     returnOnThirdDraw: authored.returnOnThirdDraw || false, // Sneaky Snacker-style recursion
     ninjutsu: authored.ninjutsu || null, // { cost } — swap in for an unblocked attacker
-    plot: authored.plot || null // { cost } — exile from hand, cast free on a later turn
+    plot: authored.plot || null, // { cost } — exile from hand, cast free on a later turn
+    bestow: authored.bestow || null // { cost } — alternate cast as an Aura (702.103)
   }
 }
 

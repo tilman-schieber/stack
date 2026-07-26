@@ -194,6 +194,7 @@ export default function EnginePlayArea() {
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: chosen })
     else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: chosen })
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: chosen })
+    else if (a.type === 'castBestow') choose({ type: 'castBestow', oid: a.oid, targets: chosen, x: c.x })
     else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
   }
 
@@ -290,7 +291,7 @@ export default function EnginePlayArea() {
       const acts = pending.actions.filter(
         (a) =>
           a.oid === card.oid &&
-          ['cast', 'castOmen', 'castFlashback', 'playLand', 'plot', 'ninjutsu'].includes(a.type)
+          ['cast', 'castBestow', 'castOmen', 'castFlashback', 'playLand', 'plot', 'ninjutsu'].includes(a.type)
       )
       if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })

@@ -50,6 +50,17 @@ export function recompute(state) {
   const bf = state.zones.battlefield.map((oid) => state.objects[oid])
   for (const o of bf) o.chars = baseChars(o)
 
+  // A bestowed permanent (Nyxborn Hydra cast for its Bestow cost) is an Aura, not a
+  // creature, while it stays attached (702.103e) — it has no P/T of its own.
+  for (const o of bf) {
+    if (o.bestowed && o.status.attachedTo) {
+      o.chars.types = o.chars.types.filter((t) => t !== 'Creature')
+      if (!o.chars.types.includes('Enchantment')) o.chars.types.push('Enchantment')
+      o.chars.power = null
+      o.chars.toughness = null
+    }
+  }
+
   // Collect continuous effects (from static abilities + floating effects) into
   // their layers.
   const layer4 = [] // add types/subtypes (e.g. Kenku Artificer animating an artifact)
@@ -61,7 +72,7 @@ export function recompute(state) {
       const e = { source: src, ability: ab, timestamp: src.timestamp || 0 }
       if (ab.grantKeywords) layer6.push(e)
       if (ab.setPT) layer7b.push(e)
-      if (ab.modifyPT) layer7d.push(e)
+      if (ab.modifyPT || ab.modifyPTPerCounter) layer7d.push(e)
     }
   }
   for (const f of state.continuous) {
@@ -114,13 +125,19 @@ export function recompute(state) {
     o.chars.toughness += plus - minus
   }
 
-  // Layer 7d — modify P/T (anthems, lords, pumps).
+  // Layer 7d — modify P/T (anthems, lords, pumps, per-counter Bestow buffs).
   for (const e of layer7d.sort(byTimestamp)) {
     const m = e.ability?.modifyPT || e.floating?.modifyPT
+    // "+1/+1 for each +1/+1 counter on this permanent" (bestowed Nyxborn Hydra):
+    // the amount is the source's current counter count.
+    const perCounter = e.ability?.modifyPTPerCounter
+    const n = perCounter ? e.source.status.counters[perCounter] || 0 : 0
+    const dp = m ? m.power : n
+    const dt = m ? m.toughness : n
     for (const o of bf) {
       if (!effTargets(e, o) || o.chars.power == null) continue
-      o.chars.power += m.power
-      o.chars.toughness += m.toughness
+      o.chars.power += dp
+      o.chars.toughness += dt
     }
   }
 }

@@ -573,6 +573,27 @@ export class GameEngine {
         if (!t.length || t.every((x) => this._legalTargetsExist(x)))
           actions.push({ type: 'castOmen', oid, label: om.name, targets: t, needsTargets: t.length })
       }
+      // Bestow (702.103): cast the card as an Aura on a creature for its bestow cost.
+      const bst = o.behavior?.bestow
+      if (bst && sorcerySpeed) {
+        const bcost = parseManaCost(bst.cost)
+        const fixed = { ...bcost, X: 0 }
+        const bx = bcost.X || 0
+        if (this._legalTargetsExist({ type: 'creature' }) && this._canPay(pid, fixed)) {
+          const sources = this._manaSources(pid).length
+          const fixedMV =
+            (fixed.generic || 0) + fixed.W + fixed.U + fixed.B + fixed.R + fixed.G + fixed.C + (fixed.hybrid?.length || 0)
+          actions.push({
+            type: 'castBestow',
+            oid,
+            label: `Bestow ${p.name}`,
+            targets: [{ type: 'creature' }],
+            needsTargets: 1,
+            hasX: bx > 0,
+            maxX: bx > 0 ? Math.max(0, sources - fixedMV) : 0
+          })
+        }
+      }
       // Plot (702.170): a special action, sorcery-speed, that exiles the card.
       const plt = o.behavior?.plot
       if (plt && sorcerySpeed && this._canPay(pid, parseManaCost(plt.cost)))
@@ -707,6 +728,23 @@ export class GameEngine {
             this._grantPriorityTo(pid)
           })
         }
+        break
+      }
+      case 'castBestow': {
+        // Bestow (702.103): cast the card as an Aura on the target creature. It's a
+        // permanent spell (no o.spell), so it enters the battlefield on resolution —
+        // attached, with X +1/+1 counters — via _enterBattlefield's bestow handling.
+        const o = s.objects[action.oid]
+        const bcost = parseManaCost(o.behavior.bestow.cost)
+        const xc = bcost.X || 0
+        o.xValue = xc ? action.x || 0 : 0
+        this._pay(pid, { ...bcost, X: 0, generic: (bcost.generic || 0) + o.xValue })
+        o.bestowCast = true
+        moveObject(s, action.oid, 'stack')
+        o.controller = pid
+        o.targets = action.targets || []
+        this._countSpellCast(o)
+        this._fireTriggers('castSpell', o)
         break
       }
       case 'castFlashback': {
@@ -977,6 +1015,11 @@ export class GameEngine {
     if (o.printed.loyalty != null) o.status.counters.loyalty = o.printed.loyalty
     // An Aura enters attached to the permanent it targeted as it was cast.
     if (o.behavior?.enchant && o.targets?.[0]?.oid) o.status.attachedTo = o.targets[0].oid
+    // A Bestow spell enters attached as an Aura (it's not a creature while attached).
+    if (o.bestowCast && o.targets?.[0]?.oid) {
+      o.status.attachedTo = o.targets[0].oid
+      o.bestowed = true
+    }
     this._fireTriggers('etb', o) // alias of enters:battlefield
     this._fireTriggers('enters:battlefield', o)
   }
@@ -1749,7 +1792,15 @@ export class GameEngine {
       // graveyard; Equipment whose creature is gone simply unattaches.
       for (const o of objectsIn(s, 'battlefield')) {
         const gone = o.status.attachedTo && !s.zones.battlefield.includes(o.status.attachedTo)
-        if (o.behavior?.enchant) {
+        if (o.bestowed) {
+          // 702.103e: a bestowed permanent whose creature is gone comes unattached
+          // and becomes a creature again (it does not go to the graveyard).
+          if (!o.status.attachedTo || gone) {
+            o.status.attachedTo = null
+            o.bestowed = false
+            repeat = true
+          }
+        } else if (o.behavior?.enchant) {
           if (!o.status.attachedTo || gone) {
             moveObject(s, o.oid, 'graveyard')
             repeat = true
