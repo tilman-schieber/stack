@@ -165,9 +165,11 @@ export default function EnginePlayArea() {
   // its targets. While either is pending we're not yet in targeting mode.
   const needX = !!(cast && cast.action.hasX && cast.x == null)
   const needSac = !!(cast && cast.action.sacChoose && !cast.sac && !needX)
+  // A discard additional cost (Grab the Prize): pick a card from hand to pitch.
+  const needDiscard = !!(cast && cast.action.discChoose && !cast.disc && !needX && !needSac)
   // Normalise so `targeting.targets` / `.chosen` work for both a player cast
   // (specs live on cast.action.targets) and an engine-initiated target choice.
-  const targeting = needX || needSac
+  const targeting = needX || needSac || needDiscard
     ? null
     : cast
       ? { targets: cast.action.targets, chosen: cast.chosen }
@@ -192,7 +194,7 @@ export default function EnginePlayArea() {
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: chosen })
     else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: chosen })
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: chosen })
-    else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac, x: c.x })
+    else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
   }
 
   function addTarget(t) {
@@ -215,6 +217,13 @@ export default function EnginePlayArea() {
     else setCast(next)
   }
 
+  // Pick a card from hand to discard as an additional cost; then continue.
+  function chooseDiscardCost(card) {
+    const next = { ...cast, disc: [card.oid] }
+    if (next.action.targets.length === 0) finalizeCast(next, [])
+    else setCast(next)
+  }
+
   // Begin any player action; open targeting/sacrifice/X sub-steps as needed.
   function startAction(a) {
     setAbilityMenu(null)
@@ -229,9 +238,9 @@ export default function EnginePlayArea() {
       else setNinjutsu(a)
       return
     }
-    const needsSetup = a.needsTargets > 0 || a.sacChoose || a.hasX
+    const needsSetup = a.needsTargets > 0 || a.sacChoose || a.discChoose || a.hasX
     if (needsSetup) {
-      setCast({ action: a, chosen: [], sac: null, x: null })
+      setCast({ action: a, chosen: [], sac: null, disc: null, x: null })
       return
     }
     if (a.type === 'activate') choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
@@ -268,6 +277,12 @@ export default function EnginePlayArea() {
             ? [...sel, card.oid]
             : sel
       )
+      return
+    }
+    // Discarding a card as an additional cost (Grab the Prize) — click one in your
+    // hand other than the spell being cast.
+    if (needDiscard) {
+      if (pid === pending.player && card.oid !== cast.action.oid) chooseDiscardCost(card)
       return
     }
     if (targeting || needSac || needX) return
@@ -424,8 +439,10 @@ export default function EnginePlayArea() {
         const a = actionFor(c.oid)
         const playable = kind === 'priority' && p.id === pending.player && !!a && a.type !== 'pass'
         const selecting =
-          (kind === 'discard' || kind === 'discardCards' || kind === 'bottom') &&
-          p.id === pending.player
+          ((kind === 'discard' || kind === 'discardCards' || kind === 'bottom') &&
+            p.id === pending.player) ||
+          // Picking a card to discard as an additional cost (Grab the Prize).
+          (needDiscard && p.id === pending.player && c.oid !== cast.action.oid)
         const chosen = discardSel.includes(c.oid) || bottomSel.includes(c.oid)
         return (
           <EngineCard
@@ -616,6 +633,7 @@ export default function EnginePlayArea() {
             : null
         }
         sacrificing={needSac ? { types: cast.action.sacChoose.types } : null}
+        discarding={needDiscard}
         choosingX={
           needX
             ? {
@@ -645,7 +663,7 @@ export default function EnginePlayArea() {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, targeting, sacrificing, choosingX, attackers, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
+function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, attackers, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
@@ -682,6 +700,15 @@ function Prompt({ view, pending, targeting, sacrificing, choosingX, attackers, a
     body = (
       <>
         <span>Choose {sacrificing.types.join(' or ').toLowerCase()} to sacrifice.</span>
+        <button className="mini" onClick={cancelCast}>
+          Cancel
+        </button>
+      </>
+    )
+  } else if (discarding) {
+    body = (
+      <>
+        <span>Choose a card in hand to discard.</span>
         <button className="mini" onClick={cancelCast}>
           Cancel
         </button>

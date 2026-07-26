@@ -498,12 +498,12 @@ export const BEHAVIORS = {
     spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', amount: 1, to: 'target0' }] },
     flashback: { sacrifice: { subtype: 'Mountain', count: 1 }, label: 'sac a Mountain' }
   },
-  // Additional cost: discard a card. Draw two; if the discard wasn't a land, 2 to each opponent.
-  // (The discard is modelled on resolution rather than as a literal cast cost.)
+  // Additional cost: discard a card (paid at cast time — a discarded madness card
+  // is still offered). Draw two; if the discard wasn't a land, 2 to each opponent.
   'Grab the Prize': {
     spell: {
+      additionalCost: { discard: 1 },
       effect: [
-        { op: 'discard', amount: 1, remember: true },
         { op: 'draw', amount: 2 },
         { op: 'dealDamageEachOpponent', amount: 2, condition: 'discardedNonland' }
       ]

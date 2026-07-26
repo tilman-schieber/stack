@@ -1,7 +1,7 @@
 // Headless verification: Mono-Red Madness (Pauper) cards (oracle text from Scryfall).
 // Run: node src/shared/engine/redmadness.test.mjs
 
-import { zone } from './state.mjs'
+import { zone, zoneKey } from './state.mjs'
 import { inZone, makeEngine, put, advanceToPriorityAt, makeAsserter } from './_testutil.mjs'
 
 const { assert, stats } = makeAsserter()
@@ -96,7 +96,7 @@ section('Lava Dart: flashback by sacrificing a Mountain')
   assert(inZone(e, 0, 'exile', dart.oid), 'Lava Dart exiled after flashback')
 }
 
-section('Grab the Prize: discard a nonland -> draw two + 2 to each opponent')
+section('Grab the Prize: discard a nonland (additional cost) -> draw two + 2 to each opponent')
 {
   const e = makeEngine()
   put(e, 0, 'Mountain', 'battlefield')
@@ -105,14 +105,10 @@ section('Grab the Prize: discard a nonland -> draw two + 2 to each opponent')
   const bolt = put(e, 0, 'Lightning Bolt', 'hand') // a nonland to discard
   advanceToPriorityAt(e, 'main1')
   const handBefore = zone(e.state, 'hand', 0).length
-  e.choose({ type: 'cast', oid: grab.oid })
+  e.choose({ type: 'cast', oid: grab.oid, discard: [bolt.oid] }) // discard paid at cast time
   resolveAll(e)
-  assert(e.pending.kind === 'discardCards', 'Grab the Prize pauses for its discard cost')
-  e.choose({ discard: [bolt.oid] })
-  resolveAll(e)
-  // hand: -grab (cast) -bolt (discard) +2 (draw) => +0 net from the pre-cast count? Track drew.
-  assert(inZone(e, 0, 'graveyard', bolt.oid), 'discarded the nonland card')
-  // hand: -Grab (cast) -Bolt (discard) +2 (draw) = handBefore
+  assert(inZone(e, 0, 'graveyard', bolt.oid), 'discarded the nonland card as a cost')
+  // -Grab (cast) -Bolt (discard) +2 (draw) = handBefore
   assert(zone(e.state, 'hand', 0).length === handBefore, 'drew two cards')
   assert(e.state.players[1].life === 18, 'dealt 2 to the opponent (discard was a nonland)')
 }
@@ -124,12 +120,40 @@ section('Grab the Prize: discarding a land deals no damage')
   put(e, 0, 'Mountain', 'battlefield')
   const grab = put(e, 0, 'Grab the Prize', 'hand')
   advanceToPriorityAt(e, 'main1')
-  e.choose({ type: 'cast', oid: grab.oid })
-  resolveAll(e)
   const aForest = zone(e.state, 'hand', 0).find((oid) => e.state.objects[oid].printed.name === 'Forest')
-  e.choose({ discard: [aForest] })
+  e.choose({ type: 'cast', oid: grab.oid, discard: [aForest] })
   resolveAll(e)
+  assert(inZone(e, 0, 'graveyard', aForest), 'the land was discarded as the cost')
   assert(e.state.players[1].life === 20, 'no damage when a land was discarded')
+}
+
+section('Grab the Prize: uncastable with no other card to discard')
+{
+  const e = makeEngine()
+  put(e, 0, 'Mountain', 'battlefield')
+  put(e, 0, 'Mountain', 'battlefield')
+  const grab = put(e, 0, 'Grab the Prize', 'hand')
+  e.state.zones[zoneKey('hand', 0)] = [grab.oid] // Grab is the only card in hand
+  advanceToPriorityAt(e, 'main1')
+  const act = e.pending.actions.find((a) => a.type === 'cast' && a.oid === grab.oid)
+  assert(!act, 'Grab the Prize is not castable — nothing to pay the discard cost')
+}
+
+section('Grab the Prize: discarding a madness card to the cost offers to cast it for madness')
+{
+  const e = makeEngine()
+  put(e, 0, 'Mountain', 'battlefield')
+  put(e, 0, 'Mountain', 'battlefield')
+  put(e, 0, 'Mountain', 'battlefield') // one spare for the madness {R}
+  const grab = put(e, 0, 'Grab the Prize', 'hand')
+  const temper = put(e, 0, 'Fiery Temper', 'hand') // madness {R}
+  advanceToPriorityAt(e, 'main1')
+  e.choose({ type: 'cast', oid: grab.oid, discard: [temper.oid] })
+  assert(e.pending.kind === 'madness', 'the discarded Fiery Temper is offered for madness (a genuine cost)')
+  e.choose({ cast: true, targets: [{ kind: 'player', pid: 1 }] })
+  resolveAll(e)
+  // Fiery Temper (3, resolves above Grab) + Grab's 2 (nonland discarded) = 5.
+  assert(e.state.players[1].life === 15, 'madness Fiery Temper (3) then Grab (2) both hit the opponent')
 }
 
 section('Melded Moxite: ETB may discard -> draw two')

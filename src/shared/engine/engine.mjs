@@ -472,11 +472,13 @@ export class GameEngine {
       return
     }
 
-    // A game action was taken; the acting player retains priority afterwards.
+    // A game action was taken; the acting player retains priority afterwards —
+    // unless casting paused for a madness card discarded as an additional cost
+    // (the pause sets its own pending and grants priority when it drains).
     const actor = s.prio.player
     this._performAction(actor, action)
     if (s.winner != null) return
-    this._grantPriorityTo(actor)
+    if (!this._castPaused) this._grantPriorityTo(actor)
   }
 
   // ---- legal actions ---------------------------------------------------
@@ -504,8 +506,11 @@ export class GameEngine {
         // also gates counters (need a spell on the stack) and Auras (a creature).
         const targetsOk = !targets.length || targets.every((t) => this._legalTargetsExist(t))
         const addl = o.behavior.spell?.additionalCost
-        const addlOk = !addl?.sacrifice || this._sacrificeCandidates(pid, addl.sacrifice).length > 0
-        if (targetsOk && addlOk) {
+        const addlSacOk = !addl?.sacrifice || this._sacrificeCandidates(pid, addl.sacrifice).length > 0
+        // A discard additional cost (Grab the Prize) needs that many *other* cards
+        // in hand to pay — you can't discard the spell you're casting.
+        const addlDiscOk = !addl?.discard || zone(s, 'hand', pid).filter((h) => h !== oid).length >= addl.discard
+        if (targetsOk && addlSacOk && addlDiscOk) {
           const xCost = p.manaCost.X || 0
           if (this._canPay(pid, this._effectiveCost(pid, o))) {
             actions.push({
@@ -515,6 +520,7 @@ export class GameEngine {
               targets,
               needsTargets: targets.length,
               sacChoose: addl?.sacrifice || null,
+              discChoose: addl?.discard || null,
               hasX: xCost > 0,
               maxX: xCost > 0 ? this._maxX(pid, o, xCost) : 0
             })
@@ -658,6 +664,12 @@ export class GameEngine {
               this._sacrifice(so)
             }
           }
+          // Additional cost: discard card(s) (Grab the Prize). Recorded for a later
+          // conditional; a discarded madness card is still offered below.
+          if (addl?.discard && action.discard?.length) {
+            o._discardedNonland = action.discard.some((d) => !s.objects[d].printed.types.includes('Land'))
+            for (const d of action.discard) if (zone(s, 'hand', pid).includes(d)) this._discardCard(pid, d)
+          }
         }
         moveObject(s, action.oid, 'stack') // clears transient status/controller
         o.controller = pid
@@ -665,6 +677,15 @@ export class GameEngine {
         o.spell = o.behavior.spell
         this._countSpellCast(o)
         this._fireTriggers('castSpell', o) // prowess, storm, Guttersnipe etc.
+        // A madness card discarded as a cost above is offered now, before priority
+        // returns (its madness spell goes on the stack above the spell just cast).
+        if (s.pendingMadness.length) {
+          this._castPaused = true
+          this._processMadness(() => {
+            this._castPaused = false
+            this._grantPriorityTo(pid)
+          })
+        }
         break
       }
       case 'castFlashback': {
