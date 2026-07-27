@@ -88,6 +88,25 @@ export const BEHAVIORS = {
   Levitation: {
     static: [{ affects: { scope: 'creatures', controller: 'you' }, grantKeywords: ['Flying'] }]
   },
+  // ---- Replacement effects (rule 614), showcased in the sample decks ----
+  // "If a source would deal damage …, it deals double that damage instead."
+  'Furnace of Rath': {
+    replacement: [{ event: 'damage', apply: { multiply: 2 } }]
+  },
+  // "If you would gain life, you gain twice that much life instead."
+  'Rhox Faithmender': {
+    replacement: [{ event: 'gainLife', filter: { player: 'you' }, apply: { multiply: 2 } }]
+  },
+  // "{T}: Prevent the next 1 damage that would be dealt to any target this turn."
+  'Samite Healer': {
+    activated: [
+      {
+        cost: { tap: true },
+        targets: [{ type: 'any' }],
+        effect: [{ op: 'preventNextDamage', amount: 1, to: 'target0' }]
+      }
+    ]
+  },
   'Giant Growth': {
     spell: {
       targets: [{ type: 'creature' }],
@@ -622,6 +641,7 @@ export function loadBehavior(printed) {
     activated: authored.activated || [],
     triggered,
     static: authored.static || [],
+    replacement: authored.replacement || [], // replacement effects (rule 614): { event, filter?, apply }
     entersWith: authored.entersWith || null,
     enchant: authored.enchant || null, // Aura: what it can be attached to
     flashback: authored.flashback || null, // { cost } — cast from the graveyard

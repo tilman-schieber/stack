@@ -304,6 +304,7 @@ export class GameEngine {
     // "Until end of turn" effects and prevention shields wear off (rule 514.2).
     s.continuous = s.continuous.filter((e) => e.duration !== 'eot')
     s.prevent = s.prevent.filter((e) => e.duration !== 'eot')
+    s.replacements = s.replacements.filter((e) => e.duration !== 'eot')
     this._emptyManaPools()
     // hand over the turn — each player's turn is numbered sequentially.
     s.activePlayer = this._otherPlayer(s.activePlayer)
@@ -1179,8 +1180,19 @@ export class GameEngine {
           this.draw(source.controller, e.amount || 1)
           break
         case 'gainLife':
-          s.players[source.controller].life += this._amount(source, e.amount)
+          this._gainLife(source.controller, this._amount(source, e.amount))
           break
+        case 'preventNextDamage': {
+          // Create a floating shield: "prevent the next N damage that would be dealt
+          // to [target] this turn" (Samite Healer). Cleared at end of turn.
+          const t = this._resolveTargetRef(source, e.to)
+          const n = this._amount(source, e.amount ?? 1)
+          let tref = null
+          if (t?.kind === 'player') tref = { player: t.pid }
+          else if (t?.kind === 'object') tref = { oid: t.obj.oid }
+          if (tref) s.replacements.push({ event: 'damage', target: tref, remaining: n, duration: 'eot' })
+          break
+        }
         case 'dealDamageEach': {
           // Damage to each permanent matching a filter (e.g. every creature).
           for (const oid of [...zone(s, 'battlefield')]) {
@@ -1722,22 +1734,32 @@ export class GameEngine {
     }
   }
 
-  // Central damage application: applies prevention, marks deathtouch kills, and
-  // grants lifelink.
+  // Central damage application: applies prevention/replacements, marks deathtouch
+  // kills, and grants lifelink.
   _dealDamage(source, target, amount, opts = {}) {
     if (amount <= 0) return
     const s = this.state
     // Prevention (rule 615): "prevent all combat damage this turn" (Fog, etc.).
     if (opts.combat && s.prevent.some((p) => p.type === 'allCombat')) return
+    // Protection is a prevention effect (615) — applied before general replacements.
+    if (target.obj) {
+      const prot = target.obj.chars?.protections || []
+      if (prot.length && (source?.chars?.colors || []).some((c) => prot.includes(c))) return
+    }
+    // General replacement effects (614/616): damage doubling (Furnace of Rath),
+    // prevention shields (Samite Healer), etc. may change the amount or the target.
+    const ev = { kind: 'damage', source, target, amount, combat: !!opts.combat }
+    this._applyReplacements(ev)
+    this._sweepReplacements()
+    amount = ev.amount
+    target = ev.target
+    if (amount <= 0) return
     if (target.player != null) {
       s.players[target.player].life -= amount
       // "Whenever this creature deals combat damage to a player" (Ninja of the Deep Hours).
       if (opts.combat && source?.chars?.types?.includes('Creature'))
         this._fireTriggers('dealsCombatDamageToPlayer', source)
     } else if (target.obj) {
-      // Protection prevents damage from sources of the protected color.
-      const prot = target.obj.chars?.protections || []
-      if (prot.length && (source?.chars?.colors || []).some((c) => prot.includes(c))) return
       if (target.obj.chars?.types.includes('Planeswalker')) {
         // Damage to a planeswalker removes that many loyalty counters (306.8).
         target.obj.status.counters.loyalty = (target.obj.status.counters.loyalty || 0) - amount
@@ -1746,7 +1768,77 @@ export class GameEngine {
         if (this._hasKW(source, 'Deathtouch')) target.obj.status.markedDeath = true
       }
     }
-    if (this._hasKW(source, 'Lifelink')) s.players[source.controller].life += amount
+    if (this._hasKW(source, 'Lifelink')) this._gainLife(source.controller, amount)
+  }
+
+  // Life gain routed through replacement effects (614) — e.g. Rhox Faithmender
+  // ("if you would gain life, gain twice that much instead").
+  _gainLife(pid, amount) {
+    if (amount <= 0) return
+    const ev = { kind: 'gainLife', player: pid, amount }
+    this._applyReplacements(ev)
+    this.state.players[pid].life += ev.amount
+  }
+
+  // ---- replacement effects (rule 614 / 616) ---------------------------
+  // A replaceable event is a small mutable record ({ kind, amount, … }). Each
+  // applicable replacement modifies it at most once (616.1); the caller then
+  // performs the possibly-changed event. Sources: static `replacement` abilities
+  // on battlefield permanents, and floating shields in state.replacements.
+
+  _collectReplacements(event) {
+    const s = this.state
+    const out = []
+    for (const o of objectsIn(s, 'battlefield'))
+      for (const rep of o.behavior?.replacement || [])
+        if (this._replacementMatches(rep, event, o)) out.push({ apply: rep.apply, source: o })
+    for (const rep of s.replacements)
+      if (this._replacementMatches(rep, event, null)) out.push({ floating: rep })
+    return out
+  }
+
+  _replacementMatches(rep, event, src) {
+    if (rep.event !== event.kind) return false
+    if (event.kind === 'damage') {
+      if (rep.filter?.combatOnly && !event.combat) return false
+      // A floating shield remembers the one target it protects.
+      if (rep.target) {
+        if (rep.target.player != null) return event.target.player === rep.target.player
+        if (rep.target.oid != null) return !!event.target.obj && event.target.obj.oid === rep.target.oid
+      }
+      return true
+    }
+    if (event.kind === 'gainLife') {
+      if (rep.filter?.player === 'you' && (!src || event.player !== src.controller)) return false
+      return true
+    }
+    return false
+  }
+
+  _applyReplacements(event) {
+    const list = this._collectReplacements(event)
+    // Rule 616 lets the affected player order the effects; we apply amount
+    // modifiers (doubling) before prevention, which is a sensible deterministic
+    // default for the current pool.
+    list.sort((a, b) => (a.apply?.multiply ? 0 : 1) - (b.apply?.multiply ? 0 : 1))
+    for (const r of list) {
+      if (event.amount <= 0) break
+      if (r.apply?.multiply) {
+        event.amount *= r.apply.multiply
+      } else if (r.apply?.prevent === 'all') {
+        event.amount = 0
+      } else if (r.floating) {
+        // "Prevent the next N damage": a shield that absorbs up to its remaining N.
+        const prevented = Math.min(r.floating.remaining, event.amount)
+        r.floating.remaining -= prevented
+        event.amount -= prevented
+        if (r.floating.remaining <= 0) r.floating._spent = true
+      }
+    }
+  }
+
+  _sweepReplacements() {
+    this.state.replacements = this.state.replacements.filter((r) => !r._spent)
   }
 
   _hasKW(o, kw) {

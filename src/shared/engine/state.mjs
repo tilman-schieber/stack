@@ -158,6 +158,7 @@ export function createState({ players, seed = 'stack' }) {
     pendingMadness: [], // madness cards awaiting a cast/decline decision
     continuous: [], // floating continuous effects (until-end-of-turn pumps, etc.)
     prevent: [], // active damage-prevention shields (rule 615)
+    replacements: [], // active replacement effects: floating shields (rule 614/616)
     tsCounter: 0, // monotonic timestamps for layer ordering (rule 613)
     log: [],
     players: [],

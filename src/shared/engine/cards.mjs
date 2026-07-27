@@ -334,6 +334,34 @@ export const SAMPLE_CARDS = {
     colors: ['G'],
     oracle_text: 'Target creature gets +3/+3 until end of turn.'
   },
+  // Replacement-effect cards (rule 614), showcased in the sample decks.
+  'Furnace of Rath': {
+    name: 'Furnace of Rath',
+    mana_cost: '{1}{R}{R}{R}',
+    type_line: 'Enchantment',
+    colors: ['R'],
+    oracle_text:
+      'If a source would deal damage to a permanent or player, it deals double that damage to that permanent or player instead.'
+  },
+  'Rhox Faithmender': {
+    name: 'Rhox Faithmender',
+    mana_cost: '{3}{W}',
+    type_line: 'Creature — Rhino Monk',
+    power: '1',
+    toughness: '5',
+    colors: ['W'],
+    keywords: ['Lifelink'],
+    oracle_text: 'Lifelink\nIf you would gain life, you gain twice that much life instead.'
+  },
+  'Samite Healer': {
+    name: 'Samite Healer',
+    mana_cost: '{1}{W}',
+    type_line: 'Creature — Human Cleric',
+    power: '1',
+    toughness: '1',
+    colors: ['W'],
+    oracle_text: '{T}: Prevent the next 1 damage that would be dealt to any target this turn.'
+  },
   // Activated-ability creatures.
   'Prodigal Sorcerer': {
     name: 'Prodigal Sorcerer',
