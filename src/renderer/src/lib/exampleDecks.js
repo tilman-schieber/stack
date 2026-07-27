@@ -121,7 +121,7 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-goblins',
     name: 'Goblins (sample)',
     description:
-      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, and Furnace of Rath to double every point of damage (a replacement effect).',
+      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), and Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger).',
     cards: [
       [14, 'Mountain'],
       [2, 'Mogg Fanatic'],
@@ -131,9 +131,9 @@ export const EXAMPLE_DECKS = [
       [3, 'Boggart Brute'],
       [2, 'Goblin King'],
       [2, 'Flametongue Kavu'],
+      [2, 'Ball Lightning'], // end-step trigger: sacrifice itself
       [2, 'Dragon Fodder'],
       [2, 'Empty the Warrens'], // Storm: two Goblins, plus a copy per earlier spell
-      [1, 'Shivan Dragon'],
       [1, 'Bonesplitter'],
       [2, 'Furnace of Rath'], // replacement: doubles all damage
       [4, 'Lightning Bolt']
@@ -161,13 +161,13 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-white-skies',
     name: 'White Skies (sample)',
     description:
-      'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers, with two replacement effects: Rhox Faithmender doubles life gained (great with Soul Warden) and Samite Healer prevents damage.',
+      'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers, with two replacement effects (Rhox Faithmender doubles life gained, Samite Healer prevents damage) and Flickerwisp, whose ETB blinks a creature back at the next end step (a delayed trigger).',
     cards: [
       [15, 'Plains'],
       [4, 'Soul Warden'],
       [3, 'Samite Healer'], // replacement: prevent the next 1 damage to any target
+      [3, 'Flickerwisp'], // delayed trigger: exile a creature, return it at end step
       [4, 'White Knight'],
-      [2, 'Fencing Ace'],
       [2, 'Rhox Faithmender'], // replacement: doubles life you gain
       [4, 'Serra Angel'],
       [2, 'Raise the Alarm'],
@@ -178,15 +178,17 @@ export const EXAMPLE_DECKS = [
   {
     slug: 'sample-black-midrange',
     name: 'Black Midrange (sample)',
-    description: 'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist and card draw.',
+    description:
+      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger: draw a card, lose 1 life).',
     cards: [
       [16, 'Swamp'],
       [4, 'Walking Corpse'],
       [4, 'Typhoid Rats'],
       [4, 'Vampire Nighthawk'],
       [2, 'Blood Artist'],
+      [2, 'Phyrexian Arena'], // upkeep trigger: draw a card, lose 1 life
       [4, 'Doom Blade'],
-      [3, 'Murder'],
+      [2, 'Murder'],
       [3, 'Sign in Blood']
     ]
   }

@@ -334,6 +334,35 @@ export const SAMPLE_CARDS = {
     colors: ['G'],
     oracle_text: 'Target creature gets +3/+3 until end of turn.'
   },
+  // Delayed / phase-boundary trigger cards (rule 503/513/603.7).
+  'Ball Lightning': {
+    name: 'Ball Lightning',
+    mana_cost: '{R}{R}{R}',
+    type_line: 'Creature — Elemental',
+    power: '6',
+    toughness: '1',
+    colors: ['R'],
+    keywords: ['Haste', 'Trample'],
+    oracle_text: 'Trample\nHaste\nAt the beginning of the end step, sacrifice this creature.'
+  },
+  Flickerwisp: {
+    name: 'Flickerwisp',
+    mana_cost: '{1}{W}{W}',
+    type_line: 'Creature — Elemental',
+    power: '3',
+    toughness: '1',
+    colors: ['W'],
+    keywords: ['Flying'],
+    oracle_text:
+      'Flying\nWhen this creature enters, exile another target permanent. Return that card to the battlefield under its owner’s control at the beginning of the next end step.'
+  },
+  'Phyrexian Arena': {
+    name: 'Phyrexian Arena',
+    mana_cost: '{1}{B}{B}',
+    type_line: 'Enchantment',
+    colors: ['B'],
+    oracle_text: 'At the beginning of your upkeep, you draw a card and you lose 1 life.'
+  },
   // Replacement-effect cards (rule 614), showcased in the sample decks.
   'Furnace of Rath': {
     name: 'Furnace of Rath',

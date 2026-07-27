@@ -229,10 +229,24 @@ export class GameEngine {
         s.spellsCastThisTurn = 0 // storm count is per turn
         break // no priority; _pump advances
       }
+      case 'upkeep': {
+        // 503: "at the beginning of [your] upkeep" abilities (and any delayed
+        // triggers scheduled for it) go on the stack before priority.
+        this._firePhaseTriggers('upkeep')
+        this._grantPriority()
+        break
+      }
       case 'draw': {
         // 103.8a: the starting player skips only the very first draw step of the
         // game (turn 1). Every later turn — including all of theirs — draws.
         if (s.turnNumber !== 1) this.draw(s.activePlayer, 1)
+        this._grantPriority()
+        break
+      }
+      case 'end': {
+        // 513: "at the beginning of the end step" abilities and delayed triggers
+        // (e.g. Ball Lightning's self-sacrifice, Flickerwisp's return).
+        this._firePhaseTriggers('endStep')
         this._grantPriority()
         break
       }
@@ -1296,6 +1310,36 @@ export class GameEngine {
         case 'preventAllCombat':
           s.prevent.push({ type: 'allCombat', duration: e.duration || 'eot' })
           break
+        case 'sacrificeSelf': {
+          // The source permanent sacrifices itself (Ball Lightning's end-step trigger).
+          const o = s.objects[source.sourceOid]
+          if (o && o.zoneName === 'battlefield') this._sacrifice(o)
+          break
+        }
+        case 'exileReturnEndStep': {
+          // Flickerwisp: exile the target and schedule a delayed trigger (603.7) to
+          // return it under its owner's control at the beginning of the next end step.
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield') {
+            const oid = t.obj.oid
+            moveObject(s, oid, 'exile')
+            s.delayedTriggers.push({
+              event: 'endStep',
+              controller: source.controller,
+              effect: [{ op: 'returnToBattlefield', oid }]
+            })
+          }
+          break
+        }
+        case 'returnToBattlefield': {
+          // Return a specific exiled card to the battlefield under its owner's control.
+          const o = s.objects[e.oid]
+          if (o && o.zoneName === 'exile') {
+            moveObject(s, o.oid, 'battlefield')
+            this._enterBattlefield(o, o.owner)
+          }
+          break
+        }
         case 'attach': {
           // Move the ability's source (an Equipment) onto the target creature.
           const t = this._resolveTargetRef(source, e.to)
@@ -2024,6 +2068,42 @@ export class GameEngine {
         })
       }
     }
+  }
+
+  // Phase-boundary triggers (rule 503/513): "at the beginning of [your] upkeep /
+  // end step" abilities on permanents, plus one-shot delayed triggers (603.7)
+  // scheduled for this phase. Queued into pendingTriggers like any other trigger.
+  _firePhaseTriggers(event) {
+    const s = this.state
+    for (const oid of [...zone(s, 'battlefield')]) {
+      const w = s.objects[oid]
+      for (const ab of w.behavior?.triggered || []) {
+        if (ab.trigger.event !== event) continue
+        if (ab.trigger.yourTurn && w.controller !== s.activePlayer) continue
+        s.pendingTriggers.push({
+          controller: w.controller,
+          sourceOid: w.oid,
+          subjectOid: w.oid,
+          effect: ab.effect,
+          targetSpec: ab.targets || []
+        })
+      }
+    }
+    // Delayed triggered abilities fire once, then are discarded.
+    const fired = new Set()
+    for (const d of s.delayedTriggers) {
+      if (d.event !== event) continue
+      if (d.yourTurn && d.controller !== s.activePlayer) continue
+      s.pendingTriggers.push({
+        controller: d.controller,
+        sourceOid: d.sourceOid ?? null,
+        subjectOid: d.subjectOid ?? null,
+        effect: d.effect,
+        targetSpec: []
+      })
+      fired.add(d)
+    }
+    if (fired.size) s.delayedTriggers = s.delayedTriggers.filter((d) => !fired.has(d))
   }
 
   // The single place a card changes zones. Fires general zone-change triggers —

@@ -155,6 +155,7 @@ export function createState({ players, seed = 'stack' }) {
     winner: null,
     pending: null,
     pendingTriggers: [], // triggered abilities waiting to go on the stack
+    delayedTriggers: [], // one-shot triggers scheduled to fire at a future step (603.7)
     pendingMadness: [], // madness cards awaiting a cast/decline decision
     continuous: [], // floating continuous effects (until-end-of-turn pumps, etc.)
     prevent: [], // active damage-prevention shields (rule 615)

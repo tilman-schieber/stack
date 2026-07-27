@@ -88,6 +88,31 @@ export const BEHAVIORS = {
   Levitation: {
     static: [{ affects: { scope: 'creatures', controller: 'you' }, grantKeywords: ['Flying'] }]
   },
+  // ---- Delayed / phase-boundary triggers (rule 503/513/603.7), sample decks ----
+  // "At the beginning of the end step, sacrifice this creature." (Haste/trample derived.)
+  'Ball Lightning': {
+    triggered: [{ trigger: { event: 'endStep' }, effect: [{ op: 'sacrificeSelf' }] }]
+  },
+  // ETB: exile a target creature, then return it at the next end step (a delayed
+  // trigger). Real card targets any "another permanent"; scoped to a creature here.
+  Flickerwisp: {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        targets: [{ type: 'creature' }],
+        effect: [{ op: 'exileReturnEndStep', to: 'target0' }]
+      }
+    ]
+  },
+  // "At the beginning of your upkeep, you draw a card and you lose 1 life."
+  'Phyrexian Arena': {
+    triggered: [
+      {
+        trigger: { event: 'upkeep', yourTurn: true },
+        effect: [{ op: 'draw', amount: 1 }, { op: 'loseLife', amount: 1 }]
+      }
+    ]
+  },
   // ---- Replacement effects (rule 614), showcased in the sample decks ----
   // "If a source would deal damage …, it deals double that damage instead."
   'Furnace of Rath': {
