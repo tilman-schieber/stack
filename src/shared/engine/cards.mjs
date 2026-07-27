@@ -334,6 +334,22 @@ export const SAMPLE_CARDS = {
     colors: ['G'],
     oracle_text: 'Target creature gets +3/+3 until end of turn.'
   },
+  // Control-changing cards (rule 613 layer 2).
+  'Act of Treason': {
+    name: 'Act of Treason',
+    mana_cost: '{2}{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    oracle_text: 'Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.'
+  },
+  'Ray of Command': {
+    name: 'Ray of Command',
+    mana_cost: '{3}{U}',
+    type_line: 'Instant',
+    colors: ['U'],
+    oracle_text:
+      'Untap target creature an opponent controls and gain control of it until end of turn. That creature gains haste until end of turn. When you lose control of the creature, tap it.'
+  },
   // Delayed / phase-boundary trigger cards (rule 503/513/603.7).
   'Ball Lightning': {
     name: 'Ball Lightning',

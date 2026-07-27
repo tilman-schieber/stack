@@ -315,6 +315,13 @@ export class GameEngine {
       o.status.damage = 0
       o.status.markedDeath = false
     }
+    // Control-changing effects ending: control reverts to the previous controller
+    // (rule 613/514.2) before the effect is removed — e.g. Act of Treason.
+    for (const e of s.continuous)
+      if (e.control != null && e.duration === 'eot') {
+        const o = s.objects[e.targets[0]]
+        if (o && o.zoneName === 'battlefield' && o.controller === e.control) o.controller = e.prev
+      }
     // "Until end of turn" effects and prevention shields wear off (rule 514.2).
     s.continuous = s.continuous.filter((e) => e.duration !== 'eot')
     s.prevent = s.prevent.filter((e) => e.duration !== 'eot')
@@ -1314,6 +1321,28 @@ export class GameEngine {
           // The source permanent sacrifices itself (Ball Lightning's end-step trigger).
           const o = s.objects[source.sourceOid]
           if (o && o.zoneName === 'battlefield') this._sacrifice(o)
+          break
+        }
+        case 'gainControl': {
+          // Layer-2 control-changing effect (rule 613.1b). Records the previous
+          // controller so control reverts when the effect ends (Act of Treason).
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield' && t.obj.controller !== source.controller) {
+            const o = t.obj
+            const dur = e.duration || 'eot'
+            s.continuous.push({
+              timestamp: ++s.tsCounter,
+              control: source.controller,
+              prev: o.controller,
+              targets: [o.oid],
+              duration: dur
+            })
+            o.controller = source.controller
+            o.status.summoningSick = true // not under your control since your turn began
+            if (e.untap) o.status.tapped = false
+            if (e.haste)
+              s.continuous.push({ timestamp: ++s.tsCounter, grantKeywords: ['Haste'], targets: [o.oid], duration: dur })
+          }
           break
         }
         case 'exileReturnEndStep': {

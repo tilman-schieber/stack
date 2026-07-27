@@ -88,6 +88,23 @@ export const BEHAVIORS = {
   Levitation: {
     static: [{ affects: { scope: 'creatures', controller: 'you' }, grantKeywords: ['Flying'] }]
   },
+  // ---- Control-changing effects (rule 613 layer 2), sample decks ----
+  // "Gain control of target creature until end of turn. Untap it. It gains haste."
+  'Act of Treason': {
+    spell: {
+      targets: [{ type: 'creature' }],
+      effect: [{ op: 'gainControl', to: 'target0', untap: true, haste: true }]
+    }
+  },
+  // "Untap target creature an opponent controls and gain control of it until end of
+  // turn. It gains haste until end of turn." (The "tap it when you lose control"
+  // clause is not modelled.)
+  'Ray of Command': {
+    spell: {
+      targets: [{ type: 'creature' }],
+      effect: [{ op: 'gainControl', to: 'target0', untap: true, haste: true }]
+    }
+  },
   // ---- Delayed / phase-boundary triggers (rule 503/513/603.7), sample decks ----
   // "At the beginning of the end step, sacrifice this creature." (Haste/trample derived.)
   'Ball Lightning': {

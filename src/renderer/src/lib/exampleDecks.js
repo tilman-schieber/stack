@@ -102,7 +102,7 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-faeries',
     name: 'Mono-Blue Faeries (sample)',
     description:
-      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker) and Snap (bounce + untap two lands for tempo), plus counters and card selection.',
+      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker), Snap (bounce + untap two lands for tempo) and Ray of Command (steal a creature until end of turn — a layer-2 control effect), plus counters and card selection.',
     cards: [
       [20, 'Island'],
       [4, 'Faerie Seer'], // 1/1 flying Faerie, ETB scry 2 — enabler + Spellstutter fuel
@@ -112,9 +112,10 @@ export const EXAMPLE_DECKS = [
       [4, 'Snapping Drake'], // 3/2 flying
       [4, 'Counterspell'],
       [4, 'Snap'], // bounce a creature, untap two lands — tempo
+      [3, 'Ray of Command'], // layer 2: gain control of a creature until end of turn
       [4, 'Preordain'],
-      [4, 'Serum Visions'],
-      [4, 'Divination']
+      [3, 'Serum Visions'],
+      [2, 'Divination']
     ]
   },
   {
@@ -135,8 +136,9 @@ export const EXAMPLE_DECKS = [
       [2, 'Dragon Fodder'],
       [2, 'Empty the Warrens'], // Storm: two Goblins, plus a copy per earlier spell
       [1, 'Bonesplitter'],
+      [2, 'Act of Treason'], // layer 2: steal a creature until end of turn
       [2, 'Furnace of Rath'], // replacement: doubles all damage
-      [4, 'Lightning Bolt']
+      [3, 'Lightning Bolt']
     ]
   },
   {
