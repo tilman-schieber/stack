@@ -350,6 +350,16 @@ export const SAMPLE_CARDS = {
     oracle_text:
       'Untap target creature an opponent controls and gain control of it until end of turn. That creature gains haste until end of turn. When you lose control of the creature, tap it.'
   },
+  // Copy-effect cards (rule 706 / 613 layer 1).
+  Clone: {
+    name: 'Clone',
+    mana_cost: '{3}{U}',
+    type_line: 'Creature — Shapeshifter',
+    power: '0',
+    toughness: '0',
+    colors: ['U'],
+    oracle_text: 'You may have this creature enter as a copy of any creature on the battlefield.'
+  },
   // Delayed / phase-boundary trigger cards (rule 503/513/603.7).
   'Ball Lightning': {
     name: 'Ball Lightning',

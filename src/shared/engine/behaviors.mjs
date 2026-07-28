@@ -105,6 +105,13 @@ export const BEHAVIORS = {
       effect: [{ op: 'gainControl', to: 'target0', untap: true, haste: true }]
     }
   },
+  // ---- Copy effects (rule 706 / 613 layer 1), sample decks ----
+  // "You may have this creature enter as a copy of any creature on the battlefield."
+  // The copy replaces this permanent's copiable characteristics (name, types, P/T,
+  // abilities) as it enters, so it never briefly exists as a 0/0.
+  Clone: {
+    copyOnEnter: {}
+  },
   // ---- Delayed / phase-boundary triggers (rule 503/513/603.7), sample decks ----
   // "At the beginning of the end step, sacrifice this creature." (Haste/trample derived.)
   'Ball Lightning': {
@@ -694,7 +701,8 @@ export function loadBehavior(printed) {
     returnOnThirdDraw: authored.returnOnThirdDraw || false, // Sneaky Snacker-style recursion
     ninjutsu: authored.ninjutsu || null, // { cost } — swap in for an unblocked attacker
     plot: authored.plot || null, // { cost } — exile from hand, cast free on a later turn
-    bestow: authored.bestow || null // { cost } — alternate cast as an Aura (702.103)
+    bestow: authored.bestow || null, // { cost } — alternate cast as an Aura (702.103)
+    copyOnEnter: authored.copyOnEnter || null // { except? } — "enter as a copy of…" (rule 614.12, layer 1)
   }
 }
 

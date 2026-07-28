@@ -6,8 +6,10 @@
 //   layer 7b — set power/toughness ("base P/T becomes X/Y")
 //   layer 7c — counters (+1/+1, -1/-1)
 //   layer 7d — modify power/toughness (anthems, lords, until-EOT pumps)
-// Layers 1–5 and 7a (copy/control/text/type/color/CDA) are stubbed for now; the
-// framework is ordered so they can be slotted in later.
+// Layer 1 (copy) is applied at enter-time by rewriting the object's copiable
+// `printed` base (see engine._applyCopy for Clone), so `baseChars` already reflects
+// a copy here. Layer 2 (control) is tracked on state.continuous and reverted in
+// engine._endCleanup. Layers 3/5/7a (text/color/CDA) remain stubbed.
 
 function baseChars(o) {
   const p = o.printed

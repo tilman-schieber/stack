@@ -6,8 +6,8 @@
 //
 // Rule references are to MagicCompRules20260619.txt.
 
-import { createState, createObject, createAbility, zone, zoneKey, moveObject, objectsIn } from './state.mjs'
-import { manaAbilityColors } from './behaviors.mjs'
+import { createState, createObject, createAbility, computeChars, zone, zoneKey, moveObject, objectsIn } from './state.mjs'
+import { manaAbilityColors, loadBehavior } from './behaviors.mjs'
 import { isPermanent, parseManaCost } from './cards.mjs'
 import { recompute } from './layers.mjs'
 
@@ -191,6 +191,9 @@ export class GameEngine {
           break
         case 'mayPay':
           this._applyMayPay(pending, answer)
+          break
+        case 'copyEnter':
+          this._applyCopyEnter(pending, answer)
           break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
@@ -501,9 +504,10 @@ export class GameEngine {
         if (zone(s, 'stack').length > 0) {
           this._resolveTop()
           // Active player receives priority after a stack object resolves — unless
-          // the resolution paused for a decision (e.g. scry), which set its own
-          // pending. This also runs SBAs and places triggers the resolution made.
-          if (!this._resume) this._grantPriorityTo(s.activePlayer)
+          // the resolution paused for a decision (e.g. scry sets _resume, a copy-as-
+          // enters choice sets s.pending). This also runs SBAs and places triggers
+          // the resolution made.
+          if (!this._resume && !s.pending) this._grantPriorityTo(s.activePlayer)
         } else {
           s.prio = null // priority loop ends; _pump advances the step
         }
@@ -946,11 +950,73 @@ export class GameEngine {
       this._resolveObject = { oid, kind: 'spell' }
       this._runResolution(o, o.spell.effect)
     } else if (isPermanent(o.printed)) {
+      // "Enter as a copy of…" (rule 614.12): before the permanent is on the
+      // battlefield, let its controller pick a permanent to copy. Pausing here
+      // means it never briefly exists as its printed 0/0 (no SBA flicker).
+      const cp = o.behavior?.copyOnEnter
+      const choices = cp ? this._copyChoices(o, cp) : []
+      if (cp && choices.length) {
+        s.pending = { kind: 'copyEnter', oid, player: o.controller ?? o.owner, choices, optional: true }
+        return
+      }
       moveObject(s, oid, 'battlefield')
       this._enterBattlefield(o, o.controller ?? o.owner)
     } else {
       moveObject(s, oid, 'graveyard')
     }
+  }
+
+  // Permanents a "copy as it enters" effect may copy. Clone copies any creature;
+  // the `except` clause could widen this (e.g. Phyrexian Metamorph adds artifacts).
+  _copyChoices(o, cp) {
+    const s = this.state
+    return objectsIn(s, 'battlefield')
+      .filter((t) => t.oid !== o.oid && this._copyable(t, cp))
+      .map((t) => t.oid)
+  }
+
+  _copyable(t, cp) {
+    if (cp.artifactOrCreature) return t.chars.types.includes('Creature') || t.chars.types.includes('Artifact')
+    return t.chars.types.includes('Creature')
+  }
+
+  // Make `o` a copy of `src`'s copiable characteristics (rule 707.2 / 613 layer 1):
+  // name, types, subtypes, colors, keywords, mana cost, P/T, loyalty, and printed
+  // rules text (so it gains the copied card's abilities). Counters, damage, control
+  // and other continuous effects are NOT copied.
+  _applyCopy(o, src) {
+    const p = src.printed
+    o.copyOf = src.printed.name
+    o.printed = {
+      ...o.printed,
+      name: p.name,
+      manaCost: { ...p.manaCost },
+      manaValue: p.manaValue,
+      supertypes: [...p.supertypes],
+      types: [...p.types],
+      subtypes: [...p.subtypes],
+      colors: [...p.colors],
+      keywords: [...p.keywords],
+      power: p.power,
+      toughness: p.toughness,
+      loyalty: p.loyalty,
+      protections: [...(p.protections || [])],
+      oracleText: p.oracleText
+    }
+    o.behavior = loadBehavior(o.printed)
+    computeChars(o)
+  }
+
+  _applyCopyEnter(pending, answer) {
+    const s = this.state
+    const o = s.objects[pending.oid]
+    if (answer?.copy != null) {
+      const src = s.objects[answer.copy]
+      if (src && pending.choices.includes(answer.copy)) this._applyCopy(o, src)
+    }
+    moveObject(s, pending.oid, 'battlefield')
+    this._enterBattlefield(o, o.controller ?? o.owner)
+    if (!this._resume) this._grantPriorityTo(s.activePlayer)
   }
 
   // Run a resolution's effects; if an interactive effect (e.g. scry) pauses it,

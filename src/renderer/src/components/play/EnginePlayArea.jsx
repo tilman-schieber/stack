@@ -299,6 +299,11 @@ export default function EnginePlayArea() {
   }
 
   function onBattlefieldCard(card, controllerPid, ev) {
+    // Clone: "enter as a copy of…" — click a creature on the battlefield to copy it.
+    if (kind === 'copyEnter' && pending.choices.includes(card.oid)) {
+      choose({ copy: card.oid })
+      return
+    }
     // Highway Robbery: sacrifice a land instead of discarding (click your land).
     if (kind === 'discardCards' && pending.orSacrificeLand && controllerPid === pending.player && isLand(card)) {
       choose({ sacLand: card.oid })
@@ -380,6 +385,7 @@ export default function EnginePlayArea() {
       cls.push('targetable')
     if (kind === 'discardCards' && pending.orSacrificeLand && controllerPid === pending.player && isLand(card))
       cls.push('targetable')
+    if (kind === 'copyEnter' && pending.choices.includes(card.oid)) cls.push('targetable')
     if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
       cls.push('activatable')
     if (kind === 'declareAttackers') {
@@ -850,6 +856,17 @@ function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, 
         </button>
         <button className="mini" onClick={() => choose({ bin: true })}>
           Graveyard
+        </button>
+      </>
+    )
+  } else if (kind === 'copyEnter') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — click a highlighted creature to enter as a copy of it, or decline.
+        </span>
+        <button className="mini" onClick={() => choose({ copy: null })}>
+          Don’t copy
         </button>
       </>
     )
