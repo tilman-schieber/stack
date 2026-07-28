@@ -68,8 +68,11 @@ export function printedFromScryfall(sf) {
   const f = sf.card_faces?.[0] || sf
   const cost = parseManaCost(f.mana_cost || '')
   const t = parseTypeLine(f.type_line || '')
-  const power = f.power != null && f.power !== '' ? Number(f.power) : null
-  const toughness = f.toughness != null && f.toughness !== '' ? Number(f.toughness) : null
+  // A "*" (or other non-numeric) power/toughness is characteristic-defining (rule
+  // 613 layer 7a): the printed value is null and a CDA sets the base P/T later.
+  const num = (v) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null)
+  const power = num(f.power)
+  const toughness = num(f.toughness)
   return {
     name: f.name || sf.name,
     manaCost: cost,
@@ -349,6 +352,17 @@ export const SAMPLE_CARDS = {
     colors: ['U'],
     oracle_text:
       'Untap target creature an opponent controls and gain control of it until end of turn. That creature gains haste until end of turn. When you lose control of the creature, tap it.'
+  },
+  // Characteristic-defining P/T (rule 613 layer 7a).
+  Nightmare: {
+    name: 'Nightmare',
+    mana_cost: '{5}{B}',
+    type_line: 'Creature — Nightmare Horse',
+    power: '*',
+    toughness: '*',
+    colors: ['B'],
+    keywords: ['Flying'],
+    oracle_text: "Flying\nNightmare's power and toughness are each equal to the number of Swamps you control."
   },
   // Modal spells (rule 700.2).
   Abrade: {

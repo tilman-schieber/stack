@@ -3,13 +3,14 @@
 // honoring timestamps. M3 implements the layers that matter for the current card
 // pool:
 //   layer 6  — ability adding (grant keywords: "creatures you control have …")
+//   layer 7a — characteristic-defining P/T ("*/* equal to …", e.g. Nightmare)
 //   layer 7b — set power/toughness ("base P/T becomes X/Y")
 //   layer 7c — counters (+1/+1, -1/-1)
 //   layer 7d — modify power/toughness (anthems, lords, until-EOT pumps)
 // Layer 1 (copy) is applied at enter-time by rewriting the object's copiable
 // `printed` base (see engine._applyCopy for Clone), so `baseChars` already reflects
 // a copy here. Layer 2 (control) is tracked on state.continuous and reverted in
-// engine._endCleanup. Layers 3/5/7a (text/color/CDA) remain stubbed.
+// engine._endCleanup. Layers 3/5 (text/color) remain stubbed.
 
 function baseChars(o) {
   const p = o.printed
@@ -39,6 +40,19 @@ function matchStatic(affects, source, o) {
   if (affects.controller === 'opponent' && o.controller === source.controller) return false
   if (affects.subtype && !o.chars.subtypes.includes(affects.subtype)) return false
   return true
+}
+
+// The game-state quantity a characteristic-defining P/T is equal to (rule 613.7a).
+function cdaCount(state, o, name) {
+  const bf = state.zones.battlefield.map((oid) => state.objects[oid])
+  if (name === 'swampsYouControl')
+    return bf.filter((t) => t.controller === o.controller && t.chars.subtypes.includes('Swamp')).length
+  if (name === 'cardsInYourHand') return (state.zones[o.controller + ':hand'] || []).length
+  if (name === 'cardsInAllGraveyards')
+    return Object.keys(state.zones)
+      .filter((k) => k.endsWith(':graveyard'))
+      .reduce((sum, k) => sum + state.zones[k].length, 0)
+  return 0
 }
 
 // Whether continuous effect `e` applies to object `o`.
@@ -103,6 +117,16 @@ export function recompute(state) {
       if (!effTargets(e, o)) continue
       for (const kw of kws) if (!o.chars.keywords.includes(kw)) o.chars.keywords.push(kw)
     }
+  }
+
+  // Layer 7a — characteristic-defining P/T (Nightmare, Maro): the base P/T is a
+  // count derived from game state. Runs before set/counters/modify so those stack.
+  for (const o of bf) {
+    const cda = o.behavior?.cda
+    if (!cda) continue
+    const n = cdaCount(state, o, cda.count)
+    o.chars.power = n
+    o.chars.toughness = n
   }
 
   // Layer 7b — set base P/T. A targeted floating effect (an animate) establishes

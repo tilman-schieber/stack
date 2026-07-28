@@ -105,6 +105,13 @@ export const BEHAVIORS = {
       effect: [{ op: 'gainControl', to: 'target0', untap: true, haste: true }]
     }
   },
+  // ---- Characteristic-defining P/T (rule 613 layer 7a), sample decks ----
+  // "Nightmare's power and toughness are each equal to the number of Swamps you
+  // control." (Flying is derived from the keyword line.) A CDA sets the base P/T
+  // from game state, so counters/anthems still stack on top of it.
+  Nightmare: {
+    cda: { count: 'swampsYouControl' }
+  },
   // ---- Modal spells (rule 700.2), sample decks ----
   // "Choose one — Abrade deals 3 damage to target creature; or Destroy target artifact."
   Abrade: {
@@ -735,7 +742,8 @@ export function loadBehavior(printed) {
     ninjutsu: authored.ninjutsu || null, // { cost } — swap in for an unblocked attacker
     plot: authored.plot || null, // { cost } — exile from hand, cast free on a later turn
     bestow: authored.bestow || null, // { cost } — alternate cast as an Aura (702.103)
-    copyOnEnter: authored.copyOnEnter || null // { except? } — "enter as a copy of…" (rule 614.12, layer 1)
+    copyOnEnter: authored.copyOnEnter || null, // { except? } — "enter as a copy of…" (rule 614.12, layer 1)
+    cda: authored.cda || null // { count } — characteristic-defining P/T (rule 613 layer 7a)
   }
 }
 
