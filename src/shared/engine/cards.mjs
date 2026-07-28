@@ -350,6 +350,22 @@ export const SAMPLE_CARDS = {
     oracle_text:
       'Untap target creature an opponent controls and gain control of it until end of turn. That creature gains haste until end of turn. When you lose control of the creature, tap it.'
   },
+  // Modal spells (rule 700.2).
+  Abrade: {
+    name: 'Abrade',
+    mana_cost: '{1}{R}',
+    type_line: 'Instant',
+    colors: ['R'],
+    oracle_text: 'Choose one —\n• Abrade deals 3 damage to target creature.\n• Destroy target artifact.'
+  },
+  'Cryptic Command': {
+    name: 'Cryptic Command',
+    mana_cost: '{1}{U}{U}{U}',
+    type_line: 'Instant',
+    colors: ['U'],
+    oracle_text:
+      "Choose two —\n• Counter target spell.\n• Return target permanent to its owner's hand.\n• Tap all creatures your opponents control.\n• Draw a card."
+  },
   // Copy-effect cards (rule 706 / 613 layer 1).
   Clone: {
     name: 'Clone',

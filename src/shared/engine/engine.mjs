@@ -549,9 +549,15 @@ export class GameEngine {
       const canCastNow = instantSpeed || sorcerySpeed
       if (canCastNow) {
         const targets = this._spellTargets(o)
+        // A modal spell (rule 700.2) picks `count` of its modes on cast. It's
+        // castable when at least `count` modes have a legal (or no) target.
+        const modal = o.behavior.spell?.modal
+        const modes = o.behavior.spell?.modes
+        const modeCastable = (m) => !m.targets?.length || m.targets.every((t) => this._legalTargetsExist(t))
+        const modalOk = !modal || modes.filter(modeCastable).length >= (modal.count || 1)
         // A targeted spell needs a legal target to be cast (rule 601.2c). This
         // also gates counters (need a spell on the stack) and Auras (a creature).
-        const targetsOk = !targets.length || targets.every((t) => this._legalTargetsExist(t))
+        const targetsOk = modalOk && (!targets.length || targets.every((t) => this._legalTargetsExist(t)))
         const addl = o.behavior.spell?.additionalCost
         const addlSacOk = !addl?.sacrifice || this._sacrificeCandidates(pid, addl.sacrifice).length > 0
         // A discard additional cost (Grab the Prize) needs that many *other* cards
@@ -569,7 +575,10 @@ export class GameEngine {
               sacChoose: addl?.sacrifice || null,
               discChoose: addl?.discard || null,
               hasX: xCost > 0,
-              maxX: xCost > 0 ? this._maxX(pid, o, xCost) : 0
+              maxX: xCost > 0 ? this._maxX(pid, o, xCost) : 0,
+              // Modal: the renderer picks `count` modes, then targets for each.
+              modal: modal || null,
+              modes: modal ? modes.map((m, i) => ({ index: i, label: m.label, targets: m.targets || [], castable: modeCastable(m) })) : null
             })
           }
           // Alternative cost (e.g. Fireblast: sacrifice two Mountains instead of mana).
@@ -697,6 +706,38 @@ export class GameEngine {
     return []
   }
 
+  // A modal spell (rule 700.2): the caster picked `action.modes` (indices) and,
+  // in `action.modeTargets`, the chosen targets per selected mode. Flatten the
+  // selected modes into one effect list + one `targets` array so resolution is
+  // identical to a normal spell. Each mode's `target0…` refs are shifted by the
+  // number of targets contributed by earlier selected modes.
+  _applyModalCast(o, action) {
+    const modes = o.behavior.spell.modes
+    const picked = action.modes || []
+    const modeTargets = action.modeTargets || []
+    let effect = []
+    let targets = []
+    picked.forEach((mi, k) => {
+      const m = modes[mi]
+      effect = effect.concat(this._offsetTargetRefs(m.effect, targets.length))
+      targets = targets.concat(modeTargets[k] || [])
+    })
+    o.chosenModes = picked
+    o.targets = targets
+    o.spell = { ...o.behavior.spell, effect }
+  }
+
+  // Shift every `target<n>` reference in an effect list by `offset` (so a mode's
+  // effects index into the combined `targets` array at the right slot).
+  _offsetTargetRefs(effect, offset) {
+    if (!offset) return effect
+    return effect.map((e) => {
+      if (typeof e.to === 'string' && /^target\d+$/.test(e.to))
+        return { ...e, to: 'target' + (Number(e.to.slice(6)) + offset) }
+      return e
+    })
+  }
+
   // ---- performing actions ---------------------------------------------
 
   _performAction(pid, action) {
@@ -741,8 +782,12 @@ export class GameEngine {
         }
         moveObject(s, action.oid, 'stack') // clears transient status/controller
         o.controller = pid
-        o.targets = action.targets || []
-        o.spell = o.behavior.spell
+        if (o.behavior.spell?.modal) {
+          this._applyModalCast(o, action)
+        } else {
+          o.targets = action.targets || []
+          o.spell = o.behavior.spell
+        }
         this._countSpellCast(o)
         this._fireTriggers('castSpell', o) // prowess, storm, Guttersnipe etc.
         // A madness card discarded as a cost above is offered now, before priority
@@ -1334,6 +1379,16 @@ export class GameEngine {
               o.status.tapped = false
               n--
             }
+          }
+          break
+        }
+        case 'tapAll': {
+          // Tap every permanent matching a filter (Cryptic Command: "tap all
+          // creatures your opponents control").
+          for (const o of objectsIn(s, 'battlefield')) {
+            if (e.who === 'opponents' && o.controller === source.controller) continue
+            if (e.filter?.type === 'creature' && !o.chars.types.includes('Creature')) continue
+            o.status.tapped = true
           }
           break
         }

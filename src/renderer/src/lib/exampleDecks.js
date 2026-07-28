@@ -102,7 +102,7 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-faeries',
     name: 'Mono-Blue Faeries (sample)',
     description:
-      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker), Snap (bounce + untap two lands for tempo), Ray of Command (steal a creature until end of turn — a layer-2 control effect) and Clone (enter as a copy of any creature — a layer-1 copy effect), plus counters and card selection.',
+      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker), Snap (bounce + untap two lands for tempo), Ray of Command (steal a creature until end of turn — a layer-2 control effect), Clone (enter as a copy of any creature — a layer-1 copy effect) and Cryptic Command (a choose-two modal spell), plus counters and card selection.',
     cards: [
       [20, 'Island'],
       [4, 'Faerie Seer'], // 1/1 flying Faerie, ETB scry 2 — enabler + Spellstutter fuel
@@ -114,16 +114,16 @@ export const EXAMPLE_DECKS = [
       [4, 'Snap'], // bounce a creature, untap two lands — tempo
       [3, 'Ray of Command'], // layer 2: gain control of a creature until end of turn
       [2, 'Clone'], // layer 1: enter as a copy of any creature on the battlefield
-      [4, 'Preordain'],
-      [3, 'Serum Visions'],
-      [2, 'Divination']
+      [2, 'Cryptic Command'], // modal: choose two of counter / bounce / tap-all / draw
+      [3, 'Preordain'],
+      [3, 'Serum Visions']
     ]
   },
   {
     slug: 'sample-goblins',
     name: 'Goblins (sample)',
     description:
-      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), and Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger).',
+      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger), and Abrade (a choose-one modal spell — burn a creature or blow up an artifact).',
     cards: [
       [14, 'Mountain'],
       [2, 'Mogg Fanatic'],
@@ -139,6 +139,7 @@ export const EXAMPLE_DECKS = [
       [1, 'Bonesplitter'],
       [2, 'Act of Treason'], // layer 2: steal a creature until end of turn
       [2, 'Furnace of Rath'], // replacement: doubles all damage
+      [2, 'Abrade'], // modal: 3 damage to a creature, or destroy an artifact
       [3, 'Lightning Bolt']
     ]
   },

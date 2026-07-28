@@ -167,12 +167,20 @@ export default function EnginePlayArea() {
   const needSac = !!(cast && cast.action.sacChoose && !cast.sac && !needX)
   // A discard additional cost (Grab the Prize): pick a card from hand to pitch.
   const needDiscard = !!(cast && cast.action.discChoose && !cast.disc && !needX && !needSac)
-  // Normalise so `targeting.targets` / `.chosen` work for both a player cast
-  // (specs live on cast.action.targets) and an engine-initiated target choice.
-  const targeting = needX || needSac || needDiscard
+  // A modal spell (Abrade, Cryptic Command): first pick `count` modes, then collect
+  // targets for each selected mode in turn.
+  const modalPicking = !!(cast && cast.action.modal && !cast.modes)
+  const modalMode = cast && cast.action.modal && cast.modes ? cast.action.modes[cast.modes[cast.mtIdx]] : null
+  // Normalise so `targeting.targets` / `.chosen` work for a player cast (specs live
+  // on cast.action.targets, or the current modal mode) or an engine target choice.
+  const targeting = needX || needSac || needDiscard || modalPicking
     ? null
     : cast
-      ? { targets: cast.action.targets, chosen: cast.chosen }
+      ? cast.action.modal
+        ? modalMode?.targets?.length
+          ? { targets: modalMode.targets, chosen: cast.curTargets || [] }
+          : null
+        : { targets: cast.action.targets, chosen: cast.chosen }
       : engineTargeting
         ? { targets: pending.targets, chosen: chooseSel }
         : null
@@ -198,7 +206,43 @@ export default function EnginePlayArea() {
     else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
   }
 
+  // Finalize a modal cast once every selected mode has its targets.
+  function finalizeModal(c) {
+    choose({ type: 'cast', oid: c.action.oid, modes: c.modes, modeTargets: c.modeTargets })
+  }
+
+  // Advance modal target collection: record []-targets for no-target modes, and
+  // finalize once all selected modes are covered.
+  function advanceModal(c) {
+    let mtIdx = c.mtIdx
+    const modeTargets = [...c.modeTargets]
+    while (mtIdx < c.modes.length) {
+      const mode = c.action.modes[c.modes[mtIdx]]
+      if (mode.targets?.length) break // this mode needs targeting; stop
+      modeTargets[mtIdx] = []
+      mtIdx++
+    }
+    if (mtIdx >= c.modes.length) finalizeModal({ ...c, modeTargets })
+    else setCast({ ...c, modeTargets, mtIdx, curTargets: [] })
+  }
+
+  // The player has chosen which `count` modes to use (indices into action.modes).
+  function pickModes(indices) {
+    advanceModal({ ...cast, modes: indices, modeTargets: [], mtIdx: 0, curTargets: [] })
+  }
+
   function addTarget(t) {
+    // Modal: accumulate targets for the current mode, then advance to the next.
+    if (cast && cast.action.modal) {
+      const spec = cast.action.modes[cast.modes[cast.mtIdx]].targets
+      const chosen = [...(cast.curTargets || []), t]
+      if (chosen.length >= spec.length) {
+        const modeTargets = [...cast.modeTargets]
+        modeTargets[cast.mtIdx] = chosen
+        advanceModal({ ...cast, modeTargets, mtIdx: cast.mtIdx + 1, curTargets: [] })
+      } else setCast({ ...cast, curTargets: chosen })
+      return
+    }
     const chosen = [...targeting.chosen, t]
     const done = chosen.length >= targeting.targets.length
     if (cast) {
@@ -239,7 +283,7 @@ export default function EnginePlayArea() {
       else setNinjutsu(a)
       return
     }
-    const needsSetup = a.needsTargets > 0 || a.sacChoose || a.discChoose || a.hasX
+    const needsSetup = a.needsTargets > 0 || a.sacChoose || a.discChoose || a.hasX || a.modal
     if (needsSetup) {
       setCast({ action: a, chosen: [], sac: null, disc: null, x: null })
       return
@@ -648,6 +692,7 @@ export default function EnginePlayArea() {
         }
         sacrificing={needSac ? { types: cast.action.sacChoose.types } : null}
         discarding={needDiscard}
+        modal={modalPicking ? { count: cast.action.modal.count, modes: cast.action.modes, pick: pickModes } : null}
         choosingX={
           needX
             ? {
@@ -676,13 +721,44 @@ export default function EnginePlayArea() {
   )
 }
 
+// Mode selection for a modal spell ("Choose one/two —"). Click modes to select;
+// once `count` are chosen it commits (and the parent collects any per-mode targets).
+function ModalPicker({ modal, cancelCast }) {
+  const [sel, setSel] = useState([])
+  const toggle = (i) => {
+    const next = sel.includes(i) ? sel.filter((x) => x !== i) : [...sel, i]
+    if (next.length === modal.count) modal.pick(next)
+    else setSel(next)
+  }
+  return (
+    <>
+      <span>Choose {modal.count === 1 ? 'one' : modal.count === 2 ? 'two' : modal.count} —</span>
+      {modal.modes.map((m, i) => (
+        <button
+          key={i}
+          disabled={!m.castable && !sel.includes(i)}
+          className={sel.includes(i) ? 'primary' : 'mini'}
+          onClick={() => toggle(i)}
+        >
+          {m.label}
+        </button>
+      ))}
+      <button className="mini" onClick={cancelCast}>
+        Cancel
+      </button>
+    </>
+  )
+}
+
 // The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, attackers, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
+function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, modal, attackers, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
   let body = null
-  if (ninjutsu) {
+  if (modal) {
+    body = <ModalPicker modal={modal} cancelCast={cancelCast} />
+  } else if (ninjutsu) {
     body = (
       <>
         <span>Ninjutsu — click an unblocked attacker to return to hand.</span>

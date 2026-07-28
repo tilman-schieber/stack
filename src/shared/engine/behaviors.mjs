@@ -105,6 +105,39 @@ export const BEHAVIORS = {
       effect: [{ op: 'gainControl', to: 'target0', untap: true, haste: true }]
     }
   },
+  // ---- Modal spells (rule 700.2), sample decks ----
+  // "Choose one — Abrade deals 3 damage to target creature; or Destroy target artifact."
+  Abrade: {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        {
+          label: 'Abrade deals 3 damage to target creature',
+          targets: [{ type: 'creature' }],
+          effect: [{ op: 'dealDamage', to: 'target0', amount: 3 }]
+        },
+        {
+          label: 'Destroy target artifact',
+          targets: [{ type: 'artifact' }],
+          effect: [{ op: 'destroy', to: 'target0' }]
+        }
+      ]
+    }
+  },
+  // "Choose two — Counter target spell; or Return target permanent to its owner's
+  // hand; or Tap all creatures your opponents control; or Draw a card." (Choose two
+  // demonstrates count>1: each selected mode carries its own targets.)
+  'Cryptic Command': {
+    spell: {
+      modal: { count: 2 },
+      modes: [
+        { label: 'Counter target spell', targets: [{ type: 'spell' }], effect: [{ op: 'counter', to: 'target0' }] },
+        { label: "Return target creature to its owner's hand", targets: [{ type: 'creature' }], effect: [{ op: 'bounce', to: 'target0' }] },
+        { label: 'Tap all creatures your opponents control', effect: [{ op: 'tapAll', who: 'opponents', filter: { type: 'creature' } }] },
+        { label: 'Draw a card', effect: [{ op: 'draw', amount: 1 }] }
+      ]
+    }
+  },
   // ---- Copy effects (rule 706 / 613 layer 1), sample decks ----
   // "You may have this creature enter as a copy of any creature on the battlefield."
   // The copy replaces this permanent's copiable characteristics (name, types, P/T,
