@@ -2,6 +2,7 @@
 // from its `printed` base by applying active continuous effects in layer order,
 // honoring timestamps. M3 implements the layers that matter for the current card
 // pool:
+//   layer 5  — color-changing ("target creature becomes black", e.g. Aphotic Wisps)
 //   layer 6  — ability adding (grant keywords: "creatures you control have …")
 //   layer 7a — characteristic-defining P/T ("*/* equal to …", e.g. Nightmare)
 //   layer 7b — set power/toughness ("base P/T becomes X/Y")
@@ -10,7 +11,7 @@
 // Layer 1 (copy) is applied at enter-time by rewriting the object's copiable
 // `printed` base (see engine._applyCopy for Clone), so `baseChars` already reflects
 // a copy here. Layer 2 (control) is tracked on state.continuous and reverted in
-// engine._endCleanup. Layers 3/5 (text/color) remain stubbed.
+// engine._endCleanup. Layer 3 (text-changing) remains stubbed (vanishingly rare).
 
 function baseChars(o) {
   const p = o.printed
@@ -80,6 +81,7 @@ export function recompute(state) {
   // Collect continuous effects (from static abilities + floating effects) into
   // their layers.
   const layer4 = [] // add types/subtypes (e.g. Kenku Artificer animating an artifact)
+  const layer5 = [] // color-changing effects
   const layer6 = []
   const layer7b = []
   const layer7d = []
@@ -94,6 +96,7 @@ export function recompute(state) {
   for (const f of state.continuous) {
     const e = { floating: f, timestamp: f.timestamp }
     if (f.addTypes || f.addSubtypes) layer4.push(e)
+    if (f.setColors) layer5.push(e)
     if (f.grantKeywords) layer6.push(e)
     if (f.setPT) layer7b.push(e)
     if (f.modifyPT) layer7d.push(e)
@@ -107,6 +110,14 @@ export function recompute(state) {
       if (!effTargets(e, o)) continue
       for (const t of e.floating.addTypes || []) if (!o.chars.types.includes(t)) o.chars.types.push(t)
       for (const t of e.floating.addSubtypes || []) if (!o.chars.subtypes.includes(t)) o.chars.subtypes.push(t)
+    }
+  }
+
+  // Layer 5 — color-changing effects ("becomes black"): replace the object's colors.
+  for (const e of layer5.sort(byTimestamp)) {
+    for (const o of bf) {
+      if (!effTargets(e, o)) continue
+      o.chars.colors = [...e.floating.setColors]
     }
   }
 

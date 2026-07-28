@@ -183,7 +183,7 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-black-midrange',
     name: 'Black Midrange (sample)',
     description:
-      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger: draw a card, lose 1 life) and Nightmare (a */* whose power and toughness equal the Swamps you control — a characteristic-defining P/T, layer 7a).',
+      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger), Nightmare (a */* whose P/T equals the Swamps you control — a characteristic-defining P/T, layer 7a), and Aphotic Wisps (turn a creature black — a layer-5 color change that also dodges Doom Blade’s “nonblack”).',
     cards: [
       [16, 'Swamp'],
       [2, 'Walking Corpse'],
@@ -191,8 +191,9 @@ export const EXAMPLE_DECKS = [
       [4, 'Vampire Nighthawk'],
       [2, 'Blood Artist'],
       [2, 'Nightmare'], // layer 7a: P/T each equal to the number of Swamps you control
+      [2, 'Aphotic Wisps'], // layer 5: target creature becomes black, gains fear, draw
       [2, 'Phyrexian Arena'], // upkeep trigger: draw a card, lose 1 life
-      [4, 'Doom Blade'],
+      [3, 'Doom Blade'],
       [2, 'Murder'],
       [3, 'Sign in Blood']
     ]

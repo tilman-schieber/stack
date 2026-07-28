@@ -61,7 +61,7 @@ export const BEHAVIORS = {
     spell: { targets: [{ type: 'spell' }], effect: [{ op: 'counter', to: 'target0' }] }
   },
   'Doom Blade': {
-    spell: { targets: [{ type: 'creature' }], effect: [{ op: 'destroy', to: 'target0' }] }
+    spell: { targets: [{ type: 'creature', excludeColor: 'B' }], effect: [{ op: 'destroy', to: 'target0' }] }
   },
   Counterspell: {
     spell: { targets: [{ type: 'spell' }], effect: [{ op: 'counter', to: 'target0' }] }
@@ -103,6 +103,20 @@ export const BEHAVIORS = {
     spell: {
       targets: [{ type: 'creature' }],
       effect: [{ op: 'gainControl', to: 'target0', untap: true, haste: true }]
+    }
+  },
+  // ---- Color-changing effects (rule 613 layer 5), sample decks ----
+  // "Target creature becomes black and gains fear until end of turn. Draw a card."
+  // The color change is a layer-5 effect; making a creature black changes whether
+  // "nonblack"-restricted spells (Doom Blade) can target it. (Fear is granted as a
+  // keyword; its unblockable-except clause is not yet enforced.)
+  'Aphotic Wisps': {
+    spell: {
+      targets: [{ type: 'creature' }],
+      effect: [
+        { op: 'setColors', to: 'target0', colors: ['B'], keywords: ['Fear'], duration: 'eot' },
+        { op: 'draw', amount: 1 }
+      ]
     }
   },
   // ---- Characteristic-defining P/T (rule 613 layer 7a), sample decks ----

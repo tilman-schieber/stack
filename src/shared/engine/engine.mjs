@@ -482,6 +482,10 @@ export class GameEngine {
     if (spec.noncreature && o.chars.types.includes('Creature')) return false
     if (spec.exclude?.some((t) => o.chars.types.includes(t))) return false
     if (spec.excludeSuper?.some((t) => o.chars.supertypes.includes(t))) return false
+    // Color restriction (Doom Blade: "target nonblack creature"). Reads the current
+    // characteristics, so a layer-5 color change (Aphotic Wisps) makes a creature
+    // an illegal/legal target as expected.
+    if (spec.excludeColor && o.chars.colors.includes(spec.excludeColor)) return false
     return true
   }
 
@@ -1380,6 +1384,20 @@ export class GameEngine {
               n--
             }
           }
+          break
+        }
+        case 'setColors': {
+          // "Target creature becomes [color]…" (Aphotic Wisps) — a layer-5 color
+          // change, optionally granting a keyword, until end of turn.
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object')
+            s.continuous.push({
+              timestamp: ++s.tsCounter,
+              targets: [t.obj.oid],
+              setColors: [...e.colors],
+              grantKeywords: e.keywords ? [...e.keywords] : undefined,
+              duration: e.duration || 'eot'
+            })
           break
         }
         case 'tapAll': {

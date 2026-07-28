@@ -353,6 +353,14 @@ export const SAMPLE_CARDS = {
     oracle_text:
       'Untap target creature an opponent controls and gain control of it until end of turn. That creature gains haste until end of turn. When you lose control of the creature, tap it.'
   },
+  // Color-changing effect (rule 613 layer 5).
+  'Aphotic Wisps': {
+    name: 'Aphotic Wisps',
+    mana_cost: '{B}',
+    type_line: 'Instant',
+    colors: ['B'],
+    oracle_text: 'Target creature becomes black and gains fear until end of turn.\nDraw a card.'
+  },
   // Characteristic-defining P/T (rule 613 layer 7a).
   Nightmare: {
     name: 'Nightmare',

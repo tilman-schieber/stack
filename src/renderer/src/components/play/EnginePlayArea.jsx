@@ -185,11 +185,14 @@ export default function EnginePlayArea() {
         ? { targets: pending.targets, chosen: chooseSel }
         : null
   const targetSlot = targeting ? targeting.targets[targeting.chosen.length] : null
-  const wantsCreature = targetSlot && (targetSlot.type === 'creature' || targetSlot.type === 'any')
   const wantsPlayer = targetSlot && (targetSlot.type === 'player' || targetSlot.type === 'any')
   const wantsSpell = targetSlot && targetSlot.type === 'spell'
   const wantsLand = targetSlot && targetSlot.type === 'land'
   const wantsArtifact = targetSlot && targetSlot.type === 'artifact'
+  // A creature target may carry a color restriction (Doom Blade: "nonblack").
+  const colorOk = (c) => !targetSlot?.excludeColor || !c.colors?.includes(targetSlot.excludeColor)
+  const wantsCreature = !!(targetSlot && (targetSlot.type === 'creature' || targetSlot.type === 'any'))
+  const matchesCreature = (c) => wantsCreature && isCreature(c) && colorOk(c)
   const matchesArtifact = (c) =>
     wantsArtifact && c.types?.includes('Artifact') && !(targetSlot.noncreature && c.types?.includes('Creature'))
 
@@ -366,7 +369,7 @@ export default function EnginePlayArea() {
       return
     }
     if (targeting) {
-      if (wantsCreature && isCreature(card)) addTarget({ kind: 'object', oid: card.oid })
+      if (matchesCreature(card)) addTarget({ kind: 'object', oid: card.oid })
       else if (wantsLand && isLand(card)) addTarget({ kind: 'object', oid: card.oid })
       else if (matchesArtifact(card)) addTarget({ kind: 'object', oid: card.oid })
       return
@@ -422,7 +425,7 @@ export default function EnginePlayArea() {
     if (card.blocking) cls.push('blk')
     if (ninjutsu && ninjutsu.returns.includes(card.oid)) cls.push('targetable')
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
-    if (targeting && wantsCreature && isCreature(card)) cls.push('targetable')
+    if (targeting && matchesCreature(card)) cls.push('targetable')
     if (targeting && wantsLand && isLand(card)) cls.push('targetable')
     if (targeting && matchesArtifact(card)) cls.push('targetable')
     if (needSac && controllerPid === pending.player && (cast.action.sacChoose.types || []).some((t) => card.types.includes(t)))
