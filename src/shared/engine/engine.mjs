@@ -524,11 +524,21 @@ export class GameEngine {
       // legal targets to be cast (601.2c); a normal slot needs one.
       const min = spec.min ?? 1
       const n = objectsIn(s, 'battlefield').filter(
-        (o) => this._specMatches(spec, o) && (!ctx || this._targetableBy(o, ctx.byPid, ctx.sourceColors))
+        (o) =>
+          this._specMatches(spec, o) &&
+          this._controllerMatches(spec, o, ctx) &&
+          (!ctx || this._targetableBy(o, ctx.byPid, ctx.sourceColors))
       ).length
       return n >= min
     }
     return true
+  }
+
+  // "target creature you control" / "an opponent controls" — matches the target's
+  // controller against the targeting player (from ctx.byPid). No restriction passes.
+  _controllerMatches(spec, o, ctx) {
+    if (!spec.controller || !ctx) return true
+    return spec.controller === 'you' ? o.controller === ctx.byPid : o.controller !== ctx.byPid
   }
 
   // Reject a target choice that names an untargetable permanent (rule 115.6).
@@ -1230,6 +1240,25 @@ export class GameEngine {
     computeChars(o)
   }
 
+  // Put a copy of a spell already on the stack (707.10). The copy shares the
+  // original's characteristics, targets, and any division; it's marked isCopy so it
+  // ceases to exist when it leaves the stack instead of going to a graveyard.
+  _copyStackSpell(orig, controller) {
+    const s = this.state
+    const copy = createObject(s, { name: orig.printed.name }, controller)
+    copy.printed = orig.printed
+    copy.behavior = orig.behavior
+    copy.spell = orig.spell
+    copy.chars = orig.chars
+    copy.cardId = orig.cardId
+    copy.targets = (orig.targets || []).map((t) => ({ ...t }))
+    if (orig.division) copy.division = [...orig.division]
+    copy.isCopy = true
+    copy.chosenModes = orig.chosenModes
+    copy.zoneName = 'stack'
+    zone(s, 'stack').push(copy.oid)
+  }
+
   _applyCopyEnter(pending, answer) {
     const s = this.state
     const o = s.objects[pending.oid]
@@ -1257,7 +1286,8 @@ export class GameEngine {
     this._resolveObject = null
     if (!ctx) return
     const o = s.objects[ctx.oid]
-    if (ctx.kind === 'ability') {
+    if (ctx.kind === 'ability' || o?.isCopy) {
+      // Abilities and copies of spells (707.10a) cease to exist on leaving the stack.
       const st = zone(s, 'stack')
       const i = st.indexOf(ctx.oid)
       if (i >= 0) st.splice(i, 1)
@@ -1733,6 +1763,37 @@ export class GameEngine {
         case 'createToken': {
           const def = e.token
           for (let i = 0; i < (e.count || 1); i++) this._createToken(def, source.controller)
+          break
+        }
+        case 'createTokenCopy': {
+          // "Create a token that's a copy of [target permanent]" (rule 707.2 / 111.4).
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield') {
+            for (let i = 0; i < (e.count || 1); i++) {
+              const tok = createObject(s, { name: t.obj.printed.name }, source.controller)
+              tok.token = true
+              this._applyCopy(tok, t.obj) // copy its copiable characteristics
+              tok.tokenDef = {
+                name: tok.printed.name,
+                types: tok.printed.types,
+                subtypes: tok.printed.subtypes,
+                colors: tok.printed.colors,
+                power: tok.printed.power,
+                toughness: tok.printed.toughness
+              }
+              tok.zoneName = 'battlefield'
+              s.zones.battlefield.push(tok.oid)
+              this._enterBattlefield(tok, source.controller)
+            }
+          }
+          break
+        }
+        case 'copySpell': {
+          // "Copy target instant or sorcery spell" (rule 707.10). The copy is put
+          // on the stack with the same targets; it's not created by casting.
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'stack' && t.obj.spell)
+            for (let i = 0; i < (e.count || 1); i++) this._copyStackSpell(t.obj, source.controller)
           break
         }
         case 'animate': {

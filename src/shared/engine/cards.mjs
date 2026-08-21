@@ -444,6 +444,21 @@ export const SAMPLE_CARDS = {
     keywords: ['Equip'],
     oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
   },
+  // Copy effects (rule 707): copy a spell on the stack; token that's a copy.
+  Twincast: {
+    name: 'Twincast',
+    mana_cost: '{U}{U}',
+    type_line: 'Instant',
+    colors: ['U'],
+    oracle_text: 'Copy target instant or sorcery spell. You may choose new targets for the copy.'
+  },
+  'Cackling Counterpart': {
+    name: 'Cackling Counterpart',
+    mana_cost: '{1}{U}{U}',
+    type_line: 'Instant',
+    colors: ['U'],
+    oracle_text: "Create a token that's a copy of target creature you control.\nFlashback {5}{U}{U}"
+  },
   // Divided damage / variable target count (rule 601.2c-d).
   'Forked Bolt': {
     name: 'Forked Bolt',

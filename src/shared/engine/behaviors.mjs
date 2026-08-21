@@ -753,6 +753,15 @@ export const BEHAVIORS = {
   'Drudge Skeletons': {
     activated: [{ cost: { mana: '{B}' }, effect: [{ op: 'regenerate', to: 'self' }] }]
   },
+  // Copy a spell on the stack (707.10): the copy shares targets and ceases to exist.
+  Twincast: {
+    spell: { targets: [{ type: 'spell' }], effect: [{ op: 'copySpell', to: 'target0' }] }
+  },
+  // Token that's a copy of a permanent (707.2): "a copy of target creature you control."
+  'Cackling Counterpart': {
+    spell: { targets: [{ type: 'creature', controller: 'you' }], effect: [{ op: 'createTokenCopy', to: 'target0' }] },
+    flashback: { cost: '{5}{U}{U}' }
+  },
   // Divided / variable-count targeting (601.2c-d): "2 damage divided as you choose
   // among one or two targets." One variadic slot (min/max) carries the division.
   'Forked Bolt': {

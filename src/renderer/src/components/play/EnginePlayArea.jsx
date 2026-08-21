@@ -221,8 +221,12 @@ export default function EnginePlayArea() {
     const prot = c.protections || []
     return prot.length > 0 && sourceColors.some((col) => prot.includes(col))
   }
+  // "target creature you control / an opponent controls" restricts by controller.
+  const controllerOk = (controllerPid) =>
+    !targetSlot?.controller ||
+    (targetSlot.controller === 'you' ? controllerPid === casterPid : controllerPid !== casterPid)
   const matchesCreature = (c, controllerPid) =>
-    wantsCreature && isCreature(c) && colorOk(c) && !untargetable(c, controllerPid)
+    wantsCreature && isCreature(c) && colorOk(c) && controllerOk(controllerPid) && !untargetable(c, controllerPid)
   const matchesArtifact = (c, controllerPid) =>
     wantsArtifact &&
     c.types?.includes('Artifact') &&

@@ -102,21 +102,23 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-faeries',
     name: 'Mono-Blue Faeries (sample)',
     description:
-      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu (swap in Ninja of the Deep Hours for an unblocked attacker), Snap (bounce + untap two lands for tempo), Ray of Command (steal a creature until end of turn — a layer-2 control effect), Clone (enter as a copy of any creature — a layer-1 copy effect) and Cryptic Command (a choose-two modal spell), plus counters and card selection.',
+      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu, Snap (tempo bounce), Ray of Command (a layer-2 control steal), Clone (enter as a copy — a layer-1 copy effect), Cryptic Command (a choose-two modal), and two more copy effects (rule 707): Twincast (copy a spell on the stack) and Cackling Counterpart (make a token copy of your creature).',
     cards: [
       [20, 'Island'],
       [4, 'Faerie Seer'], // 1/1 flying Faerie, ETB scry 2 — enabler + Spellstutter fuel
       [4, 'Spellstutter Sprite'], // flash 1/1 flying Faerie; ETB counters by Faerie count
       [4, 'Ninja of the Deep Hours'], // Ninjutsu {1}{U}; combat damage -> draw
-      [4, 'Wind Drake'], // 2/2 flying
-      [3, 'Snapping Drake'], // 3/2 flying
+      [3, 'Wind Drake'], // 2/2 flying
+      [2, 'Snapping Drake'], // 3/2 flying
       [4, 'Counterspell'],
       [4, 'Snap'], // bounce a creature, untap two lands — tempo
       [3, 'Ray of Command'], // layer 2: gain control of a creature until end of turn
       [2, 'Clone'], // layer 1: enter as a copy of any creature on the battlefield
       [2, 'Cryptic Command'], // modal: choose two of counter / bounce / tap-all / draw
-      [3, 'Preordain'],
-      [3, 'Serum Visions']
+      [2, 'Twincast'], // 707.10: copy target instant or sorcery spell on the stack
+      [2, 'Cackling Counterpart'], // 707.2: create a token that's a copy of your creature
+      [2, 'Preordain'],
+      [2, 'Serum Visions']
     ]
   },
   {
