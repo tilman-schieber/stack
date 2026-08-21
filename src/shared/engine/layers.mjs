@@ -72,6 +72,13 @@ export function recompute(state) {
   const bf = state.zones.battlefield.map((oid) => state.objects[oid])
   for (const o of bf) o.chars = baseChars(o)
 
+  // Face-down permanents (morph, rule 707.2) are a 2/2 creature with no name,
+  // types beyond Creature, colors, or abilities — their real card is hidden.
+  for (const o of bf) {
+    if (!o.faceDown) continue
+    o.chars = { name: '', types: ['Creature'], subtypes: [], supertypes: [], colors: [], keywords: [], protections: [], power: 2, toughness: 2 }
+  }
+
   // A bestowed permanent (Nyxborn Hydra cast for its Bestow cost) is an Aura, not a
   // creature, while it stays attached (702.103e) — it has no P/T of its own.
   for (const o of bf) {

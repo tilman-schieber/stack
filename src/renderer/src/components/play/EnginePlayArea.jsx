@@ -356,6 +356,8 @@ export default function EnginePlayArea() {
     else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: [] })
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: [] })
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: [] })
+    else if (a.type === 'castFaceDown') choose({ type: 'castFaceDown', oid: a.oid })
+    else if (a.type === 'turnFaceUp') choose({ type: 'turnFaceUp', oid: a.oid })
     else choose({ type: 'cast', oid: a.oid })
   }
   const startActivate = startAction
@@ -399,7 +401,7 @@ export default function EnginePlayArea() {
       const acts = pending.actions.filter(
         (a) =>
           a.oid === card.oid &&
-          ['cast', 'castBestow', 'castOmen', 'castFlashback', 'playLand', 'plot', 'ninjutsu'].includes(a.type)
+          ['cast', 'castBestow', 'castOmen', 'castFlashback', 'castFaceDown', 'playLand', 'plot', 'ninjutsu'].includes(a.type)
       )
       if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
@@ -438,8 +440,10 @@ export default function EnginePlayArea() {
     // Activate an ability of a permanent you control. If it has more than one
     // activatable ability (e.g. a planeswalker), pop a picker.
     if (kind === 'priority' && controllerPid === pending.player) {
-      const acts = pending.actions.filter((a) => a.type === 'activate' && a.oid === card.oid)
-      if (acts.length === 1) startActivate(acts[0])
+      const acts = pending.actions.filter(
+        (a) => (a.type === 'activate' || a.type === 'turnFaceUp') && a.oid === card.oid
+      )
+      if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
       return
     }

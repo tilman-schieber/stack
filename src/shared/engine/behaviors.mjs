@@ -841,6 +841,10 @@ export function loadBehavior(printed) {
   const ward = authored.ward || parseWard(printed.oracleText || '')
   // "This spell can't be countered." — a spell property read by the counter op.
   const uncounterable = authored.uncounterable || /can't be countered/i.test(printed.oracleText || '')
+  // Morph (702.37): "Morph {cost}" — may be cast face down as a 2/2 for {3}, then
+  // turned face up any time for its morph cost.
+  const morphMatch = (printed.oracleText || '').match(/morph\s*[—-]?\s*(\{[^}]+\})/i)
+  const morph = authored.morph || (morphMatch ? { cost: morphMatch[1] } : null)
 
   return {
     spell: authored.spell || null,
@@ -865,6 +869,7 @@ export function loadBehavior(printed) {
     uncounterable, // "This spell can't be countered."
     cantLose: authored.cantLose || false, // controller can't lose the game (Platinum Angel)
     permissions: authored.permissions || [], // "as though" grants, e.g. ['castAnySpeed']
+    morph: morph, // { cost } — cast face down as a 2/2 for {3}, turn up for the cost (702.37)
     staticRules: authored.staticRules || [], // rule-modifying statics (613.11): restrict / costMod
     ward: ward // { mana } or { life } — counter an opponent's spell/ability unless paid (702.21)
   }

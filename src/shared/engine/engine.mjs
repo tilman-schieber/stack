@@ -751,6 +751,9 @@ export class GameEngine {
           }
         }
       }
+      // Morph (702.37): cast the card face down as a 2/2 creature for {3}.
+      if (o.behavior?.morph && sorcerySpeed && this._canPay(pid, parseManaCost('{3}')))
+        actions.push({ type: 'castFaceDown', oid, label: `${p.name} (face down)` })
       // Omen / adventure: the alternate castable half (sorcery speed).
       const om = o.behavior?.omen
       if (om && sorcerySpeed && this._canPay(pid, parseManaCost(om.cost))) {
@@ -833,6 +836,10 @@ export class GameEngine {
     for (const oid of zone(s, 'battlefield')) {
       const o = s.objects[oid]
       if (o.controller !== pid) continue
+      // Turn a face-down permanent face up (702.37e) — a special action, any time
+      // you have priority, by paying its morph cost.
+      if (o.faceDown && o.behavior?.morph && this._canPay(pid, parseManaCost(o.behavior.morph.cost)))
+        actions.push({ type: 'turnFaceUp', oid, label: 'Turn face up' })
       ;(o.behavior?.activated || []).forEach((ab, i) => {
         if (ab.manaAbility) return // mana abilities are paid automatically
         if (!this._canActivate(pid, o, ab)) return
@@ -994,6 +1001,28 @@ export class GameEngine {
             this._grantPriorityTo(pid)
           })
         }
+        break
+      }
+      case 'castFaceDown': {
+        // Morph (702.37): cast the card face down as a 2/2 for {3}. It's a permanent
+        // (creature) spell with no revealed characteristics; it enters face down.
+        const o = s.objects[action.oid]
+        this._pay(pid, parseManaCost('{3}'))
+        o.xValue = 0
+        moveObject(s, action.oid, 'stack')
+        o.controller = pid
+        o.faceDown = true
+        o.spell = null // resolves as a permanent
+        this._countSpellCast(o) // it's still a spell cast (storm counts it)
+        break
+      }
+      case 'turnFaceUp': {
+        // Special action (702.37e): pay the morph cost to reveal the card.
+        const o = s.objects[action.oid]
+        this._pay(pid, parseManaCost(o.behavior.morph.cost))
+        o.faceDown = false
+        recompute(s)
+        this._fireTriggers('turnedFaceUp', o)
         break
       }
       case 'castBestow': {

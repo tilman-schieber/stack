@@ -6,6 +6,32 @@ import { zone } from './state.mjs'
 import { recompute } from './layers.mjs'
 
 function cardView(o) {
+  // A face-down permanent (morph) shows only as an anonymous 2/2 creature — its
+  // real card, colors, and abilities are hidden from both players.
+  if (o.faceDown) {
+    return {
+      oid: o.oid,
+      name: 'Face-down creature',
+      cardId: null,
+      token: false,
+      faceDown: true,
+      types: ['Creature'],
+      supertypes: [],
+      colors: [],
+      power: 2,
+      toughness: 2,
+      keywords: [],
+      protections: [],
+      tapped: !!o.status?.tapped,
+      summoningSick: !!o.status?.summoningSick,
+      attacking: !!o.status?.attacking,
+      blocked: !!o.status?.blocked,
+      blocking: o.status?.blocking || null,
+      damage: o.status?.damage || 0,
+      counters: o.status?.counters || {},
+      loyalty: null
+    }
+  }
   return {
     oid: o.oid,
     name: o.chars?.name || o.printed?.name || '',

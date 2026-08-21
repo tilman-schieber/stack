@@ -452,6 +452,16 @@ export const SAMPLE_CARDS = {
     colors: ['U'],
     oracle_text: 'Enchant land\nWhen this Aura enters, draw a card.\nEnchanted land is an Island.'
   },
+  // Morph / face-down permanents (rule 702.37).
+  'Patron of the Wild': {
+    name: 'Patron of the Wild',
+    mana_cost: '{G}',
+    type_line: 'Creature — Elf',
+    power: '1',
+    toughness: '1',
+    colors: ['G'],
+    oracle_text: 'Morph {2}{G} (You may cast this card face down as a 2/2 creature for {3}. Turn it face up any time for its morph cost.)'
+  },
   // "As though" permission (rule 118): cast any spell at instant speed.
   'Vedalken Orrery': {
     name: 'Vedalken Orrery',

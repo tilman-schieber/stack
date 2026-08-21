@@ -157,14 +157,15 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-green-stompy',
     name: 'Green Stompy (sample)',
     description:
-      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout (hexproof: opponents can\'t target it) and Tomakul Honor Guard (Ward {2}), and Great Sable Stag, which can\'t be countered.',
+      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout (hexproof: opponents can\'t target it) and Tomakul Honor Guard (Ward {2}), Great Sable Stag (can\'t be countered), and Patron of the Wild, a Morph creature you can cast face down as a 2/2 and later flip up.',
     cards: [
       [14, 'Forest'],
       [4, 'Llanowar Elves'],
       [2, 'Gladecover Scout'], // hexproof: can't be targeted by opponents (Bogles-style aura carrier)
       [2, 'Tomakul Honor Guard'], // ward {2}: opponents pay {2} or their spell/ability is countered
       [2, 'Great Sable Stag'], // "This spell can't be countered" + protection
-      [2, 'Grizzly Bears'],
+      [2, 'Patron of the Wild'], // Morph: cast face down as a 2/2, turn up for {2}{G}
+      [1, 'Grizzly Bears'],
       [3, 'Elvish Visionary'],
       [3, 'Servant of the Scale'],
       [3, 'Rumbling Baloth'],
