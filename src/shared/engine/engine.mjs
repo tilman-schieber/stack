@@ -687,7 +687,9 @@ export class GameEngine {
       }
       // Instants and cards with flash can be cast any time you have priority.
       const instantSpeed = p.types.includes('Instant') || p.keywords.includes('Flash')
-      const canCastNow = instantSpeed || sorcerySpeed
+      // "As though" permission (rule 118 / 601.3e): Vedalken Orrery lets you cast
+      // any spell as though it had flash — i.e. any time you have priority.
+      const canCastNow = instantSpeed || sorcerySpeed || this._hasPermission(pid, 'castAnySpeed')
       if (canCastNow) {
         const targets = this._spellTargets(o)
         // Untargetability context: this spell's caster + its colors, so hexproof/
@@ -2116,6 +2118,14 @@ export class GameEngine {
   // Does `pid` control a permanent that keeps them from losing (Platinum Angel)?
   _cantLose(pid) {
     return objectsIn(this.state, 'battlefield').some((o) => o.controller === pid && o.behavior?.cantLose)
+  }
+
+  // Does `pid` control a permanent granting a named "as though" permission (rule
+  // 118 / 609.4) — e.g. Vedalken Orrery's 'castAnySpeed'?
+  _hasPermission(pid, key) {
+    return objectsIn(this.state, 'battlefield').some(
+      (o) => o.controller === pid && o.behavior?.permissions?.includes(key)
+    )
   }
 
   // Largest X affordable for an X spell given current mana (X is generic).

@@ -119,6 +119,7 @@ export const EXAMPLE_DECKS = [
       [2, 'Cackling Counterpart'], // 707.2: create a token that's a copy of your creature
       [1, 'Time Walk'], // 720: take an extra turn after this one
       [2, 'Claustrophobia'], // aura: taps + doesn't untap (a can't-untap restriction)
+      [1, 'Vedalken Orrery'], // permission: cast spells as though they had flash
       [2, 'Preordain'],
       [1, 'Serum Visions']
     ]

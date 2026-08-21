@@ -753,6 +753,8 @@ export const BEHAVIORS = {
   'Drudge Skeletons': {
     activated: [{ cost: { mana: '{B}' }, effect: [{ op: 'regenerate', to: 'self' }] }]
   },
+  // "As though" permission: cast spells as though they had flash (rule 118).
+  'Vedalken Orrery': { permissions: ['castAnySpeed'] },
   // "This spell can't be countered." is auto-derived from oracle text; the
   // protections are parsed too, so Great Sable Stag needs no explicit behavior.
   // Aura: taps on entry and stops the creature untapping (a rule-modifier static).
@@ -855,6 +857,7 @@ export function loadBehavior(printed) {
     chooseOnEnter: authored.chooseOnEnter || null, // { kind } — "as this enters, choose a…" (614.12b)
     uncounterable, // "This spell can't be countered."
     cantLose: authored.cantLose || false, // controller can't lose the game (Platinum Angel)
+    permissions: authored.permissions || [], // "as though" grants, e.g. ['castAnySpeed']
     staticRules: authored.staticRules || [], // rule-modifying statics (613.11): restrict / costMod
     ward: ward // { mana } or { life } — counter an opponent's spell/ability unless paid (702.21)
   }

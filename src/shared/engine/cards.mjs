@@ -444,6 +444,14 @@ export const SAMPLE_CARDS = {
     keywords: ['Equip'],
     oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
   },
+  // "As though" permission (rule 118): cast any spell at instant speed.
+  'Vedalken Orrery': {
+    name: 'Vedalken Orrery',
+    mana_cost: '{4}',
+    type_line: 'Artifact',
+    colors: [],
+    oracle_text: 'You may cast spells as though they had flash.'
+  },
   // More rule modifiers: can't-be-countered, can't-untap, can't-lose.
   'Great Sable Stag': {
     name: 'Great Sable Stag',
