@@ -18,6 +18,7 @@ function cardView(o) {
     power: o.chars?.power ?? null,
     toughness: o.chars?.toughness ?? null,
     keywords: o.chars?.keywords || [],
+    protections: o.chars?.protections || [],
     tapped: !!o.status?.tapped,
     summoningSick: !!o.status?.summoningSick,
     attacking: !!o.status?.attacking,

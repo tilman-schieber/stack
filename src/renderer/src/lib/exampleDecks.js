@@ -123,12 +123,13 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-goblins',
     name: 'Goblins (sample)',
     description:
-      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger), Abrade (a choose-one modal spell), and Goblin Warchief, whose "Goblin spells cost {1} less" is a rule-modifying static (it changes what you may do, not any card\'s characteristics).',
+      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger), Abrade (a choose-one modal spell), Goblin Warchief, whose "Goblin spells cost {1} less" is a rule-modifying static, and Lightning Greaves, which grants shroud (nothing can target the equipped creature — not even you) and haste for equip {0}.',
     cards: [
       [14, 'Mountain'],
       [2, 'Mogg Fanatic'],
       [1, 'Chandra Nalaar'],
       [2, 'Goblin Warchief'], // static rule-modifier: Goblin spells cost {1} less; grants haste
+      [2, 'Lightning Greaves'], // grants shroud (untargetable by anyone) + haste; equip {0}
       [2, 'Raging Goblin'],
       [2, 'Goblin Piker'],
       [3, 'Boggart Brute'],
@@ -147,11 +148,13 @@ export const EXAMPLE_DECKS = [
   {
     slug: 'sample-green-stompy',
     name: 'Green Stompy (sample)',
-    description: 'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog.',
+    description:
+      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout, whose hexproof (an untargetability restriction) means opponents\' removal and even your own Rancor obey the rule: it can\'t be the target of spells your opponents control.',
     cards: [
       [14, 'Forest'],
       [4, 'Llanowar Elves'],
-      [3, 'Grizzly Bears'],
+      [2, 'Gladecover Scout'], // hexproof: can't be targeted by opponents (Bogles-style aura carrier)
+      [2, 'Grizzly Bears'],
       [3, 'Elvish Visionary'],
       [3, 'Servant of the Scale'],
       [3, 'Rumbling Baloth'],
@@ -166,7 +169,7 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-white-skies',
     name: 'White Skies (sample)',
     description:
-      'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers, with two replacement effects (Rhox Faithmender doubles life gained, Samite Healer prevents damage), Flickerwisp (a delayed-trigger blink), plus two rule-modifying statics: Pacifism ("enchanted creature can\'t attack or block") and Thalia, Guardian of Thraben (noncreature spells cost {1} more).',
+      'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers, with two replacement effects (Rhox Faithmender doubles life gained, Samite Healer prevents damage), Flickerwisp (a delayed-trigger blink), two rule-modifying statics — Pacifism ("enchanted creature can\'t attack or block") and Thalia, Guardian of Thraben (noncreature spells cost {1} more) — and White Knight, whose protection from black now also stops black removal (Doom Blade, Murder) from even targeting it, not just from blocking/damage.',
     cards: [
       [15, 'Plains'],
       [4, 'Soul Warden'],

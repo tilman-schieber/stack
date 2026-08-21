@@ -425,6 +425,25 @@ export const SAMPLE_CARDS = {
     keywords: ['First strike'],
     oracle_text: 'First strike\nNoncreature spells cost {1} more to cast.'
   },
+  // Untargetability (rule 702.11 hexproof / 702.18 shroud).
+  'Gladecover Scout': {
+    name: 'Gladecover Scout',
+    mana_cost: '{G}',
+    type_line: 'Creature — Elf Scout',
+    power: '1',
+    toughness: '1',
+    colors: ['G'],
+    keywords: ['Hexproof'],
+    oracle_text: 'Hexproof'
+  },
+  'Lightning Greaves': {
+    name: 'Lightning Greaves',
+    mana_cost: '{2}',
+    type_line: 'Artifact — Equipment',
+    colors: [],
+    keywords: ['Equip'],
+    oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
+  },
   // Delayed / phase-boundary trigger cards (rule 503/513/603.7).
   'Ball Lightning': {
     name: 'Ball Lightning',

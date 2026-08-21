@@ -148,6 +148,12 @@ export default function EnginePlayArea() {
   const defenderPid = view.activePlayer === 0 ? 1 : 0
   const actionFor = (oid) =>
     kind === 'priority' ? pending.actions?.find((a) => a.oid === oid) : null
+  // Find any card view by oid across every zone (used to read a casting spell's
+  // colors for protection-from-color targeting checks).
+  const cardByOid = (oid) =>
+    view.players
+      .flatMap((p) => [...p.hand, ...p.battlefield, ...p.graveyard, ...p.exile])
+      .find((c) => c.oid === oid)
 
   // Human-readable name of what new attackers will be sent at.
   const attackTargetName =
@@ -192,9 +198,26 @@ export default function EnginePlayArea() {
   // A creature target may carry a color restriction (Doom Blade: "nonblack").
   const colorOk = (c) => !targetSlot?.excludeColor || !c.colors?.includes(targetSlot.excludeColor)
   const wantsCreature = !!(targetSlot && (targetSlot.type === 'creature' || targetSlot.type === 'any'))
-  const matchesCreature = (c) => wantsCreature && isCreature(c) && colorOk(c)
-  const matchesArtifact = (c) =>
-    wantsArtifact && c.types?.includes('Artifact') && !(targetSlot.noncreature && c.types?.includes('Creature'))
+  // Untargetability (hexproof/shroud/protection): who is choosing, and the colors
+  // of the spell/ability doing the targeting, decide which permanents are illegal.
+  const casterPid = pending?.player
+  const sourceOid = cast ? cast.action.oid : engineTargeting ? pending.sourceOid : null
+  const sourceColors = (sourceOid != null ? cardByOid(sourceOid)?.colors : null) || []
+  const untargetable = (c, controllerPid) => {
+    const kw = c.keywords || []
+    if (kw.includes('Shroud')) return true
+    if (kw.includes('Hexproof') && controllerPid !== casterPid) return true
+    const prot = c.protections || []
+    return prot.length > 0 && sourceColors.some((col) => prot.includes(col))
+  }
+  const matchesCreature = (c, controllerPid) =>
+    wantsCreature && isCreature(c) && colorOk(c) && !untargetable(c, controllerPid)
+  const matchesArtifact = (c, controllerPid) =>
+    wantsArtifact &&
+    c.types?.includes('Artifact') &&
+    !(targetSlot.noncreature && c.types?.includes('Creature')) &&
+    !untargetable(c, controllerPid)
+  const matchesLand = (c, controllerPid) => wantsLand && isLand(c) && !untargetable(c, controllerPid)
 
   // Fire the assembled cast/activate (with its chosen targets and sacrifice).
   function finalizeCast(c, chosen) {
@@ -369,9 +392,9 @@ export default function EnginePlayArea() {
       return
     }
     if (targeting) {
-      if (matchesCreature(card)) addTarget({ kind: 'object', oid: card.oid })
-      else if (wantsLand && isLand(card)) addTarget({ kind: 'object', oid: card.oid })
-      else if (matchesArtifact(card)) addTarget({ kind: 'object', oid: card.oid })
+      if (matchesCreature(card, controllerPid)) addTarget({ kind: 'object', oid: card.oid })
+      else if (matchesLand(card, controllerPid)) addTarget({ kind: 'object', oid: card.oid })
+      else if (matchesArtifact(card, controllerPid)) addTarget({ kind: 'object', oid: card.oid })
       return
     }
     // Activate an ability of a permanent you control. If it has more than one
@@ -425,9 +448,9 @@ export default function EnginePlayArea() {
     if (card.blocking) cls.push('blk')
     if (ninjutsu && ninjutsu.returns.includes(card.oid)) cls.push('targetable')
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
-    if (targeting && matchesCreature(card)) cls.push('targetable')
-    if (targeting && wantsLand && isLand(card)) cls.push('targetable')
-    if (targeting && matchesArtifact(card)) cls.push('targetable')
+    if (targeting && matchesCreature(card, controllerPid)) cls.push('targetable')
+    if (targeting && matchesLand(card, controllerPid)) cls.push('targetable')
+    if (targeting && matchesArtifact(card, controllerPid)) cls.push('targetable')
     if (needSac && controllerPid === pending.player && (cast.action.sacChoose.types || []).some((t) => card.types.includes(t)))
       cls.push('targetable')
     if (kind === 'discardCards' && pending.orSacrificeLand && controllerPid === pending.player && isLand(card))

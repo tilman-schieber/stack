@@ -408,6 +408,8 @@ export class GameEngine {
   }
 
   _applyChooseTargets(pending, answer) {
+    const src = this.state.objects[pending.sourceOid]
+    this._assertTargetsLegal(answer?.targets, pending.player, src?.chars?.colors || src?.printed?.colors)
     this._placeTrigger(pending._trigger, answer?.targets || [])
     this._advanceTriggerPlacement() // continue with the rest of the queue
   }
@@ -489,14 +491,43 @@ export class GameEngine {
     return true
   }
 
-  // Is there at least one legal target for a target spec?
-  _legalTargetsExist(spec) {
+  // Untargetability (rules 702.11 hexproof, 702.18 shroud, 702.16e protection):
+  // can player `byPid`, with a source of colors `sourceColors`, target permanent
+  // `o` with a spell or ability? Shroud blocks everyone; hexproof blocks only the
+  // controller's opponents; protection from a color blocks a source of that color.
+  _targetableBy(o, byPid, sourceColors) {
+    const kw = o.chars?.keywords || []
+    if (kw.includes('Shroud')) return false
+    if (kw.includes('Hexproof') && byPid !== o.controller) return false
+    const prot = o.chars?.protections || []
+    if (prot.length && (sourceColors || []).some((c) => prot.includes(c))) return false
+    return true
+  }
+
+  // Is there at least one legal target for a target spec? When `ctx` ({ byPid,
+  // sourceColors }) is given, untargetable permanents (hexproof/shroud/protection)
+  // are excluded — so a spell whose only would-be targets are untargetable is not
+  // castable (rule 601.2c).
+  _legalTargetsExist(spec, ctx) {
     const s = this.state
     if (spec.type === 'player' || spec.type === 'any') return true
     if (spec.type === 'spell') return zone(s, 'stack').length > 0
     if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact')
-      return objectsIn(s, 'battlefield').some((o) => this._specMatches(spec, o))
+      return objectsIn(s, 'battlefield').some(
+        (o) => this._specMatches(spec, o) && (!ctx || this._targetableBy(o, ctx.byPid, ctx.sourceColors))
+      )
     return true
+  }
+
+  // Reject a target choice that names an untargetable permanent (rule 115.6).
+  // Object targets only; players/spells can't have hexproof/shroud in this pool.
+  _assertTargetsLegal(chosen, byPid, sourceColors) {
+    for (const t of chosen || []) {
+      if (t?.kind !== 'object') continue
+      const o = this.state.objects[t.oid]
+      if (o && !this._targetableBy(o, byPid, sourceColors))
+        throw new Error(`illegal target: ${o.chars?.name || o.printed?.name} can't be targeted`)
+    }
   }
 
   _resolvePriority(pending, answer) {
@@ -553,15 +584,18 @@ export class GameEngine {
       const canCastNow = instantSpeed || sorcerySpeed
       if (canCastNow) {
         const targets = this._spellTargets(o)
+        // Untargetability context: this spell's caster + its colors, so hexproof/
+        // shroud/protection exclude illegal would-be targets from the gate.
+        const ctx = { byPid: pid, sourceColors: p.colors }
         // A modal spell (rule 700.2) picks `count` of its modes on cast. It's
         // castable when at least `count` modes have a legal (or no) target.
         const modal = o.behavior.spell?.modal
         const modes = o.behavior.spell?.modes
-        const modeCastable = (m) => !m.targets?.length || m.targets.every((t) => this._legalTargetsExist(t))
+        const modeCastable = (m) => !m.targets?.length || m.targets.every((t) => this._legalTargetsExist(t, ctx))
         const modalOk = !modal || modes.filter(modeCastable).length >= (modal.count || 1)
         // A targeted spell needs a legal target to be cast (rule 601.2c). This
         // also gates counters (need a spell on the stack) and Auras (a creature).
-        const targetsOk = modalOk && (!targets.length || targets.every((t) => this._legalTargetsExist(t)))
+        const targetsOk = modalOk && (!targets.length || targets.every((t) => this._legalTargetsExist(t, ctx)))
         const addl = o.behavior.spell?.additionalCost
         const addlSacOk = !addl?.sacrifice || this._sacrificeCandidates(pid, addl.sacrifice).length > 0
         // A discard additional cost (Grab the Prize) needs that many *other* cards
@@ -609,7 +643,8 @@ export class GameEngine {
       const om = o.behavior?.omen
       if (om && sorcerySpeed && this._canPay(pid, parseManaCost(om.cost))) {
         const t = om.targets || []
-        if (!t.length || t.every((x) => this._legalTargetsExist(x)))
+        const octx = { byPid: pid, sourceColors: p.colors }
+        if (!t.length || t.every((x) => this._legalTargetsExist(x, octx)))
           actions.push({ type: 'castOmen', oid, label: om.name, targets: t, needsTargets: t.length })
       }
       // Bestow (702.103): cast the card as an Aura on a creature for its bestow cost.
@@ -618,7 +653,7 @@ export class GameEngine {
         const bcost = parseManaCost(bst.cost)
         const fixed = { ...bcost, X: 0 }
         const bx = bcost.X || 0
-        if (this._legalTargetsExist({ type: 'creature' }) && this._canPay(pid, fixed)) {
+        if (this._legalTargetsExist({ type: 'creature' }, { byPid: pid, sourceColors: p.colors }) && this._canPay(pid, fixed)) {
           const sources = this._manaSources(pid).length
           const fixedMV =
             (fixed.generic || 0) + fixed.W + fixed.U + fixed.B + fixed.R + fixed.G + fixed.C + (fixed.hybrid?.length || 0)
@@ -654,7 +689,8 @@ export class GameEngine {
       const o = s.objects[oid]
       if (!o.plotted || o.plottedTurn >= s.turnNumber || !sorcerySpeed) continue
       const targets = this._spellTargets(o)
-      if (targets.length && !targets.every((t) => this._legalTargetsExist(t))) continue
+      const pctx = { byPid: pid, sourceColors: o.printed.colors }
+      if (targets.length && !targets.every((t) => this._legalTargetsExist(t, pctx))) continue
       actions.push({
         type: 'castPlotted',
         oid,
@@ -676,7 +712,8 @@ export class GameEngine {
       if (fb.sacrifice && this._sacrificeCandidates(pid, fb.sacrifice).length < (fb.sacrifice.count || 1))
         continue
       const targets = this._spellTargets(o)
-      if (targets.length && !targets.every((t) => this._legalTargetsExist(t))) continue
+      const fctx = { byPid: pid, sourceColors: o.printed.colors }
+      if (targets.length && !targets.every((t) => this._legalTargetsExist(t, fctx))) continue
       actions.push({ type: 'castFlashback', oid, targets, needsTargets: targets.length })
     }
 
@@ -746,6 +783,16 @@ export class GameEngine {
 
   _performAction(pid, action) {
     const s = this.state
+    // Target legality is checked before any cost is paid (rule 601.2c): reject a
+    // choice that names an untargetable permanent (hexproof/shroud/protection)
+    // before committing mana. Covers every cast variant plus activated abilities;
+    // for an ability the source permanent supplies the colors, otherwise the card.
+    const actor = s.objects[action.oid]
+    if (actor) {
+      const chosen = [...(action.targets || []), ...(action.modeTargets || []).flat()]
+      const colors = action.type === 'activate' ? actor.chars?.colors || actor.printed.colors : actor.printed.colors
+      this._assertTargetsLegal(chosen, pid, colors)
+    }
     switch (action.type) {
       case 'playLand': {
         moveObject(s, action.oid, 'battlefield')
@@ -792,6 +839,7 @@ export class GameEngine {
           o.targets = action.targets || []
           o.spell = o.behavior.spell
         }
+        // Reject an untargetable choice (hexproof/shroud/protection) up front.
         this._countSpellCast(o)
         this._fireTriggers('castSpell', o) // prowess, storm, Guttersnipe etc.
         // A madness card discarded as a cost above is offered now, before priority
@@ -936,7 +984,10 @@ export class GameEngine {
         return false
     }
     if (ab.oncePerTurn && (o.status.abilityUsed || []).includes(ab)) return false
-    if (ab.targets?.length && !ab.targets.every((t) => this._legalTargetsExist(t))) return false
+    // The ability's source (the permanent `o`) supplies the colors for protection;
+    // its controller is `pid`, so hexproof only blocks it against opponents.
+    const actx = { byPid: pid, sourceColors: o.chars?.colors || o.printed.colors }
+    if (ab.targets?.length && !ab.targets.every((t) => this._legalTargetsExist(t, actx))) return false
     const cost = ab.cost || {}
     if (cost.tap) {
       if (o.status.tapped) return false

@@ -311,6 +311,20 @@ export const BEHAVIORS = {
       }
     ]
   },
+  // Equipment that grants shroud (702.18): the equipped creature can't be targeted
+  // by ANY spell or ability — including its controller's. A layer-6 keyword grant.
+  'Lightning Greaves': {
+    static: [{ affects: { scope: 'attached' }, grantKeywords: ['Haste', 'Shroud'] }],
+    activated: [
+      {
+        equip: true,
+        sorcerySpeed: true,
+        cost: {},
+        targets: [{ type: 'creature' }],
+        effect: [{ op: 'attach', to: 'target0' }]
+      }
+    ]
+  },
   // Token makers — art is resolved from Scryfall by the token's characteristics.
   'Dragon Fodder': {
     spell: {
