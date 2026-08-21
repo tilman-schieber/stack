@@ -753,6 +753,16 @@ export const BEHAVIORS = {
   'Drudge Skeletons': {
     activated: [{ cost: { mana: '{B}' }, effect: [{ op: 'regenerate', to: 'self' }] }]
   },
+  // "This spell can't be countered." is auto-derived from oracle text; the
+  // protections are parsed too, so Great Sable Stag needs no explicit behavior.
+  // Aura: taps on entry and stops the creature untapping (a rule-modifier static).
+  Claustrophobia: {
+    enchant: { type: 'creature' },
+    triggered: [{ trigger: { event: 'enters:battlefield', self: true }, effect: [{ op: 'tap', to: 'attached' }] }],
+    staticRules: [{ affects: { scope: 'attached' }, restrict: ['untap'] }]
+  },
+  // "You can't lose the game and your opponents can't win the game."
+  'Platinum Angel': { cantLose: true },
   // Extensible turn structure (rule 720 / 500-506).
   'Time Walk': { spell: { effect: [{ op: 'extraTurn' }] } },
   'Relentless Assault': { spell: { effect: [{ op: 'additionalCombat' }] } },
@@ -820,6 +830,8 @@ export function loadBehavior(printed) {
   // "Ward—Pay N life". The engine fires it in _checkWard when an opponent targets
   // this permanent.
   const ward = authored.ward || parseWard(printed.oracleText || '')
+  // "This spell can't be countered." — a spell property read by the counter op.
+  const uncounterable = authored.uncounterable || /can't be countered/i.test(printed.oracleText || '')
 
   return {
     spell: authored.spell || null,
@@ -841,6 +853,8 @@ export function loadBehavior(printed) {
     copyOnEnter: authored.copyOnEnter || null, // { except? } — "enter as a copy of…" (rule 614.12, layer 1)
     cda: authored.cda || null, // { count } — characteristic-defining P/T (rule 613 layer 7a)
     chooseOnEnter: authored.chooseOnEnter || null, // { kind } — "as this enters, choose a…" (614.12b)
+    uncounterable, // "This spell can't be countered."
+    cantLose: authored.cantLose || false, // controller can't lose the game (Platinum Angel)
     staticRules: authored.staticRules || [], // rule-modifying statics (613.11): restrict / costMod
     ward: ward // { mana } or { life } — counter an opponent's spell/ability unless paid (702.21)
   }

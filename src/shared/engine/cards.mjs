@@ -444,6 +444,34 @@ export const SAMPLE_CARDS = {
     keywords: ['Equip'],
     oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
   },
+  // More rule modifiers: can't-be-countered, can't-untap, can't-lose.
+  'Great Sable Stag': {
+    name: 'Great Sable Stag',
+    mana_cost: '{1}{G}{G}',
+    type_line: 'Creature — Elk',
+    power: '3',
+    toughness: '3',
+    colors: ['G'],
+    oracle_text: "This spell can't be countered.\nProtection from blue and from black"
+  },
+  Claustrophobia: {
+    name: 'Claustrophobia',
+    mana_cost: '{1}{U}{U}',
+    type_line: 'Enchantment — Aura',
+    colors: ['U'],
+    oracle_text:
+      "Enchant creature\nWhen this Aura enters, tap enchanted creature.\nEnchanted creature doesn't untap during its controller's untap step."
+  },
+  'Platinum Angel': {
+    name: 'Platinum Angel',
+    mana_cost: '{7}',
+    type_line: 'Artifact Creature — Angel',
+    power: '4',
+    toughness: '4',
+    colors: [],
+    keywords: ['Flying'],
+    oracle_text: "Flying\nYou can't lose the game and your opponents can't win the game."
+  },
   // Extra turns / additional combat (rule 720 / 500-506): extensible turn structure.
   'Time Walk': {
     name: 'Time Walk',

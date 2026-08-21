@@ -102,7 +102,7 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-faeries',
     name: 'Mono-Blue Faeries (sample)',
     description:
-      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu, Snap (tempo bounce), Ray of Command (a layer-2 control steal), Clone (enter as a copy — a layer-1 copy effect), Cryptic Command (a choose-two modal), and two more copy effects (rule 707): Twincast (copy a spell on the stack) and Cackling Counterpart (make a token copy of your creature).',
+      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu, Snap (tempo bounce), Ray of Command (a layer-2 control steal), Clone (enter as a copy — a layer-1 copy effect), Cryptic Command (a choose-two modal), and two more copy effects (rule 707): Twincast (copy a spell on the stack) and Cackling Counterpart (token copy), an extra turn (Time Walk), and Claustrophobia (taps a creature and stops it untapping).',
     cards: [
       [20, 'Island'],
       [4, 'Faerie Seer'], // 1/1 flying Faerie, ETB scry 2 — enabler + Spellstutter fuel
@@ -118,6 +118,7 @@ export const EXAMPLE_DECKS = [
       [2, 'Twincast'], // 707.10: copy target instant or sorcery spell on the stack
       [2, 'Cackling Counterpart'], // 707.2: create a token that's a copy of your creature
       [1, 'Time Walk'], // 720: take an extra turn after this one
+      [2, 'Claustrophobia'], // aura: taps + doesn't untap (a can't-untap restriction)
       [2, 'Preordain'],
       [1, 'Serum Visions']
     ]
@@ -155,12 +156,13 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-green-stompy',
     name: 'Green Stompy (sample)',
     description:
-      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout (hexproof: opponents can\'t target it) and Tomakul Honor Guard, whose Ward {2} forces an opponent to pay {2} or have their removal countered.',
+      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout (hexproof: opponents can\'t target it) and Tomakul Honor Guard (Ward {2}), and Great Sable Stag, which can\'t be countered.',
     cards: [
       [14, 'Forest'],
       [4, 'Llanowar Elves'],
       [2, 'Gladecover Scout'], // hexproof: can't be targeted by opponents (Bogles-style aura carrier)
       [2, 'Tomakul Honor Guard'], // ward {2}: opponents pay {2} or their spell/ability is countered
+      [2, 'Great Sable Stag'], // "This spell can't be countered" + protection
       [2, 'Grizzly Bears'],
       [3, 'Elvish Visionary'],
       [3, 'Servant of the Scale'],
@@ -196,11 +198,12 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-black-midrange',
     name: 'Black Midrange (sample)',
     description:
-      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger), Nightmare (a */* whose P/T equals the Swamps you control — a characteristic-defining P/T, layer 7a), Aphotic Wisps (turn a creature black — a layer-5 color change that also dodges Doom Blade’s “nonblack”), and Drudge Skeletons, whose "{B}: Regenerate" sets up a shield that replaces the next destruction (a replacement effect).',
+      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger), Nightmare (a */* whose P/T equals the Swamps you control — a characteristic-defining P/T, layer 7a), Aphotic Wisps (a layer-5 color change), Drudge Skeletons ({B}: Regenerate — a replacement shield), and Platinum Angel (you can\'t lose the game while it\'s out).',
     cards: [
       [16, 'Swamp'],
       [2, 'Walking Corpse'],
       [2, 'Drudge Skeletons'], // {B}: Regenerate — a regeneration replacement shield
+      [1, 'Platinum Angel'], // you can't lose the game while it's out
       [4, 'Typhoid Rats'],
       [4, 'Vampire Nighthawk'],
       [2, 'Blood Artist'],

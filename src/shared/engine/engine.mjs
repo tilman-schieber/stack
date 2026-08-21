@@ -228,7 +228,8 @@ export class GameEngine {
         for (const o of objectsIn(s, 'battlefield')) {
           o.status.attackedThisTurn = false // reset for every creature each turn
           if (o.controller === s.activePlayer) {
-            o.status.tapped = false
+            // "Doesn't untap during its controller's untap step" (Claustrophobia).
+            if (!this._restricted(o, 'untap')) o.status.tapped = false
             o.status.summoningSick = false
             o.status.loyaltyUsed = false // a planeswalker may act again this turn
             o.status.abilityUsed = [] // once-per-turn abilities reset
@@ -624,6 +625,7 @@ export class GameEngine {
     const s = this.state
     const o = s.objects[oid]
     if (!o) return
+    if (o.behavior?.uncounterable && o.kind !== 'ability') return // "can't be countered"
     if (o.kind === 'ability') {
       const st = zone(s, 'stack')
       const i = st.indexOf(oid)
@@ -1703,6 +1705,11 @@ export class GameEngine {
           }
           break
         }
+        case 'tap': {
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield') t.obj.status.tapped = true
+          break
+        }
         case 'addCounter': {
           // Put counters on a permanent (e.g. Writhing Chrysalis growing itself).
           const t = this._resolveTargetRef(source, e.to)
@@ -1719,6 +1726,7 @@ export class GameEngine {
           if (t?.kind === 'object' && t.obj.zoneName === 'stack') {
             if (e.maxMv === 'faeries' && (t.obj.printed.manaValue || 0) > this._faerieCount(source.controller))
               break
+            if (t.obj.behavior?.uncounterable) break // "This spell can't be countered."
             moveObject(s, t.obj.oid, 'graveyard')
           }
           break
@@ -1987,6 +1995,12 @@ export class GameEngine {
       const obj = this.state.objects[source.sourceOid]
       return obj ? { kind: 'object', obj } : null
     }
+    // 'attached' — the permanent the source (an Aura/Equipment) is attached to.
+    if (ref === 'attached') {
+      const src = this.state.objects[source.sourceOid]
+      const obj = src && this.state.objects[src.status?.attachedTo]
+      return obj ? { kind: 'object', obj } : null
+    }
     if (!ref?.startsWith?.('target')) return null
     const idx = Number(ref.slice('target'.length))
     const t = source.targets?.[idx]
@@ -2091,12 +2105,17 @@ export class GameEngine {
     return true
   }
 
-  // Is creature `o` forbidden from attacking / blocking by an active rule-modifier
-  // (Pacifism, etc.)? `action` is 'attack' or 'block'.
+  // Is creature `o` forbidden from attacking / blocking / untapping by an active
+  // rule-modifier (Pacifism, Claustrophobia)? `action` is 'attack'|'block'|'untap'.
   _restricted(o, action) {
     for (const { source, mod } of this._ruleMods())
       if (mod.restrict?.includes(action) && matchStatic(mod.affects, source, o)) return true
     return false
+  }
+
+  // Does `pid` control a permanent that keeps them from losing (Platinum Angel)?
+  _cantLose(pid) {
+    return objectsIn(this.state, 'battlefield').some((o) => o.controller === pid && o.behavior?.cantLose)
   }
 
   // Largest X affordable for an X spell given current mana (X is generic).
@@ -2465,7 +2484,10 @@ export class GameEngine {
       repeat = false
       recompute(s) // fresh characteristics (layers) before checking SBAs
       for (const p of s.players) {
-        if ((p.life <= 0 || p.loses) && s.winner == null) {
+        // "You can't lose the game and your opponents can't win" (Platinum Angel):
+        // a player who controls such a permanent doesn't lose to SBAs, and since
+        // the opponent can't win off that, no winner is set.
+        if ((p.life <= 0 || p.loses) && s.winner == null && !this._cantLose(p.id)) {
           s.winner = this._otherPlayer(p.id)
         }
       }
