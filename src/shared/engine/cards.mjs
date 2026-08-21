@@ -444,6 +444,16 @@ export const SAMPLE_CARDS = {
     keywords: ['Equip'],
     oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
   },
+  // Regeneration (701.15): {cost}: set up a shield that replaces the next destroy.
+  'Drudge Skeletons': {
+    name: 'Drudge Skeletons',
+    mana_cost: '{1}{B}',
+    type_line: 'Creature — Skeleton',
+    power: '1',
+    toughness: '1',
+    colors: ['B'],
+    oracle_text: '{B}: Regenerate this creature.'
+  },
   // Ward (702.21): counter an opponent's spell/ability targeting this unless paid.
   'Tomakul Honor Guard': {
     name: 'Tomakul Honor Guard',

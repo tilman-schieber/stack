@@ -748,6 +748,11 @@ export const BEHAVIORS = {
       { trigger: { event: 'dealsCombatDamageToPlayer', self: true }, effect: [{ op: 'draw', amount: 1 }] }
     ]
   },
+  // Regeneration: "{B}: Regenerate this creature." Sets up a shield (615.4) that
+  // replaces the next destruction this turn.
+  'Drudge Skeletons': {
+    activated: [{ cost: { mana: '{B}' }, effect: [{ op: 'regenerate', to: 'self' }] }]
+  },
   // Recursion: when you draw your third card in a turn, return this from your
   // graveyard to the battlefield tapped. (It's never hard-cast in mono-red.)
   'Sneaky Snacker': { returnOnThirdDraw: true },

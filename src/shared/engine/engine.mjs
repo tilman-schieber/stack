@@ -320,6 +320,7 @@ export class GameEngine {
     for (const o of objectsIn(s, 'battlefield')) {
       o.status.damage = 0
       o.status.markedDeath = false
+      o.status.regenShields = 0 // unused regeneration shields wear off (514.2)
     }
     // Control-changing effects ending: control reverts to the previous controller
     // (rule 613/514.2) before the effect is removed — e.g. Act of Treason.
@@ -1518,7 +1519,15 @@ export class GameEngine {
         case 'destroy': {
           const t = this._resolveTargetRef(source, e.to)
           if (t?.kind === 'object' && t.obj.zoneName === 'battlefield' && !this._hasKW(t.obj, 'Indestructible'))
-            this._bury(t.obj)
+            if (!this._tryRegenerate(t.obj)) this._bury(t.obj) // a regen shield replaces the destruction
+          break
+        }
+        case 'regenerate': {
+          // "Regenerate [creature]" sets up a replacement shield (615.4) for the
+          // rest of the turn; the shield is consumed the next time it's destroyed.
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield')
+            t.obj.status.regenShields = (t.obj.status.regenShields || 0) + 1
           break
         }
         case 'bounce': {
@@ -2298,10 +2307,14 @@ export class GameEngine {
         // does not save it); lethal/deathtouch damage is destruction (it does).
         const destroyed =
           (o.status.damage >= tough || o.status.markedDeath) && !this._hasKW(o, 'Indestructible')
-        if (tough <= 0 || destroyed) {
+        if (tough <= 0) {
+          this._bury(o) // 0 toughness: regeneration does not save it
+          repeat = true
+        } else if (destroyed) {
           // Fire dies triggers while the creature is still on the battlefield
-          // (leaves-the-battlefield abilities "look back in time").
-          this._bury(o)
+          // (leaves-the-battlefield abilities "look back in time"). A regeneration
+          // shield replaces the destruction instead.
+          if (!this._tryRegenerate(o)) this._bury(o)
           repeat = true
         }
       }
@@ -2512,6 +2525,27 @@ export class GameEngine {
   // A permanent leaving the battlefield for the graveyard (death/destroy).
   _bury(o) {
     this._relocate(o, 'graveyard')
+  }
+
+  // Regeneration (701.15 / 614.8): if `o` has a regeneration shield, consume it to
+  // replace a destruction — remove all damage, tap it, and pull it out of combat —
+  // instead of putting it in the graveyard. Returns true if a shield was used.
+  _tryRegenerate(o) {
+    if ((o.status.regenShields || 0) <= 0) return false
+    o.status.regenShields--
+    o.status.damage = 0
+    o.status.markedDeath = false
+    o.status.tapped = true
+    o.status.attacking = false
+    o.status.attackingTarget = null
+    o.status.blocked = false
+    o.status.blocking = null
+    const c = this.state.combat
+    if (c) {
+      c.attackers = c.attackers.filter((a) => a !== o.oid)
+      delete c.blocks[o.oid]
+    }
+    return true
   }
 
   // A permanent sacrificed (as a cost or effect). Distinct from destroy/other

@@ -190,10 +190,11 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-black-midrange',
     name: 'Black Midrange (sample)',
     description:
-      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger), Nightmare (a */* whose P/T equals the Swamps you control — a characteristic-defining P/T, layer 7a), and Aphotic Wisps (turn a creature black — a layer-5 color change that also dodges Doom Blade’s “nonblack”).',
+      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger), Nightmare (a */* whose P/T equals the Swamps you control — a characteristic-defining P/T, layer 7a), Aphotic Wisps (turn a creature black — a layer-5 color change that also dodges Doom Blade’s “nonblack”), and Drudge Skeletons, whose "{B}: Regenerate" sets up a shield that replaces the next destruction (a replacement effect).',
     cards: [
       [16, 'Swamp'],
       [2, 'Walking Corpse'],
+      [2, 'Drudge Skeletons'], // {B}: Regenerate — a regeneration replacement shield
       [4, 'Typhoid Rats'],
       [4, 'Vampire Nighthawk'],
       [2, 'Blood Artist'],
