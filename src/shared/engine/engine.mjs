@@ -397,10 +397,11 @@ export class GameEngine {
   // _applyChooseTargets. When the queue is empty, grants priority.
   _advanceTriggerPlacement() {
     const s = this.state
-    // APNAP: active player's triggers first (they end up lowest on the stack).
-    s.pendingTriggers.sort(
-      (a, b) => (a.controller === s.activePlayer ? 0 : 1) - (b.controller === s.activePlayer ? 0 : 1)
-    )
+    // APNAP (rule 603.3b): order triggers by seat starting from the active player,
+    // so the active player's go on the stack first (lowest). Stable within a seat.
+    const n = s.players.length
+    const rank = (pid) => (pid - s.activePlayer + n) % n
+    s.pendingTriggers.sort((a, b) => rank(a.controller) - rank(b.controller))
     while (s.pendingTriggers.length) {
       const t = s.pendingTriggers.shift()
       const spec = t.targetSpec || []
@@ -2430,7 +2431,6 @@ export class GameEngine {
 
   _combatDamagePass(pass) {
     const s = this.state
-    const def = this._defendingPlayer()
     const onBf = (oid) => s.objects[oid] && s.objects[oid].zoneName === 'battlefield'
 
     // Attackers deal damage.
