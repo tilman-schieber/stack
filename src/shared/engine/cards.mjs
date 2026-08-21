@@ -444,6 +444,17 @@ export const SAMPLE_CARDS = {
     keywords: ['Equip'],
     oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
   },
+  // Choose-and-remember on entry (rule 614.12b): a value chosen as it enters.
+  'Adaptive Automaton': {
+    name: 'Adaptive Automaton',
+    mana_cost: '{3}',
+    type_line: 'Artifact Creature — Construct',
+    power: '2',
+    toughness: '2',
+    colors: [],
+    oracle_text:
+      'As this creature enters, choose a creature type.\nThis creature is the chosen type in addition to its other types.\nOther creatures you control of the chosen type get +1/+1.'
+  },
   // Copy effects (rule 707): copy a spell on the stack; token that's a copy.
   Twincast: {
     name: 'Twincast',

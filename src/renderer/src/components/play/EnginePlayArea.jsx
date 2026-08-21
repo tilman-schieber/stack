@@ -1025,6 +1025,29 @@ function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, 
         </button>
       </>
     )
+  } else if (kind === 'chooseValue') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — {pending.label}:
+        </span>
+        <select
+          defaultValue={pending.options[0]}
+          onChange={(ev) => {
+            if (ev.target.value) choose({ value: ev.target.value })
+          }}
+        >
+          {pending.options.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+        <button className="primary" onClick={() => choose({ value: pending.options[0] })}>
+          Choose
+        </button>
+      </>
+    )
   } else if (kind === 'mayPay') {
     body = (
       <>

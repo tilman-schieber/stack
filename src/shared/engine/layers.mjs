@@ -42,6 +42,9 @@ export function matchStatic(affects, source, o) {
   if (affects.controller === 'you' && o.controller !== source.controller) return false
   if (affects.controller === 'opponent' && o.controller === source.controller) return false
   if (affects.subtype && !o.chars.subtypes.includes(affects.subtype)) return false
+  // "…of the chosen type" (Adaptive Automaton): match the value chosen as the
+  // source entered (source.chosen). Until a value is chosen, nothing matches.
+  if (affects.chosenSubtype && !(source.chosen && o.chars.subtypes.includes(source.chosen))) return false
   return true
 }
 

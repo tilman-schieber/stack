@@ -125,13 +125,14 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-goblins',
     name: 'Goblins (sample)',
     description:
-      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger), Abrade (a choose-one modal spell), Goblin Warchief, whose "Goblin spells cost {1} less" is a rule-modifying static, and Lightning Greaves, which grants shroud (nothing can target the equipped creature — not even you) and haste for equip {0}.',
+      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger), Abrade (a choose-one modal spell), Goblin Warchief, whose "Goblin spells cost {1} less" is a rule-modifying static, Lightning Greaves, which grants shroud (nothing can target the equipped creature — not even you) and haste for equip {0}, and Adaptive Automaton, which remembers a creature type chosen as it enters and pumps that type.',
     cards: [
       [14, 'Mountain'],
       [2, 'Mogg Fanatic'],
       [1, 'Chandra Nalaar'],
       [2, 'Goblin Warchief'], // static rule-modifier: Goblin spells cost {1} less; grants haste
       [2, 'Lightning Greaves'], // grants shroud (untargetable by anyone) + haste; equip {0}
+      [2, 'Adaptive Automaton'], // as it enters, choose a type (Goblin) -> that type gets +1/+1
       [2, 'Raging Goblin'],
       [2, 'Goblin Piker'],
       [3, 'Boggart Brute'],

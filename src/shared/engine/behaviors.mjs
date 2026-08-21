@@ -753,6 +753,17 @@ export const BEHAVIORS = {
   'Drudge Skeletons': {
     activated: [{ cost: { mana: '{B}' }, effect: [{ op: 'regenerate', to: 'self' }] }]
   },
+  // Choose-and-remember on entry: "As this enters, choose a creature type." The
+  // chosen type is stored on o.chosen; the lord static reads it via chosenSubtype.
+  'Adaptive Automaton': {
+    chooseOnEnter: { kind: 'creatureType', label: 'Choose a creature type' },
+    static: [
+      {
+        affects: { scope: 'creatures', controller: 'you', another: true, chosenSubtype: true },
+        modifyPT: { power: 1, toughness: 1 }
+      }
+    ]
+  },
   // Copy a spell on the stack (707.10): the copy shares targets and ceases to exist.
   Twincast: {
     spell: { targets: [{ type: 'spell' }], effect: [{ op: 'copySpell', to: 'target0' }] }
@@ -826,6 +837,7 @@ export function loadBehavior(printed) {
     bestow: authored.bestow || null, // { cost } — alternate cast as an Aura (702.103)
     copyOnEnter: authored.copyOnEnter || null, // { except? } — "enter as a copy of…" (rule 614.12, layer 1)
     cda: authored.cda || null, // { count } — characteristic-defining P/T (rule 613 layer 7a)
+    chooseOnEnter: authored.chooseOnEnter || null, // { kind } — "as this enters, choose a…" (614.12b)
     staticRules: authored.staticRules || [], // rule-modifying statics (613.11): restrict / costMod
     ward: ward // { mana } or { life } — counter an opponent's spell/ability unless paid (702.21)
   }

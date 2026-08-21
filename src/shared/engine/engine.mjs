@@ -198,6 +198,9 @@ export class GameEngine {
         case 'copyEnter':
           this._applyCopyEnter(pending, answer)
           break
+        case 'chooseValue':
+          this._applyChooseValue(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -1192,6 +1195,20 @@ export class GameEngine {
         s.pending = { kind: 'copyEnter', oid, player: o.controller ?? o.owner, choices, optional: true }
         return
       }
+      // "As this enters, choose a [value]" (rule 614.12b): a remembered value that
+      // the permanent's own abilities read (Adaptive Automaton's chosen type).
+      const ch = o.behavior?.chooseOnEnter
+      if (ch && o.chosen == null) {
+        s.pending = {
+          kind: 'chooseValue',
+          oid,
+          player: o.controller ?? o.owner,
+          kindOfChoice: ch.kind,
+          options: this._chooseOptions(ch),
+          label: ch.label || 'Choose a creature type'
+        }
+        return
+      }
       moveObject(s, oid, 'battlefield')
       this._enterBattlefield(o, o.controller ?? o.owner)
     } else {
@@ -1266,6 +1283,26 @@ export class GameEngine {
       const src = s.objects[answer.copy]
       if (src && pending.choices.includes(answer.copy)) this._applyCopy(o, src)
     }
+    moveObject(s, pending.oid, 'battlefield')
+    this._enterBattlefield(o, o.controller ?? o.owner)
+    if (!this._resume) this._grantPriorityTo(s.activePlayer)
+  }
+
+  // The options for an "as this enters, choose…" decision. For a creature type,
+  // a common list plus every subtype already present in the game.
+  _chooseOptions(ch) {
+    if (ch.options) return [...ch.options]
+    if (ch.kind === 'color') return ['W', 'U', 'B', 'R', 'G']
+    const common = ['Goblin', 'Elf', 'Human', 'Zombie', 'Faerie', 'Soldier', 'Wizard', 'Warrior', 'Beast', 'Dragon', 'Angel', 'Vampire', 'Skeleton', 'Knight', 'Cleric']
+    const present = new Set(common)
+    for (const o of objectsIn(this.state, 'battlefield')) for (const st of o.chars?.subtypes || []) present.add(st)
+    return [...present]
+  }
+
+  _applyChooseValue(pending, answer) {
+    const s = this.state
+    const o = s.objects[pending.oid]
+    o.chosen = pending.options.includes(answer?.value) ? answer.value : pending.options[0]
     moveObject(s, pending.oid, 'battlefield')
     this._enterBattlefield(o, o.controller ?? o.owner)
     if (!this._resume) this._grantPriorityTo(s.activePlayer)
