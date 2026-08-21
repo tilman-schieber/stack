@@ -277,14 +277,14 @@ export class GameEngine {
         break
       }
       case 'declareBlockers': {
-        const def = this._defendingPlayer()
-        const eligible = this._eligibleBlockers(def)
-        s.pending = {
-          kind: 'declareBlockers',
-          player: def,
-          eligible,
-          attackers: s.combat.attackers
+        // Each attacked opponent declares blockers in turn (multiplayer).
+        s.combat.blocks = s.combat.blocks || {}
+        s.combat.blockQueue = this._blockingPlayers()
+        if (s.combat.blockQueue.length === 0) {
+          this._grantPriority()
+          break
         }
+        this._presentBlockers()
         break
       }
       case 'combatDamage': {
@@ -641,7 +641,9 @@ export class GameEngine {
     const action = answer || { type: 'pass' }
     if (action.type === 'pass') {
       s.prio.passCount++
-      if (s.prio.passCount >= s.players.length) {
+      // The stack resolves (or the step ends) once every player still in the game
+      // has passed in succession (rule 117.4).
+      if (s.prio.passCount >= this._activeCount()) {
         if (zone(s, 'stack').length > 0) {
           this._resolveTop()
           // Active player receives priority after a stack object resolves — unless
@@ -1664,7 +1666,7 @@ export class GameEngine {
           if (e.condition === 'discardedNonland' && !source._discardedNonland) break
           const amt = this._amount(source, e.amount)
           for (const p of s.players)
-            if (p.id !== source.controller) this._dealDamage(source, { player: p.id }, amt)
+            if (p.id !== source.controller && !p.hasLost) this._dealDamage(source, { player: p.id }, amt)
           break
         }
         case 'returnSelfTapped': {
@@ -2247,17 +2249,42 @@ export class GameEngine {
     return this._otherPlayer(this.state.activePlayer)
   }
 
-  // Legal things an attacker may be declared against: the defending player and
-  // each planeswalker they control.
+  // Legal things an attacker may be declared against: each opponent still in the
+  // game and each planeswalker they control (multiplayer, rule 506.2).
   _attackDefenders() {
     const s = this.state
-    const def = this._defendingPlayer()
-    const out = [{ kind: 'player', pid: def, name: s.players[def].name }]
-    for (const o of objectsIn(s, 'battlefield')) {
-      if (o.controller === def && o.chars.types.includes('Planeswalker'))
-        out.push({ kind: 'planeswalker', oid: o.oid, name: o.chars.name, loyalty: o.status.counters.loyalty })
+    const out = []
+    for (const pid of this._opponentsOf(s.activePlayer)) {
+      out.push({ kind: 'player', pid, name: s.players[pid].name })
+      for (const o of objectsIn(s, 'battlefield'))
+        if (o.controller === pid && o.chars.types.includes('Planeswalker'))
+          out.push({ kind: 'planeswalker', oid: o.oid, name: o.chars.name, loyalty: o.status.counters.loyalty })
     }
     return out
+  }
+
+  // The player defending against a given attacker (the attacked player, or the
+  // controller of the attacked planeswalker).
+  _defenderOfAttacker(a) {
+    const t = a.status.attackingTarget
+    if (t?.planeswalker) return this.state.objects[t.planeswalker]?.controller
+    return t?.player
+  }
+
+  // Distinct opponents currently being attacked — each declares its own blockers.
+  _blockingPlayers() {
+    const s = this.state
+    const set = new Set()
+    for (const oid of s.combat.attackers) set.add(this._defenderOfAttacker(s.objects[oid]))
+    return [...set].filter((pid) => pid != null && !s.players[pid]?.hasLost)
+  }
+
+  // Present the next queued defender with the attackers aimed at them.
+  _presentBlockers() {
+    const s = this.state
+    const def = s.combat.blockQueue.shift()
+    const attackers = s.combat.attackers.filter((oid) => this._defenderOfAttacker(s.objects[oid]) === def)
+    s.pending = { kind: 'declareBlockers', player: def, eligible: this._eligibleBlockers(def), attackers }
   }
 
   // Resolve an attacker's declared target into a _dealDamage target.
@@ -2311,12 +2338,15 @@ export class GameEngine {
         throw new Error('illegal block: menace must be blocked by two or more creatures')
     }
 
-    s.combat.blocks = blocks
+    // Merge this defender's blocks into the combat (other defenders add theirs).
+    Object.assign((s.combat.blocks ||= {}), blocks)
     for (const [blockerOid, attackerOid] of Object.entries(blocks)) {
       s.objects[blockerOid].status.blocking = attackerOid
       s.objects[attackerOid].status.blocked = true // stays blocked even if blockers leave
     }
-    this._grantPriority()
+    // Move on to the next attacked opponent, or finish blocking.
+    if (s.combat.blockQueue && s.combat.blockQueue.length) this._presentBlockers()
+    else this._grantPriority()
   }
 
   // Combat damage. If any combatant has first/double strike we run two passes
@@ -2524,11 +2554,17 @@ export class GameEngine {
       recompute(s) // fresh characteristics (layers) before checking SBAs
       for (const p of s.players) {
         // "You can't lose the game and your opponents can't win" (Platinum Angel):
-        // a player who controls such a permanent doesn't lose to SBAs, and since
-        // the opponent can't win off that, no winner is set.
-        if ((p.life <= 0 || p.loses) && s.winner == null && !this._cantLose(p.id)) {
-          s.winner = this._otherPlayer(p.id)
+        // such a player doesn't lose to SBAs.
+        if (p.hasLost || this._cantLose(p.id)) continue
+        if (p.life <= 0 || p.loses) {
+          this._eliminate(p) // leaves the game (rule 800.4); repeats SBAs
+          repeat = true
         }
+      }
+      // The game ends when one player remains (or everyone left is protected).
+      if (s.winner == null) {
+        const alive = s.players.filter((p) => !p.hasLost)
+        if (alive.length === 1 && s.players.length > 1) s.winner = alive[0].id
       }
       // A planeswalker with no loyalty is put into its owner's graveyard (704.5i).
       for (const o of objectsIn(s, 'battlefield')) {
@@ -2840,8 +2876,45 @@ export class GameEngine {
     }
   }
 
+  // The next still-in-the-game player in seat order (rule 802). For a two-player
+  // game this is simply the opponent; kept named _otherPlayer for its many callers.
   _otherPlayer(pid) {
-    return pid === 0 ? 1 : 0
+    return this._nextInSeat(pid)
+  }
+
+  _nextInSeat(pid) {
+    const n = this.state.players.length
+    for (let i = 1; i <= n; i++) {
+      const cand = (pid + i) % n
+      if (!this.state.players[cand].hasLost) return cand
+    }
+    return pid
+  }
+
+  // All players other than `pid` who are still in the game.
+  _opponentsOf(pid) {
+    return this.state.players.filter((p) => p.id !== pid && !p.hasLost).map((p) => p.id)
+  }
+
+  _activeCount() {
+    return this.state.players.filter((p) => !p.hasLost).length
+  }
+
+  // A player leaves the game (rule 800.4): mark them out and remove the objects
+  // they own from the battlefield and stack. The turn/priority helpers skip them.
+  _eliminate(p) {
+    const s = this.state
+    p.hasLost = true
+    for (const key of ['battlefield', 'stack']) {
+      s.zones[key] = s.zones[key].filter((oid) => {
+        const o = s.objects[oid]
+        if (o && o.owner === p.id) {
+          o.zoneName = 'exile'
+          return false
+        }
+        return true
+      })
+    }
   }
 
   // Number of Faerie creatures a player controls (Spellstutter Sprite's X).
