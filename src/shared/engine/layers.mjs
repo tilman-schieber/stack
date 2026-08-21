@@ -85,6 +85,7 @@ export function recompute(state) {
 
   // Collect continuous effects (from static abilities + floating effects) into
   // their layers.
+  const layer3 = [] // text-changing (Spreading Seas: "enchanted land is an Island")
   const layer4 = [] // add types/subtypes (e.g. Kenku Artificer animating an artifact)
   const layer5 = [] // color-changing effects
   const layer6 = []
@@ -93,6 +94,7 @@ export function recompute(state) {
   for (const src of bf) {
     for (const ab of src.behavior?.static || []) {
       const e = { source: src, ability: ab, timestamp: src.timestamp || 0 }
+      if (ab.setSubtypes) layer3.push(e)
       if (ab.grantKeywords) layer6.push(e)
       if (ab.setPT) layer7b.push(e)
       if (ab.modifyPT || ab.modifyPTPerCounter) layer7d.push(e)
@@ -100,6 +102,7 @@ export function recompute(state) {
   }
   for (const f of state.continuous) {
     const e = { floating: f, timestamp: f.timestamp }
+    if (f.setSubtypes) layer3.push(e)
     if (f.addTypes || f.addSubtypes) layer4.push(e)
     if (f.setColors) layer5.push(e)
     if (f.grantKeywords) layer6.push(e)
@@ -108,6 +111,17 @@ export function recompute(state) {
   }
 
   const byTimestamp = (a, b) => a.timestamp - b.timestamp
+  const src3 = (e) => e.ability || e.floating
+
+  // Layer 3 — text-changing. The practical case: a land's basic land type is
+  // replaced ("enchanted land is an Island"), which swaps what it taps for since
+  // mana abilities read the current subtypes.
+  for (const e of layer3.sort(byTimestamp)) {
+    for (const o of bf) {
+      if (!effTargets(e, o)) continue
+      o.chars.subtypes = [...src3(e).setSubtypes]
+    }
+  }
 
   // Layer 4 — add types / subtypes (turning an artifact into a creature, etc.).
   for (const e of layer4.sort(byTimestamp)) {

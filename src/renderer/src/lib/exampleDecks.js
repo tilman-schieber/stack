@@ -120,8 +120,8 @@ export const EXAMPLE_DECKS = [
       [1, 'Time Walk'], // 720: take an extra turn after this one
       [2, 'Claustrophobia'], // aura: taps + doesn't untap (a can't-untap restriction)
       [1, 'Vedalken Orrery'], // permission: cast spells as though they had flash
-      [2, 'Preordain'],
-      [1, 'Serum Visions']
+      [1, 'Spreading Seas'], // layer 3: enchanted land becomes an Island
+      [2, 'Preordain']
     ]
   },
   {

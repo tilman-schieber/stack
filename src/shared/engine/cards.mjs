@@ -444,6 +444,14 @@ export const SAMPLE_CARDS = {
     keywords: ['Equip'],
     oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
   },
+  // Layer 3 text-changing (rule 613): a land's basic type is replaced.
+  'Spreading Seas': {
+    name: 'Spreading Seas',
+    mana_cost: '{1}{U}',
+    type_line: 'Enchantment — Aura',
+    colors: ['U'],
+    oracle_text: 'Enchant land\nWhen this Aura enters, draw a card.\nEnchanted land is an Island.'
+  },
   // "As though" permission (rule 118): cast any spell at instant speed.
   'Vedalken Orrery': {
     name: 'Vedalken Orrery',

@@ -755,6 +755,13 @@ export const BEHAVIORS = {
   },
   // "As though" permission: cast spells as though they had flash (rule 118).
   'Vedalken Orrery': { permissions: ['castAnySpeed'] },
+  // Layer 3 text-changing: "Enchanted land is an Island." Replaces the land's
+  // subtypes, so it now taps for {U} (mana abilities read current subtypes).
+  'Spreading Seas': {
+    enchant: { type: 'land' },
+    triggered: [{ trigger: { event: 'enters:battlefield', self: true }, effect: [{ op: 'draw', amount: 1 }] }],
+    static: [{ affects: { scope: 'attached' }, setSubtypes: ['Island'] }]
+  },
   // "This spell can't be countered." is auto-derived from oracle text; the
   // protections are parsed too, so Great Sable Stag needs no explicit behavior.
   // Aura: taps on entry and stops the creature untapping (a rule-modifier static).
@@ -882,7 +889,10 @@ export function manaAbilityColors(obj) {
   const p = obj.printed
   const out = []
   if (p.types.includes('Land')) {
-    for (const sub of p.subtypes) if (BASIC_MANA[sub]) out.push(BASIC_MANA[sub]) // basic land types
+    // Read current subtypes (chars) so a land-type change (Spreading Seas, layer 3)
+    // swaps what it taps for; fall back to printed before chars are computed.
+    const subtypes = obj.chars?.subtypes || p.subtypes
+    for (const sub of subtypes) if (BASIC_MANA[sub]) out.push(BASIC_MANA[sub]) // basic land types
     for (const c of obj.behavior?.mana || []) out.push(c) // authored nonbasic mana
   }
   for (const a of obj.behavior?.activated || []) {
