@@ -149,11 +149,12 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-green-stompy',
     name: 'Green Stompy (sample)',
     description:
-      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout, whose hexproof (an untargetability restriction) means opponents\' removal and even your own Rancor obey the rule: it can\'t be the target of spells your opponents control.',
+      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout (hexproof: opponents can\'t target it) and Tomakul Honor Guard, whose Ward {2} forces an opponent to pay {2} or have their removal countered.',
     cards: [
       [14, 'Forest'],
       [4, 'Llanowar Elves'],
       [2, 'Gladecover Scout'], // hexproof: can't be targeted by opponents (Bogles-style aura carrier)
+      [2, 'Tomakul Honor Guard'], // ward {2}: opponents pay {2} or their spell/ability is countered
       [2, 'Grizzly Bears'],
       [3, 'Elvish Visionary'],
       [3, 'Servant of the Scale'],

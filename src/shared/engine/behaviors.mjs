@@ -779,6 +779,12 @@ export function loadBehavior(printed) {
     })
   }
 
+  // Ward (702.21): parse its cost from the oracle text, since Scryfall's keyword
+  // list carries only "Ward", not the cost. Supports "Ward {N}" (a mana cost) and
+  // "Ward—Pay N life". The engine fires it in _checkWard when an opponent targets
+  // this permanent.
+  const ward = authored.ward || parseWard(printed.oracleText || '')
+
   return {
     spell: authored.spell || null,
     activated: authored.activated || [],
@@ -798,8 +804,19 @@ export function loadBehavior(printed) {
     bestow: authored.bestow || null, // { cost } — alternate cast as an Aura (702.103)
     copyOnEnter: authored.copyOnEnter || null, // { except? } — "enter as a copy of…" (rule 614.12, layer 1)
     cda: authored.cda || null, // { count } — characteristic-defining P/T (rule 613 layer 7a)
-    staticRules: authored.staticRules || [] // rule-modifying statics (613.11): restrict / costMod
+    staticRules: authored.staticRules || [], // rule-modifying statics (613.11): restrict / costMod
+    ward: ward // { mana } or { life } — counter an opponent's spell/ability unless paid (702.21)
   }
+}
+
+// Parse a Ward cost out of oracle text: "Ward {2}" -> { mana: '{2}' }, and
+// "Ward—Pay 2 life." -> { life: 2 }. Returns null when the card has no ward.
+function parseWard(text) {
+  const life = text.match(/ward\s*[—-]\s*pay (\d+) life/i)
+  if (life) return { life: Number(life[1]) }
+  const mana = text.match(/ward\s*(\{[^}]+\})/i)
+  if (mana) return { mana: mana[1].replace(/\s+/g, '') }
+  return null
 }
 
 const BASIC_MANA = { Plains: 'W', Island: 'U', Swamp: 'B', Mountain: 'R', Forest: 'G' }

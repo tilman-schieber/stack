@@ -192,6 +192,9 @@ export class GameEngine {
         case 'mayPay':
           this._applyMayPay(pending, answer)
           break
+        case 'wardPay':
+          this._applyWardPay(pending, answer)
+          break
         case 'copyEnter':
           this._applyCopyEnter(pending, answer)
           break
@@ -405,6 +408,9 @@ export class GameEngine {
       targets: chosenTargets
     })
     zone(this.state, 'stack').push(ao.oid)
+    // A triggered ability that targets a warded permanent triggers its ward too —
+    // but a ward's own tax ability (which targets nothing) must not recurse.
+    if (!t.effect?.some?.((e) => e.op === 'wardTax')) this._checkWard(ao.oid, t.controller, chosenTargets)
   }
 
   _applyChooseTargets(pending, answer) {
@@ -527,6 +533,74 @@ export class GameEngine {
       const o = this.state.objects[t.oid]
       if (o && !this._targetableBy(o, byPid, sourceColors))
         throw new Error(`illegal target: ${o.chars?.name || o.printed?.name} can't be targeted`)
+    }
+  }
+
+  // Is a chosen target still legal at resolution? A permanent must still be on the
+  // battlefield and targetable (it may have died, been bounced, or gained
+  // hexproof/shroud in response); a targeted spell must still be on the stack.
+  _targetStillLegal(controllerPid, sourceColors, ref) {
+    const s = this.state
+    if (!ref) return false
+    if (ref.kind === 'player') return s.players[ref.pid] != null
+    if (ref.kind === 'spell') return zone(s, 'stack').includes(ref.oid)
+    if (ref.kind === 'object') {
+      const o = s.objects[ref.oid]
+      if (!o || o.zoneName !== 'battlefield') return false
+      return this._targetableBy(o, controllerPid, sourceColors)
+    }
+    return true
+  }
+
+  // A spell or ability with one or more targets doesn't resolve — it's removed
+  // from the stack with no effect — if ALL of its targets are now illegal (rule
+  // 608.2b, "fizzle"). Untargeted objects never fizzle for this reason.
+  _fizzles(o) {
+    const refs = o.targets || []
+    if (refs.length === 0) return false
+    const src = o.kind === 'ability' ? this.state.objects[o.sourceOid] : o
+    const colors = (o.kind === 'ability' ? src?.chars?.colors : o.printed?.colors) || []
+    return refs.every((r) => !this._targetStillLegal(o.controller, colors, r))
+  }
+
+  // Ward (702.21): after a spell or ability (`triggererOid`, controlled by
+  // `byPid`) has been put on the stack targeting some permanents, each targeted
+  // permanent with ward whose controller is an opponent of `byPid` triggers "counter
+  // it unless that player pays the ward cost." The trigger is placed on the stack
+  // above the triggering object, so it resolves first.
+  _checkWard(triggererOid, byPid, targets) {
+    const s = this.state
+    for (const t of targets || []) {
+      if (t?.kind !== 'object') continue
+      const o = s.objects[t.oid]
+      if (!o || o.zoneName !== 'battlefield') continue
+      const ward = o.behavior?.ward
+      if (!ward || o.controller === byPid) continue // ward only vs opponents
+      s.pendingTriggers.push({
+        controller: o.controller, // the warded permanent's controller
+        sourceOid: o.oid,
+        subjectOid: triggererOid,
+        effect: [
+          { op: 'wardTax', payer: byPid, targetObj: triggererOid, mana: ward.mana || null, life: ward.life ?? null, wardName: o.printed.name }
+        ],
+        targetSpec: []
+      })
+    }
+  }
+
+  // Counter an object on the stack (a spell to its owner's graveyard; an ability
+  // is simply removed). Used by Ward and by counterspell-style effects.
+  _counterObject(oid) {
+    const s = this.state
+    const o = s.objects[oid]
+    if (!o) return
+    if (o.kind === 'ability') {
+      const st = zone(s, 'stack')
+      const i = st.indexOf(oid)
+      if (i >= 0) st.splice(i, 1)
+      delete s.objects[oid]
+    } else if (o.zoneName === 'stack') {
+      moveObject(s, oid, 'graveyard')
     }
   }
 
@@ -842,6 +916,7 @@ export class GameEngine {
         // Reject an untargetable choice (hexproof/shroud/protection) up front.
         this._countSpellCast(o)
         this._fireTriggers('castSpell', o) // prowess, storm, Guttersnipe etc.
+        this._checkWard(o.oid, o.controller, o.targets)
         // A madness card discarded as a cost above is offered now, before priority
         // returns (its madness spell goes on the stack above the spell just cast).
         if (s.pendingMadness.length) {
@@ -868,6 +943,7 @@ export class GameEngine {
         o.targets = action.targets || []
         this._countSpellCast(o)
         this._fireTriggers('castSpell', o)
+        this._checkWard(o.oid, o.controller, o.targets)
         break
       }
       case 'castFlashback': {
@@ -884,6 +960,7 @@ export class GameEngine {
         o.flashbackCast = true // exiled instead of the graveyard when it leaves
         this._countSpellCast(o)
         this._fireTriggers('castSpell', o)
+        this._checkWard(o.oid, o.controller, o.targets)
         break
       }
       case 'castOmen': {
@@ -896,6 +973,7 @@ export class GameEngine {
         o.omenCast = true // shuffled into the library after resolving
         this._countSpellCast(o)
         this._fireTriggers('castSpell', o)
+        this._checkWard(o.oid, o.controller, o.targets)
         break
       }
       case 'activate': {
@@ -910,6 +988,7 @@ export class GameEngine {
           targets: action.targets || []
         })
         zone(s, 'stack').push(aoid.oid)
+        this._checkWard(aoid.oid, pid, aoid.targets)
         break
       }
       case 'plot': {
@@ -933,6 +1012,7 @@ export class GameEngine {
         o.spell = o.behavior.spell
         this._countSpellCast(o)
         this._fireTriggers('castSpell', o)
+        this._checkWard(o.oid, o.controller, o.targets)
         break
       }
       case 'ninjutsu': {
@@ -1042,12 +1122,15 @@ export class GameEngine {
 
     if (o.kind === 'ability') {
       this._resolveObject = { oid, kind: 'ability' }
+      // Countered by game rules if every target is now illegal (608.2b).
+      if (this._fizzles(o)) return void this._finishResolution()
       this._runResolution(o, o.effect)
       return
     }
 
     if (o.spell) {
       this._resolveObject = { oid, kind: 'spell' }
+      if (this._fizzles(o)) return void this._finishResolution()
       this._runResolution(o, o.spell.effect)
     } else if (isPermanent(o.printed)) {
       // "Enter as a copy of…" (rule 614.12): before the permanent is on the
@@ -1298,6 +1381,25 @@ export class GameEngine {
           canPay: this._canPay(pid, parseManaCost(e.cost)),
           _source: source,
           _effect: e.effect
+        }
+        return true
+      }
+      case 'wardTax': {
+        // Ward (702.21): the player who targeted the warded permanent must pay the
+        // ward cost or their spell/ability is countered. If the triggering object
+        // is already gone (countered/fizzled otherwise), nothing to do.
+        const tgt = s.objects[e.targetObj]
+        const onStack = tgt && (tgt.kind === 'ability' ? zone(s, 'stack').includes(e.targetObj) : tgt.zoneName === 'stack')
+        if (!onStack) return false
+        const canPay = e.life != null ? s.players[e.payer].life >= e.life : this._canPay(e.payer, parseManaCost(e.mana))
+        s.pending = {
+          kind: 'wardPay',
+          player: e.payer,
+          mana: e.mana || null,
+          life: e.life ?? null,
+          canPay,
+          wardName: e.wardName,
+          _targetObj: e.targetObj
         }
         return true
       }
@@ -1654,6 +1756,19 @@ export class GameEngine {
     if (answer?.pay && pending.canPay) {
       this._pay(pending.player, parseManaCost(pending.cost))
       this._runEffects(pending._source, pending._effect)
+    }
+    this._resumeResolution()
+  }
+
+  // Ward: the targeter either pays the cost (and their spell/ability survives) or
+  // it is countered (702.21c). Paying is only possible if they can afford it.
+  _applyWardPay(pending, answer) {
+    const s = this.state
+    if (answer?.pay && pending.canPay) {
+      if (pending.life != null) s.players[pending.player].life -= pending.life
+      else this._pay(pending.player, parseManaCost(pending.mana))
+    } else {
+      this._counterObject(pending._targetObj)
     }
     this._resumeResolution()
   }
@@ -2298,7 +2413,9 @@ export class GameEngine {
       o.targets = answer.targets || []
       o.spell = o.behavior.spell
       o.madnessCast = true // exiled when it leaves the stack
+      this._assertTargetsLegal(o.targets, o.controller, o.printed.colors)
       this._fireTriggers('castSpell', o)
+      this._checkWard(o.oid, o.controller, o.targets)
     } else {
       moveObject(s, pending.oid, 'graveyard')
     }

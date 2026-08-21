@@ -986,6 +986,21 @@ function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, 
         </button>
       </>
     )
+  } else if (kind === 'wardPay') {
+    const cost = pending.life != null ? `${pending.life} life` : pending.mana
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — {pending.wardName} has ward. Pay {cost} or your spell/ability is countered.
+        </span>
+        <button className="primary" disabled={!pending.canPay} onClick={() => choose({ pay: true })}>
+          Pay {cost}
+        </button>
+        <button className="mini" onClick={() => choose({ pay: false })}>
+          Let it be countered
+        </button>
+      </>
+    )
   } else if (kind === 'discardCards') {
     const need = Math.min(pending.count, pending.hand.length)
     body = pending.optional ? (

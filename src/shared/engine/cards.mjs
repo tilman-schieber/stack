@@ -444,6 +444,27 @@ export const SAMPLE_CARDS = {
     keywords: ['Equip'],
     oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
   },
+  // Ward (702.21): counter an opponent's spell/ability targeting this unless paid.
+  'Tomakul Honor Guard': {
+    name: 'Tomakul Honor Guard',
+    mana_cost: '{1}{G}',
+    type_line: 'Creature — Human Soldier',
+    power: '3',
+    toughness: '1',
+    colors: ['G'],
+    keywords: ['Ward'],
+    oracle_text: 'Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)'
+  },
+  'Dwarven Forge-Chanter': {
+    name: 'Dwarven Forge-Chanter',
+    mana_cost: '{1}{R}',
+    type_line: 'Creature — Dwarf Wizard',
+    power: '1',
+    toughness: '3',
+    colors: ['R'],
+    keywords: ['Ward', 'Prowess'],
+    oracle_text: 'Ward—Pay 2 life. (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays 2 life.)\nProwess'
+  },
   // Delayed / phase-boundary trigger cards (rule 503/513/603.7).
   'Ball Lightning': {
     name: 'Ball Lightning',
