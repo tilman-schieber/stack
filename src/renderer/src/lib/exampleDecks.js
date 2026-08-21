@@ -117,8 +117,9 @@ export const EXAMPLE_DECKS = [
       [2, 'Cryptic Command'], // modal: choose two of counter / bounce / tap-all / draw
       [2, 'Twincast'], // 707.10: copy target instant or sorcery spell on the stack
       [2, 'Cackling Counterpart'], // 707.2: create a token that's a copy of your creature
+      [1, 'Time Walk'], // 720: take an extra turn after this one
       [2, 'Preordain'],
-      [2, 'Serum Visions']
+      [1, 'Serum Visions']
     ]
   },
   {
@@ -146,6 +147,7 @@ export const EXAMPLE_DECKS = [
       [2, 'Furnace of Rath'], // replacement: doubles all damage
       [2, 'Abrade'], // modal: 3 damage to a creature, or destroy an artifact
       [2, 'Forked Bolt'], // divided: 2 damage split among one or two targets
+      [1, 'Relentless Assault'], // 505/506: an additional combat phase this turn
       [3, 'Lightning Bolt']
     ]
   },

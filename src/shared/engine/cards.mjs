@@ -444,6 +444,22 @@ export const SAMPLE_CARDS = {
     keywords: ['Equip'],
     oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
   },
+  // Extra turns / additional combat (rule 720 / 500-506): extensible turn structure.
+  'Time Walk': {
+    name: 'Time Walk',
+    mana_cost: '{1}{U}',
+    type_line: 'Sorcery',
+    colors: ['U'],
+    oracle_text: 'Take an extra turn after this one.'
+  },
+  'Relentless Assault': {
+    name: 'Relentless Assault',
+    mana_cost: '{2}{R}{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    oracle_text:
+      'Untap all creatures that attacked this turn. After this main phase, there is an additional combat phase followed by an additional main phase.'
+  },
   // Choose-and-remember on entry (rule 614.12b): a value chosen as it enters.
   'Adaptive Automaton': {
     name: 'Adaptive Automaton',

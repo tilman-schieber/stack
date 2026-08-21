@@ -753,6 +753,9 @@ export const BEHAVIORS = {
   'Drudge Skeletons': {
     activated: [{ cost: { mana: '{B}' }, effect: [{ op: 'regenerate', to: 'self' }] }]
   },
+  // Extensible turn structure (rule 720 / 500-506).
+  'Time Walk': { spell: { effect: [{ op: 'extraTurn' }] } },
+  'Relentless Assault': { spell: { effect: [{ op: 'additionalCombat' }] } },
   // Choose-and-remember on entry: "As this enters, choose a creature type." The
   // chosen type is stored on o.chosen; the lord static reads it via chosenSubtype.
   'Adaptive Automaton': {

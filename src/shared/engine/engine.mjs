@@ -226,6 +226,7 @@ export class GameEngine {
         // 502: untap active player's permanents; clear summoning sickness for
         // creatures they control; reset the land-per-turn allowance.
         for (const o of objectsIn(s, 'battlefield')) {
+          o.status.attackedThisTurn = false // reset for every creature each turn
           if (o.controller === s.activePlayer) {
             o.status.tapped = false
             o.status.summoningSick = false
@@ -337,8 +338,10 @@ export class GameEngine {
     s.prevent = s.prevent.filter((e) => e.duration !== 'eot')
     s.replacements = s.replacements.filter((e) => e.duration !== 'eot')
     this._emptyManaPools()
-    // hand over the turn — each player's turn is numbered sequentially.
-    s.activePlayer = this._otherPlayer(s.activePlayer)
+    // Extra turns (rule 500.7 / 720): a queued extra turn is taken by its owner
+    // before the turn would pass to the other player.
+    s.activePlayer = s.extraTurns?.length ? s.extraTurns.shift() : this._otherPlayer(s.activePlayer)
+    s.extraCombats = 0 // additional-combat phases don't carry across turns
     s.turnNumber++
     this._enterStep('untap')
   }
@@ -348,6 +351,14 @@ export class GameEngine {
     const i = STEP_ORDER.indexOf(s.step)
     if (s.step === 'cleanup') {
       this._endCleanup()
+      return
+    }
+    // Additional combat phase (Relentless Assault, rule 505/506): after the
+    // post-combat main phase, loop back into a fresh combat + main instead of
+    // ending the turn.
+    if (s.step === 'main2' && s.extraCombats > 0) {
+      s.extraCombats--
+      this._enterStep('beginCombat')
       return
     }
     this._enterStep(STEP_ORDER[i + 1])
@@ -1802,6 +1813,20 @@ export class GameEngine {
           for (let i = 0; i < (e.count || 1); i++) this._createToken(def, source.controller)
           break
         }
+        case 'extraTurn': {
+          // "Take an extra turn after this one" (rule 720). Queued; taken by its
+          // controller before the turn would pass to the opponent.
+          ;(s.extraTurns ||= []).push(source.controller)
+          break
+        }
+        case 'additionalCombat': {
+          // Relentless Assault: untap all creatures that attacked this turn, then
+          // schedule an additional combat + main phase after the current main.
+          for (const o of objectsIn(s, 'battlefield'))
+            if (o.controller === source.controller && o.status.attackedThisTurn) o.status.tapped = false
+          s.extraCombats = (s.extraCombats || 0) + 1
+          break
+        }
         case 'createTokenCopy': {
           // "Create a token that's a copy of [target permanent]" (rule 707.2 / 111.4).
           const t = this._resolveTargetRef(source, e.to)
@@ -2147,6 +2172,7 @@ export class GameEngine {
     for (const { oid, defender } of entries) {
       const o = s.objects[oid]
       o.status.attacking = true
+      o.status.attackedThisTurn = true // for "untap all creatures that attacked"
       o.status.attackingTarget = defender || { player: def }
       if (!this._hasKW(o, 'Vigilance')) o.status.tapped = true
       this._fireTriggers('attacks', o)
