@@ -753,6 +753,14 @@ export const BEHAVIORS = {
   'Drudge Skeletons': {
     activated: [{ cost: { mana: '{B}' }, effect: [{ op: 'regenerate', to: 'self' }] }]
   },
+  // Divided / variable-count targeting (601.2c-d): "2 damage divided as you choose
+  // among one or two targets." One variadic slot (min/max) carries the division.
+  'Forked Bolt': {
+    spell: {
+      targets: [{ type: 'any', min: 1, max: 2, divide: 2 }],
+      effect: [{ op: 'dealDamageDivided' }]
+    }
+  },
   // Recursion: when you draw your third card in a turn, return this from your
   // graveyard to the battlefield tapped. (It's never hard-cast in mono-red.)
   'Sneaky Snacker': { returnOnThirdDraw: true },

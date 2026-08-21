@@ -142,6 +142,7 @@ export const EXAMPLE_DECKS = [
       [2, 'Act of Treason'], // layer 2: steal a creature until end of turn
       [2, 'Furnace of Rath'], // replacement: doubles all damage
       [2, 'Abrade'], // modal: 3 damage to a creature, or destroy an artifact
+      [2, 'Forked Bolt'], // divided: 2 damage split among one or two targets
       [3, 'Lightning Bolt']
     ]
   },

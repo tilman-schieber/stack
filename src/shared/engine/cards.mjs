@@ -444,6 +444,14 @@ export const SAMPLE_CARDS = {
     keywords: ['Equip'],
     oracle_text: 'Equipped creature has haste and shroud.\nEquip {0}'
   },
+  // Divided damage / variable target count (rule 601.2c-d).
+  'Forked Bolt': {
+    name: 'Forked Bolt',
+    mana_cost: '{R}',
+    type_line: 'Sorcery',
+    colors: ['R'],
+    oracle_text: 'Forked Bolt deals 2 damage divided as you choose among one or two targets.'
+  },
   // Regeneration (701.15): {cost}: set up a shield that replaces the next destroy.
   'Drudge Skeletons': {
     name: 'Drudge Skeletons',

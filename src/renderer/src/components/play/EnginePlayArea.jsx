@@ -190,7 +190,18 @@ export default function EnginePlayArea() {
       : engineTargeting
         ? { targets: pending.targets, chosen: chooseSel }
         : null
-  const targetSlot = targeting ? targeting.targets[targeting.chosen.length] : null
+  // A variadic cast ("N damage divided among one or two targets", "up to N…"):
+  // one slot is reused until `max` targets are chosen; a Confirm button finalizes
+  // once at least `min` are picked, and the total is auto-divided evenly.
+  const variadic = cast && !cast.action.modal ? cast.action.variadic : null
+  const targetSlot = variadic
+    ? targeting && targeting.chosen.length < variadic.max
+      ? variadic
+      : null
+    : targeting
+      ? targeting.targets[targeting.chosen.length]
+      : null
+  const variadicReady = !!(variadic && targeting && targeting.chosen.length >= (variadic.min ?? 1))
   const wantsPlayer = targetSlot && (targetSlot.type === 'player' || targetSlot.type === 'any')
   const wantsSpell = targetSlot && targetSlot.type === 'spell'
   const wantsLand = targetSlot && targetSlot.type === 'land'
@@ -269,6 +280,14 @@ export default function EnginePlayArea() {
       } else setCast({ ...cast, curTargets: chosen })
       return
     }
+    // Variadic: keep collecting up to max; finalize immediately at max, else wait
+    // for the Confirm button.
+    if (variadic) {
+      const chosen = [...targeting.chosen, t]
+      if (chosen.length >= variadic.max) finalizeVariadic(chosen)
+      else setCast({ ...cast, chosen })
+      return
+    }
     const chosen = [...targeting.chosen, t]
     const done = chosen.length >= targeting.targets.length
     if (cast) {
@@ -279,6 +298,21 @@ export default function EnginePlayArea() {
       if (done) choose({ targets: chosen })
       else setChooseSel(chosen)
     }
+  }
+
+  // Finalize a variadic cast: auto-divide the total evenly across the chosen
+  // targets (remainder to the earlier ones) and send it.
+  function finalizeVariadic(chosen) {
+    const v = cast.action.variadic
+    let division
+    if (v.divide != null) {
+      const n = chosen.length
+      const base = Math.floor(v.divide / n)
+      let rem = v.divide - base * n
+      division = chosen.map(() => base + (rem-- > 0 ? 1 : 0))
+    }
+    choose({ type: 'cast', oid: cast.action.oid, targets: chosen, division })
+    setCast(null)
   }
 
   // Pick a permanent to sacrifice as part of a cost; then continue to targets.
@@ -713,7 +747,14 @@ export default function EnginePlayArea() {
         pending={pending}
         targeting={
           targeting
-            ? { targets: targeting.targets, chosen: targeting.chosen, name: cast ? null : pending.name, cancelable: !!cast }
+            ? {
+                targets: targeting.targets,
+                chosen: targeting.chosen,
+                name: cast ? null : pending.name,
+                cancelable: !!cast,
+                variadic: variadic ? { min: variadic.min ?? 1, max: variadic.max } : null,
+                confirm: variadicReady ? () => finalizeVariadic(targeting.chosen) : null
+              }
             : null
         }
         sacrificing={needSac ? { types: cast.action.sacChoose.types } : null}
@@ -861,13 +902,21 @@ function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, 
       </>
     )
   } else if (targeting) {
-    const slot = targeting.targets[targeting.chosen.length]
+    const v = targeting.variadic
+    const slot = v || targeting.targets[targeting.chosen.length]
     body = (
       <>
         <span>
           {targeting.name ? <b>{targeting.name}</b> : 'Choose target'} — target{' '}
-          {targeting.chosen.length + 1}/{targeting.targets.length} ({slot.type})
+          {v
+            ? `${targeting.chosen.length}/${v.max} chosen (pick ${v.min}–${v.max})`
+            : `${targeting.chosen.length + 1}/${targeting.targets.length} (${slot.type})`}
         </span>
+        {targeting.confirm && (
+          <button className="primary" onClick={targeting.confirm}>
+            Confirm
+          </button>
+        )}
         {targeting.cancelable && (
           <button className="mini" onClick={cancelCast}>
             Cancel

@@ -519,10 +519,15 @@ export class GameEngine {
     const s = this.state
     if (spec.type === 'player' || spec.type === 'any') return true
     if (spec.type === 'spell') return zone(s, 'stack').length > 0
-    if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact')
-      return objectsIn(s, 'battlefield').some(
+    if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact') {
+      // A variadic slot ("N target creatures", "up to N…") needs at least `min`
+      // legal targets to be cast (601.2c); a normal slot needs one.
+      const min = spec.min ?? 1
+      const n = objectsIn(s, 'battlefield').filter(
         (o) => this._specMatches(spec, o) && (!ctx || this._targetableBy(o, ctx.byPid, ctx.sourceColors))
-      )
+      ).length
+      return n >= min
+    }
     return true
   }
 
@@ -678,13 +683,17 @@ export class GameEngine {
         const addlDiscOk = !addl?.discard || zone(s, 'hand', pid).filter((h) => h !== oid).length >= addl.discard
         if (targetsOk && addlSacOk && addlDiscOk) {
           const xCost = p.manaCost.X || 0
+          // A variadic spell ("N damage divided among one or two targets", "up to
+          // N target…") has a single slot carrying min/max (and maybe divide).
+          const variadic = targets.length === 1 && targets[0].max != null ? targets[0] : null
           if (this._canPay(pid, this._effectiveCost(pid, o))) {
             actions.push({
               type: 'cast',
               oid,
               label: p.name,
               targets,
-              needsTargets: targets.length,
+              needsTargets: variadic ? variadic.min ?? 1 : targets.length,
+              variadic,
               sacChoose: addl?.sacrifice || null,
               discChoose: addl?.discard || null,
               hasX: xCost > 0,
@@ -843,6 +852,34 @@ export class GameEngine {
     o.spell = { ...o.behavior.spell, effect }
   }
 
+  // Validate a variadic target choice ("N damage divided among one or two targets",
+  // "up to N target…") and record its division on the object. Throws on an illegal
+  // count or division so it's rejected before any cost is paid.
+  _applyVariadic(o, action) {
+    const specs = o.behavior?.spell?.targets || []
+    if (specs.length !== 1 || specs[0].max == null) return // not a variadic spell
+    const spec = specs[0]
+    const refs = action.targets || []
+    const min = spec.min ?? 1
+    if (refs.length < min || refs.length > spec.max)
+      throw new Error(`choose ${min === spec.max ? min : `${min}–${spec.max}`} target(s)`)
+    if (spec.divide != null) {
+      const div = action.division || this._evenDivision(spec.divide, refs.length)
+      if (div.length !== refs.length || div.some((d) => !(d >= 1)) || div.reduce((a, b) => a + b, 0) !== spec.divide)
+        throw new Error(`divide exactly ${spec.divide}, at least 1 to each target`)
+      o.division = div
+    }
+  }
+
+  // Spread `total` across `n` targets as evenly as possible (remainder to the
+  // earlier targets) — the UI's default division when the player doesn't specify.
+  _evenDivision(total, n) {
+    if (n <= 0) return []
+    const base = Math.floor(total / n)
+    let rem = total - base * n
+    return Array.from({ length: n }, () => base + (rem-- > 0 ? 1 : 0))
+  }
+
   // Shift every `target<n>` reference in an effect list by `offset` (so a mode's
   // effects index into the combined `targets` array at the right slot).
   _offsetTargetRefs(effect, offset) {
@@ -867,6 +904,9 @@ export class GameEngine {
       const chosen = [...(action.targets || []), ...(action.modeTargets || []).flat()]
       const colors = action.type === 'activate' ? actor.chars?.colors || actor.printed.colors : actor.printed.colors
       this._assertTargetsLegal(chosen, pid, colors)
+      // Validate a variadic ("divided" / "up to N") target count + division, and
+      // record the division — before any cost is paid.
+      if (action.type === 'cast' && !actor.behavior?.spell?.modal) this._applyVariadic(actor, action)
     }
     switch (action.type) {
       case 'playLand': {
@@ -914,7 +954,6 @@ export class GameEngine {
           o.targets = action.targets || []
           o.spell = o.behavior.spell
         }
-        // Reject an untargetable choice (hexproof/shroud/protection) up front.
         this._countSpellCast(o)
         this._fireTriggers('castSpell', o) // prowess, storm, Guttersnipe etc.
         this._checkWard(o.oid, o.controller, o.targets)
@@ -1461,6 +1500,20 @@ export class GameEngine {
           if (e.metalcraft && this._artifactCount(source.controller) >= 3) amt = e.metalcraft
           if (t.kind === 'player') this._dealDamage(source, { player: t.pid }, amt)
           else if (t.kind === 'object') this._dealDamage(source, { obj: t.obj }, amt)
+          break
+        }
+        case 'dealDamageDivided': {
+          // Divided damage (601.2d): deal source.division[i] to each chosen target.
+          // A target that has left the battlefield since selection is skipped.
+          const div = source.division || []
+          for (let i = 0; i < (source.targets?.length || 0); i++) {
+            const amt = div[i] ?? 0
+            if (amt <= 0) continue
+            const t = this._resolveTargetRef(source, 'target' + i)
+            if (t?.kind === 'player') this._dealDamage(source, { player: t.pid }, amt)
+            else if (t?.kind === 'object' && t.obj?.zoneName === 'battlefield')
+              this._dealDamage(source, { obj: t.obj }, amt)
+          }
           break
         }
         case 'addMana':
