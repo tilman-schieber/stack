@@ -381,6 +381,13 @@ export class GameEngine {
     const s = this.state
     this._checkSBA()
     if (s.winner != null) return // _checkSBA set a gameOver decision
+    // If the active player left the game mid-turn (rule 800.4a), that turn ends and
+    // the next remaining player begins theirs.
+    if (s.players[s.activePlayer].hasLost) {
+      s.combat = null
+      this._endCleanup()
+      return
+    }
     s.priorityAfter = pid
     this._advanceTriggerPlacement() // may pause for a target choice, else grants
   }
@@ -463,6 +470,34 @@ export class GameEngine {
       )
     for (const oid of discard) this._discardCard(pending.player, oid)
     if (pending.draw && discard.length > 0) this.draw(pending.player, pending.draw)
+    // "Each opponent discards": prompt the next opponent before resuming (empties
+    // along the way draw for the controller).
+    if (pending._oppQueue) {
+      const s = this.state
+      let next = null
+      while (pending._oppQueue.length) {
+        const cand = pending._oppQueue.shift()
+        if (zone(s, 'hand', cand).length > 0) {
+          next = cand
+          break
+        }
+        if (pending._oppDrawIfEmpty) this.draw(pending._oppController, 1)
+      }
+      if (next != null) {
+        this._processMadness(() => {
+          s.pending = {
+            kind: 'discardCards',
+            player: next,
+            count: 1,
+            hand: [...zone(s, 'hand', next)],
+            _oppQueue: pending._oppQueue,
+            _oppDrawIfEmpty: pending._oppDrawIfEmpty,
+            _oppController: pending._oppController
+          }
+        })
+        return
+      }
+    }
     this._processMadness(() => this._resumeResolution())
   }
 
@@ -1557,13 +1592,26 @@ export class GameEngine {
         return true
       }
       case 'eachOpponentDiscards': {
-        const opp = this._otherPlayer(source.controller)
-        const hand = zone(s, 'hand', opp)
-        if (hand.length === 0) {
-          if (e.drawIfEmpty) this.draw(source.controller, 1) // "for each who can't, draw"
-          return false
+        // Every opponent discards a card (multiplayer). Opponents with empty hands
+        // resolve immediately (drawing for the controller if the card says so); the
+        // rest are queued and prompted one at a time.
+        const queue = []
+        for (const opp of this._opponentsOf(source.controller)) {
+          if (zone(s, 'hand', opp).length === 0) {
+            if (e.drawIfEmpty) this.draw(source.controller, 1) // "for each who can't, draw"
+          } else queue.push(opp)
         }
-        s.pending = { kind: 'discardCards', player: opp, count: 1, hand: [...hand] }
+        if (queue.length === 0) return false
+        const first = queue.shift()
+        s.pending = {
+          kind: 'discardCards',
+          player: first,
+          count: 1,
+          hand: [...zone(s, 'hand', first)],
+          _oppQueue: queue,
+          _oppDrawIfEmpty: e.drawIfEmpty,
+          _oppController: source.controller
+        }
         return true
       }
       case 'returnFromGraveyard': {

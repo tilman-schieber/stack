@@ -119,5 +119,46 @@ section('A player who hits 0 life leaves the game; the game continues')
   assert(e.state.winner === 0, 'with only player 0 left, they win')
 }
 
+section('"Each opponent discards" prompts every opponent, not just one')
+{
+  const e = make3()
+  for (let i = 0; i < 4; i++) put(e, 0, 'Swamp', 'battlefield')
+  const fam = put(e, 0, 'Refurbished Familiar', 'hand') // ETB: each opponent discards
+  let g = 0
+  while (!(e.state.step === 'main1' && e.pending.player === 0 && e.pending.kind === 'priority') && g++ < 200) {
+    if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+    else e.choose({})
+  }
+  e.choose({ type: 'cast', oid: fam.oid, targets: [] })
+  const prompted = []
+  g = 0
+  while (g++ < 200) {
+    const p = e.pending
+    if (p.kind === 'discardCards') {
+      prompted.push(p.player)
+      e.choose({ discard: p.hand.slice(0, 1) })
+    } else if (p.kind === 'priority') {
+      if (prompted.length >= 2) break
+      e.choose({ type: 'pass' })
+    } else break
+  }
+  assert(prompted.includes(1) && prompted.includes(2), `both opponents discarded (prompted: ${prompted.join()})`)
+}
+
+section('If the active player leaves the game mid-turn, their turn ends')
+{
+  const e = make3()
+  let g = 0
+  while (!(e.state.step === 'main1' && e.pending.player === 0 && e.pending.kind === 'priority') && g++ < 200) {
+    if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+    else e.choose({})
+  }
+  e.state.players[0].life = 0 // the active player is about to lose
+  e._grantPriorityTo(0) // the engine checks SBAs here
+  assert(e.state.players[0].hasLost, 'the active player left the game')
+  assert(e.state.winner == null, 'the game continues')
+  assert(e.state.activePlayer === 1, 'the turn passed to the next player')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)
