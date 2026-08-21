@@ -88,6 +88,32 @@ export const BEHAVIORS = {
   Levitation: {
     static: [{ affects: { scope: 'creatures', controller: 'you' }, grantKeywords: ['Flying'] }]
   },
+  // ---- Rule-modifying static effects (rule 613.11 / 603.10) ----
+  // These don't change characteristics (that's layers 1–7); they change what
+  // players are allowed to do. The engine collects `staticRules` from every
+  // battlefield permanent and consults them at the relevant decision points:
+  // combat legality (restrict) and cost computation (costMod).
+  //
+  // Pacifism — Aura: "Enchanted creature can't attack or block."
+  Pacifism: {
+    enchant: { type: 'creature' },
+    staticRules: [{ affects: { scope: 'attached' }, restrict: ['attack', 'block'] }]
+  },
+  // Goblin Warchief — "Goblin spells you cast cost {1} less. Goblins you control
+  // have haste." The cost reduction is a rule-modifier; the haste grant is a
+  // normal layer-6 static.
+  'Goblin Warchief': {
+    static: [
+      { affects: { scope: 'creatures', controller: 'you', subtype: 'Goblin' }, grantKeywords: ['Haste'] }
+    ],
+    staticRules: [{ costMod: { spell: { subtype: 'Goblin', controller: 'you' }, generic: -1 } }]
+  },
+  // Thalia, Guardian of Thraben — "Noncreature spells cost {1} more to cast."
+  // Symmetric: it affects every player, so no controller restriction. First
+  // strike is a printed keyword (derived for free).
+  'Thalia, Guardian of Thraben': {
+    staticRules: [{ costMod: { spell: { noncreature: true }, generic: 1 } }]
+  },
   // ---- Control-changing effects (rule 613 layer 2), sample decks ----
   // "Gain control of target creature until end of turn. Untap it. It gains haste."
   'Act of Treason': {
@@ -757,7 +783,8 @@ export function loadBehavior(printed) {
     plot: authored.plot || null, // { cost } — exile from hand, cast free on a later turn
     bestow: authored.bestow || null, // { cost } — alternate cast as an Aura (702.103)
     copyOnEnter: authored.copyOnEnter || null, // { except? } — "enter as a copy of…" (rule 614.12, layer 1)
-    cda: authored.cda || null // { count } — characteristic-defining P/T (rule 613 layer 7a)
+    cda: authored.cda || null, // { count } — characteristic-defining P/T (rule 613 layer 7a)
+    staticRules: authored.staticRules || [] // rule-modifying statics (613.11): restrict / costMod
   }
 }
 

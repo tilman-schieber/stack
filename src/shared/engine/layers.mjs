@@ -29,7 +29,9 @@ function baseChars(o) {
 }
 
 // Does a static ability's `affects` filter match target `o`, given its source?
-function matchStatic(affects, source, o) {
+// Exported so the engine can reuse the same scope semantics for rule-modifying
+// static effects (rule 613.11) — "can't attack/block" restrictions, etc.
+export function matchStatic(affects, source, o) {
   if (!affects) return true
   // An Aura/Equipment affects only the permanent it is attached to.
   if (affects.scope === 'attached') return o.oid === source.status?.attachedTo

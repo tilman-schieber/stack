@@ -398,6 +398,33 @@ export const SAMPLE_CARDS = {
     colors: ['U'],
     oracle_text: 'You may have this creature enter as a copy of any creature on the battlefield.'
   },
+  // Rule-modifying static effects (rule 613.11): restrictions + cost changes.
+  Pacifism: {
+    name: 'Pacifism',
+    mana_cost: '{1}{W}',
+    type_line: 'Enchantment — Aura',
+    colors: ['W'],
+    oracle_text: "Enchant creature\nEnchanted creature can't attack or block."
+  },
+  'Goblin Warchief': {
+    name: 'Goblin Warchief',
+    mana_cost: '{1}{R}{R}',
+    type_line: 'Creature — Goblin Warrior',
+    power: '2',
+    toughness: '2',
+    colors: ['R'],
+    oracle_text: 'Goblin spells you cast cost {1} less to cast.\nGoblins you control have haste.'
+  },
+  'Thalia, Guardian of Thraben': {
+    name: 'Thalia, Guardian of Thraben',
+    mana_cost: '{1}{W}',
+    type_line: 'Legendary Creature — Human Soldier',
+    power: '2',
+    toughness: '1',
+    colors: ['W'],
+    keywords: ['First strike'],
+    oracle_text: 'First strike\nNoncreature spells cost {1} more to cast.'
+  },
   // Delayed / phase-boundary trigger cards (rule 503/513/603.7).
   'Ball Lightning': {
     name: 'Ball Lightning',

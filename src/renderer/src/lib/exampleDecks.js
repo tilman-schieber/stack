@@ -123,12 +123,13 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-goblins',
     name: 'Goblins (sample)',
     description:
-      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger), and Abrade (a choose-one modal spell — burn a creature or blow up an artifact).',
+      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger), Abrade (a choose-one modal spell), and Goblin Warchief, whose "Goblin spells cost {1} less" is a rule-modifying static (it changes what you may do, not any card\'s characteristics).',
     cards: [
       [14, 'Mountain'],
       [2, 'Mogg Fanatic'],
       [1, 'Chandra Nalaar'],
-      [3, 'Raging Goblin'],
+      [2, 'Goblin Warchief'], // static rule-modifier: Goblin spells cost {1} less; grants haste
+      [2, 'Raging Goblin'],
       [2, 'Goblin Piker'],
       [3, 'Boggart Brute'],
       [2, 'Goblin King'],
@@ -165,18 +166,20 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-white-skies',
     name: 'White Skies (sample)',
     description:
-      'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers, with two replacement effects (Rhox Faithmender doubles life gained, Samite Healer prevents damage) and Flickerwisp, whose ETB blinks a creature back at the next end step (a delayed trigger).',
+      'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers, with two replacement effects (Rhox Faithmender doubles life gained, Samite Healer prevents damage), Flickerwisp (a delayed-trigger blink), plus two rule-modifying statics: Pacifism ("enchanted creature can\'t attack or block") and Thalia, Guardian of Thraben (noncreature spells cost {1} more).',
     cards: [
       [15, 'Plains'],
       [4, 'Soul Warden'],
-      [3, 'Samite Healer'], // replacement: prevent the next 1 damage to any target
+      [2, 'Samite Healer'], // replacement: prevent the next 1 damage to any target
       [3, 'Flickerwisp'], // delayed trigger: exile a creature, return it at end step
-      [4, 'White Knight'],
+      [3, 'White Knight'],
       [2, 'Rhox Faithmender'], // replacement: doubles life you gain
       [4, 'Serra Angel'],
+      [2, 'Thalia, Guardian of Thraben'], // static rule-modifier: noncreature spells cost {1} more
+      [3, 'Pacifism'], // static rule-modifier: enchanted creature can't attack or block
       [2, 'Raise the Alarm'],
       [3, 'Glorious Anthem'],
-      [3, 'Levitation']
+      [2, 'Levitation']
     ]
   },
   {

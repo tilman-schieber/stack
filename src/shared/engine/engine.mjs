@@ -9,7 +9,7 @@
 import { createState, createObject, createAbility, computeChars, zone, zoneKey, moveObject, objectsIn } from './state.mjs'
 import { manaAbilityColors, loadBehavior } from './behaviors.mjs'
 import { isPermanent, parseManaCost } from './cards.mjs'
-import { recompute } from './layers.mjs'
+import { recompute, matchStatic } from './layers.mjs'
 
 // Step order (rules 500–514). First strike is folded into a single combat-damage
 // step for M0 (no keywords yet). Priority is granted in PRIORITY_STEPS only.
@@ -1704,7 +1704,48 @@ export class GameEngine {
       ).length
       cost.generic = Math.max(0, (cost.generic || 0) - artifacts)
     }
+    // Rule-modifying statics that raise or lower this spell's cost (Thalia, Goblin
+    // Warchief, medallions, …). Increases apply before reductions (601.2f order),
+    // and generic is clamped at 0 — a reduction never touches colored pips.
+    let delta = 0
+    for (const { source, mod } of this._ruleMods()) {
+      if (mod.costMod && this._spellMatchesFilter(pid, o, mod.costMod.spell, source))
+        delta += mod.costMod.generic
+    }
+    if (delta) cost.generic = Math.max(0, (cost.generic || 0) + delta)
     return cost
+  }
+
+  // ---- rule-modifying static effects (rule 613.11) --------------------
+  // Permanents can carry `staticRules` that change what players may do rather
+  // than any object's characteristics. Collected fresh each query so leaving the
+  // battlefield removes the effect automatically.
+  _ruleMods() {
+    const out = []
+    for (const src of objectsIn(this.state, 'battlefield'))
+      for (const mod of src.behavior?.staticRules || []) out.push({ source: src, mod })
+    return out
+  }
+
+  // Does a cost-modifier's spell filter match spell `o` cast by `pid`? `o` may be
+  // a hand/graveyard card not yet on the stack, so match on printed characteristics.
+  _spellMatchesFilter(pid, o, f, source) {
+    if (!f) return true
+    const p = o.printed
+    if (f.controller === 'you' && pid !== source.controller) return false
+    if (f.controller === 'opponent' && pid === source.controller) return false
+    if (f.subtype && !p.subtypes.includes(f.subtype)) return false
+    if (f.type && !p.types.includes(f.type)) return false
+    if (f.noncreature && p.types.includes('Creature')) return false
+    return true
+  }
+
+  // Is creature `o` forbidden from attacking / blocking by an active rule-modifier
+  // (Pacifism, etc.)? `action` is 'attack' or 'block'.
+  _restricted(o, action) {
+    for (const { source, mod } of this._ruleMods())
+      if (mod.restrict?.includes(action) && matchStatic(mod.affects, source, o)) return true
+    return false
   }
 
   // Largest X affordable for an X spell given current mana (X is generic).
@@ -1757,6 +1798,7 @@ export class GameEngine {
           o.chars.types.includes('Creature') &&
           !o.status.tapped &&
           !this._hasKW(o, 'Defender') && // creatures with defender can't attack
+          !this._restricted(o, 'attack') && // Pacifism etc.
           this._canTap(o) // haste overrides summoning sickness
       )
       .map((o) => o.oid)
@@ -1820,7 +1862,11 @@ export class GameEngine {
     const s = this.state
     return objectsIn(s, 'battlefield')
       .filter(
-        (o) => o.controller === pid && o.chars.types.includes('Creature') && !o.status.tapped
+        (o) =>
+          o.controller === pid &&
+          o.chars.types.includes('Creature') &&
+          !o.status.tapped &&
+          !this._restricted(o, 'block') // Pacifism etc.
       )
       .map((o) => o.oid)
   }
@@ -1845,6 +1891,7 @@ export class GameEngine {
       const b = s.objects[blockerOid]
       const a = s.objects[attackerOid]
       if (!b || !a || !a.status.attacking) throw new Error('illegal block: not an attacker')
+      if (this._restricted(b, 'block')) throw new Error(`illegal block: ${b.chars.name} can't block`)
       if (!this._canBlock(b, a)) throw new Error(`illegal block: ${b.chars.name} cannot block a flyer`)
       ;(perAttacker[attackerOid] ||= []).push(blockerOid)
     }
