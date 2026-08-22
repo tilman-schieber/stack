@@ -100,6 +100,10 @@ export default function EnginePlayArea() {
   const endGame = useEngineGame((s) => s.endGame)
   const stops = useEngineGame((s) => s.stops)
   const toggleStop = useEngineGame((s) => s.toggleStop)
+  const mode = useEngineGame((s) => s.mode)
+  const mySeat = useEngineGame((s) => s.netSeat)
+  // Online: whether the local player is the one who currently must act.
+  const myTurn = mode === 'local' || view?.pending?.player === mySeat
   const [showStops, setShowStops] = useState(false)
   const [zoom, setZoom] = useState(null) // card being previewed (right-click)
   const [abilityMenu, setAbilityMenu] = useState(null) // { actions, x, y } picker
@@ -514,8 +518,10 @@ export default function EnginePlayArea() {
     return cls.join(' ')
   }
 
-  const top = view.players[1]
-  const bottom = view.players[0]
+  // Orient the board so the local player sits at the bottom. In local hot-seat
+  // that's seat 0; online, it's whichever seat this client controls (netSeat).
+  const bottom = view.players[mySeat]
+  const top = view.players[mySeat === 0 ? 1 : 0]
 
   // Player status + zones live in the left sidebar, one block per player.
   const statusColumn = (p) => (
@@ -651,6 +657,9 @@ export default function EnginePlayArea() {
             <span className="phase-pill on">{STEP_LABEL[view.step] || view.step}</span>
             <span className="eng-active">Active: {view.players[view.activePlayer].name}</span>
           </>
+        )}
+        {mode !== 'local' && !myTurn && kind !== 'gameOver' && (
+          <span className="eng-waiting">Waiting for opponent…</span>
         )}
         <div className="turn-active">
           <button className="mini" onClick={() => setShowStops((s) => !s)}>

@@ -56,6 +56,13 @@ function cardView(o) {
   }
 }
 
+// An opponent's hand card as seen by a viewer who may not know its identity — a
+// face-down "card back". Keeps the oid (so counts/animation line up) but leaks
+// nothing about what the card is. Mirrors the face-down redaction above.
+function hiddenHandCard(o) {
+  return { oid: o.oid, hidden: true, name: 'Hidden card', cardId: null, token: false }
+}
+
 function stackView(state, oid) {
   const o = state.objects[oid]
   if (o.kind === 'ability') {
@@ -78,13 +85,18 @@ function stackView(state, oid) {
   }
 }
 
-export function projectGame(engine) {
+// Build the serializable view. `viewerPid` (default null) redacts hidden
+// information for networked play: when set, other players' hands are shown as card
+// backs and library-revealing pending decisions (scry/search/explore) owned by an
+// opponent are stripped. `null` yields the full view used by local hot-seat.
+export function projectGame(engine, viewerPid = null) {
   const state = engine.state
   recompute(state) // ensure P/T reflects anthems/pumps in the view
   const bf = zone(state, 'battlefield')
 
   const players = state.players.map((p) => {
     const controlled = bf.map((oid) => state.objects[oid]).filter((o) => o.controller === p.id)
+    const hidden = viewerPid != null && p.id !== viewerPid // hide this player's hand from the viewer
     return {
       id: p.id,
       name: p.name,
@@ -93,20 +105,28 @@ export function projectGame(engine) {
       counters: p.counters,
       handCount: zone(state, 'hand', p.id).length,
       libraryCount: zone(state, 'library', p.id).length,
-      hand: zone(state, 'hand', p.id).map((oid) => cardView(state.objects[oid])),
+      hand: zone(state, 'hand', p.id).map((oid) =>
+        hidden ? hiddenHandCard(state.objects[oid]) : cardView(state.objects[oid])
+      ),
       battlefield: controlled.map(cardView),
       graveyard: zone(state, 'graveyard', p.id).map((oid) => cardView(state.objects[oid])),
       exile: zone(state, 'exile', p.id).map((oid) => cardView(state.objects[oid]))
     }
   })
 
-  // Scry/surveil reveals specific library cards to their controller — enrich
-  // them into card views so the UI can show the art.
+  // Scry/surveil reveals specific library cards to their controller — enrich them
+  // into card views so the UI can show the art. To another player's view, those
+  // cards are private, so strip them (keep kind/player so "waiting…" can show).
   let pending = state.pending
+  const privateToViewer = viewerPid == null || pending?.player === viewerPid
   if (pending?.kind === 'scry' || pending?.kind === 'search')
-    pending = { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])) }
+    pending = privateToViewer
+      ? { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])) }
+      : { ...pending, cards: pending.cards.map((oid) => ({ oid, hidden: true })) }
   else if (pending?.kind === 'explore')
-    pending = { ...pending, card: cardView(state.objects[pending.card]) }
+    pending = privateToViewer
+      ? { ...pending, card: cardView(state.objects[pending.card]) }
+      : { ...pending, card: { oid: pending.card, hidden: true } }
 
   return {
     turnNumber: state.turnNumber,

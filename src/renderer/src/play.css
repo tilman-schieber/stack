@@ -469,6 +469,49 @@
   margin-top: 14px;
 }
 
+/* --- play-mode tabs + networked setup --- */
+.mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.mode-tabs button {
+  flex: 1;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 6px;
+  cursor: pointer;
+}
+.mode-tabs button.active {
+  background: var(--accent, #3b6ea5);
+  border-color: var(--accent, #3b6ea5);
+  color: #fff;
+}
+.net-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.net-code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  width: 100%;
+  resize: vertical;
+  word-break: break-all;
+}
+.eng-waiting {
+  color: var(--accent, #6ea0d8);
+  font-style: italic;
+}
+
 /* select styling for player-panel etc */
 select {
   font: inherit;

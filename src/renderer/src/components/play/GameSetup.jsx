@@ -1,48 +1,38 @@
 import React, { useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
-import { EXAMPLE_DECKS, deckCardNames, expandExampleDeck } from '../../lib/exampleDecks.js'
+import { EXAMPLE_DECKS } from '../../lib/exampleDecks.js'
+import { resolveExampleDeck } from '../../lib/resolveDeck.js'
+import NetworkSetup from './NetworkSetup.jsx'
 
-// Build a case-insensitive name -> card lookup (indexing each face of DFCs).
-function buildLookup(cards) {
-  const map = new Map()
-  for (const card of cards) {
-    const keys = [card.name]
-    if (Array.isArray(card.card_faces)) for (const f of card.card_faces) if (f.name) keys.push(f.name)
-    for (const k of keys) {
-      const key = String(k).toLowerCase()
-      if (!map.has(key)) map.set(key, card)
-    }
-  }
-  return (name) => map.get(String(name).toLowerCase())
-}
+const DeckSelect = ({ value, onChange, label }) => (
+  <>
+    <label className="field-label">{label}</label>
+    <select value={value} onChange={(ev) => onChange(ev.target.value)}>
+      {EXAMPLE_DECKS.map((d) => (
+        <option key={d.slug} value={d.slug}>
+          {d.name}
+        </option>
+      ))}
+    </select>
+  </>
+)
 
-// Choose two decks and start a rules-enforced game.
+// Choose a play mode and set up a game: local hot-seat, or a serverless online
+// game (host or join) over a peer-to-peer WebRTC connection.
 export default function GameSetup() {
   const startEngineGame = useEngineGame((s) => s.startEngineGame)
+  const [mode, setMode] = useState('local') // 'local' | 'host' | 'join'
   const [e0, setE0] = useState(EXAMPLE_DECKS[0].slug)
   const [e1, setE1] = useState(EXAMPLE_DECKS[1].slug)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  async function start() {
-    const d0 = EXAMPLE_DECKS.find((d) => d.slug === e0)
-    const d1 = EXAMPLE_DECKS.find((d) => d.slug === e1)
+  async function startLocal() {
     setBusy(true)
     setError('')
     try {
-      const names = [...new Set([...deckCardNames(d0), ...deckCardNames(d1)])]
-      const { cards } = await window.api.resolveDeck(names)
-      const lookup = buildLookup(cards)
-      const b0 = expandExampleDeck(d0, lookup)
-      const b1 = expandExampleDeck(d1, lookup)
-      const missing = [...new Set([...b0.missing, ...b1.missing])]
-      if (missing.length) throw new Error(`Could not resolve: ${missing.join(', ')}`)
-      startEngineGame({
-        decks: [
-          { name: d0.name, cards: b0.cards },
-          { name: d1.name, cards: b1.cards }
-        ]
-      })
+      const [d0, d1] = await Promise.all([resolveExampleDeck(e0), resolveExampleDeck(e1)])
+      startEngineGame({ decks: [d0, d1] })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -54,29 +44,33 @@ export default function GameSetup() {
     <div className="game-setup">
       <div className="setup-card">
         <h2>New game</h2>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Two-player game with automatic rule enforcement.
-        </p>
-        <label className="field-label">Player 1 deck</label>
-        <select value={e0} onChange={(ev) => setE0(ev.target.value)}>
-          {EXAMPLE_DECKS.map((d) => (
-            <option key={d.slug} value={d.slug}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-        <label className="field-label">Player 2 deck</label>
-        <select value={e1} onChange={(ev) => setE1(ev.target.value)}>
-          {EXAMPLE_DECKS.map((d) => (
-            <option key={d.slug} value={d.slug}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-        {error && <div className="search-error">{error}</div>}
-        <button className="primary" onClick={start} disabled={busy}>
-          {busy ? 'Resolving cards…' : 'Start game'}
-        </button>
+        <div className="mode-tabs">
+          <button className={mode === 'local' ? 'active' : ''} onClick={() => setMode('local')}>
+            Local hot-seat
+          </button>
+          <button className={mode === 'host' ? 'active' : ''} onClick={() => setMode('host')}>
+            Host online
+          </button>
+          <button className={mode === 'join' ? 'active' : ''} onClick={() => setMode('join')}>
+            Join online
+          </button>
+        </div>
+
+        {mode === 'local' && (
+          <>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Two players on this screen, with automatic rule enforcement.
+            </p>
+            <DeckSelect label="Player 1 deck" value={e0} onChange={setE0} />
+            <DeckSelect label="Player 2 deck" value={e1} onChange={setE1} />
+            {error && <div className="search-error">{error}</div>}
+            <button className="primary" onClick={startLocal} disabled={busy}>
+              {busy ? 'Resolving cards…' : 'Start game'}
+            </button>
+          </>
+        )}
+
+        {mode !== 'local' && <NetworkSetup role={mode} />}
       </div>
     </div>
   )
