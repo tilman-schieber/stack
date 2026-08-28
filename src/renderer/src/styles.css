@@ -230,33 +230,19 @@ code {
   font-size: 12px;
   color: var(--accent);
 }
-.saved-header {
+.deck-counts {
+  margin: -4px 0 10px;
+}
+.manage-link {
   margin-top: 12px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
   border-top: 1px solid var(--border);
   padding-top: 12px;
-}
-.saved-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.saved-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.saved-item:hover {
-  background: var(--panel-2);
-}
-.saved-name {
-  font-weight: 600;
+  text-align: left;
+  border-radius: 0;
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
 }
 
 .main {
@@ -792,4 +778,110 @@ code {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ===== Deck manager ===== */
+.deck-manager {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px 28px;
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+}
+.dm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.dm-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.dm-actions {
+  display: flex;
+  gap: 8px;
+}
+.dm-import {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dm-import textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.dm-import-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dm-import-row .field-label {
+  margin: 0;
+}
+.dm-import-row input {
+  flex: 1;
+}
+.dm-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.dm-table th,
+.dm-table td {
+  padding: 9px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.dm-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  background: var(--panel-2);
+}
+.dm-table tr:last-child td {
+  border-bottom: none;
+}
+.dm-table .num {
+  text-align: right;
+  width: 60px;
+}
+.dm-name {
+  font-weight: 600;
+}
+.dm-name input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.dm-link {
+  cursor: pointer;
+}
+.dm-link:hover {
+  text-decoration: underline;
+}
+.dm-row-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.dm-row-actions button {
+  margin-left: 4px;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+.dm-row-actions button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
 }

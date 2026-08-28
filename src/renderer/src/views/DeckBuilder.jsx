@@ -7,7 +7,7 @@ import DeckImport from '../components/DeckImport.jsx'
 import SettingsModal from '../components/SettingsModal.jsx'
 import { useDeck } from '../store/deck.js'
 
-export default function DeckBuilder() {
+export default function DeckBuilder({ onManageDecks }) {
   const [tab, setTab] = useState('import')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const notFound = useDeck((s) => s.notFound)
@@ -20,7 +20,7 @@ export default function DeckBuilder() {
 
   return (
     <div className="app">
-      <DeckSidebar onOpenSettings={() => setSettingsOpen(true)} />
+      <DeckSidebar onOpenSettings={() => setSettingsOpen(true)} onManageDecks={onManageDecks} />
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 
       <main className="main">

@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
+import { promises as fs } from 'fs'
 import * as scryfall from './scryfall.js'
 import * as db from './db.js'
 import * as deckStore from './deckStore.js'
@@ -144,6 +145,37 @@ function registerIpc() {
   ipcMain.handle('decks:list', () => deckStore.listDecks())
   ipcMain.handle('decks:load', (_e, slug) => deckStore.loadDeck(slug))
   ipcMain.handle('decks:delete', (_e, slug) => deckStore.deleteDeck(slug))
+  ipcMain.handle('decks:rename', (_e, slug, name) => deckStore.renameDeck(slug, name))
+  ipcMain.handle('decks:duplicate', (_e, slug) => deckStore.duplicateDeck(slug))
+
+  // Deck manager file I/O: the renderer hands us decklist text to write, or asks
+  // us to pick a text file to read. Paths never leave the main process.
+  ipcMain.handle('decks:exportFile', async (e, defaultName, text) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Export decklist',
+      defaultPath: `${String(defaultName || 'deck').replace(/[\\/:*?"<>|]+/g, '-')}.txt`,
+      filters: [{ name: 'Decklist', extensions: ['txt'] }]
+    })
+    if (canceled || !filePath) return null
+    await fs.writeFile(filePath, String(text), 'utf8')
+    return path.basename(filePath)
+  })
+  ipcMain.handle('decks:importFile', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Import decklist',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Decklist', extensions: ['txt', 'dec', 'dek', 'mwdeck'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    if (canceled || !filePaths?.length) return null
+    const file = filePaths[0]
+    const text = await fs.readFile(file, 'utf8')
+    return { name: path.basename(file).replace(/\.[^.]+$/, ''), text }
+  })
 }
 
 app.whenReady().then(() => {

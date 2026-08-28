@@ -17,6 +17,14 @@ npm run build      # production build into out/
 
 Package installers: `npm run pack:linux` (AppImage), `pack:mac` (dmg), `pack:win` (nsis).
 
+## Decks tab (deck manager)
+
+Every saved deck in one list. **Import…** a decklist by pasting Arena/MTGO text or opening
+a `.txt` file (it is resolved against Scryfall and saved; *Import & edit* opens it in the
+builder). Per deck: **Edit** (open in Build), **Rename**, **Duplicate**, **Copy** (decklist
+text to the clipboard), **Export…** (to a `.txt` file, with set codes and collector numbers
+so the exact printings round-trip), **Delete**.
+
 ## Build tab (deck builder)
 
 1. **Import** → paste an Arena/MTGO decklist (or *Load sample*) → *Import deck*. Lines like
@@ -29,7 +37,8 @@ Package installers: `npm run pack:linux` (AppImage), `pack:mac` (dmg), `pack:win
    the default for future imports — handy for basic lands).
 4. **Stats** shows totals, mana curve, colors, types, and **rules-engine coverage** — which
    cards the engine fully supports.
-5. Name the deck and **Save**. Saved decks reopen offline with their exact printings.
+5. Name the deck and **Save** (or **Copy list** for the text). Saved decks reopen offline with
+   their exact printings; **Saved decks →** goes to the Decks tab.
 6. **Settings** (⚙) filters which printings the art picker shows.
 
 ## Play tab

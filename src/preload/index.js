@@ -24,7 +24,13 @@ const api = {
   saveDeck: (deck) => ipcRenderer.invoke('decks:save', deck),
   listDecks: () => ipcRenderer.invoke('decks:list'),
   loadDeck: (slug) => ipcRenderer.invoke('decks:load', slug),
-  deleteDeck: (slug) => ipcRenderer.invoke('decks:delete', slug)
+  deleteDeck: (slug) => ipcRenderer.invoke('decks:delete', slug),
+  renameDeck: (slug, name) => ipcRenderer.invoke('decks:rename', slug, name),
+  duplicateDeck: (slug) => ipcRenderer.invoke('decks:duplicate', slug),
+  // (defaultName, text) -> saved file name, or null if cancelled
+  exportDeckFile: (defaultName, text) => ipcRenderer.invoke('decks:exportFile', defaultName, text),
+  // () -> { name, text } | null
+  importDeckFile: () => ipcRenderer.invoke('decks:importFile')
 }
 
 contextBridge.exposeInMainWorld('api', api)

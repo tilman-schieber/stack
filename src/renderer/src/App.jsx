@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import DeckManager from './views/DeckManager.jsx'
 import DeckBuilder from './views/DeckBuilder.jsx'
 import PlayArea from './views/PlayArea.jsx'
 import { useSettings } from './store/settings.js'
@@ -26,8 +27,14 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+const VIEWS = [
+  ['decks', 'Decks'],
+  ['build', 'Build'],
+  ['play', 'Play']
+]
+
 export default function App() {
-  const [view, setView] = useState('build')
+  const [view, setView] = useState('decks')
   const loadSettings = useSettings((s) => s.load)
 
   useEffect(() => {
@@ -39,16 +46,23 @@ export default function App() {
       <header className="topbar">
         <div className="topbrand">🃏 MTG</div>
         <nav className="viewnav">
-          <button className={view === 'build' ? 'active' : ''} onClick={() => setView('build')}>
-            Build
-          </button>
-          <button className={view === 'play' ? 'active' : ''} onClick={() => setView('play')}>
-            Play
-          </button>
+          {VIEWS.map(([key, label]) => (
+            <button key={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}>
+              {label}
+            </button>
+          ))}
         </nav>
       </header>
       <div className="viewbody">
-        <ErrorBoundary key={view}>{view === 'build' ? <DeckBuilder /> : <PlayArea />}</ErrorBoundary>
+        <ErrorBoundary key={view}>
+          {view === 'decks' ? (
+            <DeckManager onEdit={() => setView('build')} />
+          ) : view === 'build' ? (
+            <DeckBuilder onManageDecks={() => setView('decks')} />
+          ) : (
+            <PlayArea />
+          )}
+        </ErrorBoundary>
       </div>
     </div>
   )

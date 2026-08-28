@@ -73,3 +73,23 @@ export async function deleteDeck(slug) {
   await fs.rm(file, { force: true })
   return true
 }
+
+// Rename a deck. The file is keyed by the slugified name, so a rename writes the
+// record under the new slug and removes the old file (unless the slug is the same).
+export async function renameDeck(slug, newName) {
+  const name = String(newName || '').trim()
+  if (!name) throw new Error('A deck needs a name')
+  const record = await loadDeck(slug)
+  const saved = await saveDeck({ ...record, name })
+  if (saved.slug !== slugify(slug)) await deleteDeck(slug)
+  return saved
+}
+
+// Duplicate a deck as "<name> (copy)", picking a free name if that exists.
+export async function duplicateDeck(slug) {
+  const record = await loadDeck(slug)
+  const existing = new Set((await listDecks()).map((d) => d.slug))
+  let name = `${record.name} (copy)`
+  for (let i = 2; existing.has(slugify(name)); i++) name = `${record.name} (copy ${i})`
+  return saveDeck({ ...record, name })
+}
