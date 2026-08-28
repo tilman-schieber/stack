@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useEngineGame, PRIORITY_STEPS } from '../../store/engineGame.js'
 import { useTokenArt, tokenKey } from '../../store/tokenArt.js'
 import '../../play.css'
@@ -105,6 +105,7 @@ export default function EnginePlayArea() {
   // Online: whether the local player is the one who currently must act.
   const myTurn = mode === 'local' || view?.pending?.player === mySeat
   const [showStops, setShowStops] = useState(false)
+  const [confirmExit, setConfirmExit] = useState(false) // "Concede?" two-step confirmation
   const [zoom, setZoom] = useState(null) // card being previewed (right-click)
   const [abilityMenu, setAbilityMenu] = useState(null) // { actions, x, y } picker
 
@@ -248,7 +249,8 @@ export default function EnginePlayArea() {
     else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: chosen })
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: chosen })
     else if (a.type === 'castBestow') choose({ type: 'castBestow', oid: a.oid, targets: chosen, x: c.x })
-    else choose({ type: 'cast', oid: a.oid, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
+    else
+      choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
   }
 
   // Finalize a modal cast once every selected mode has its targets.
@@ -340,6 +342,10 @@ export default function EnginePlayArea() {
   // Begin any player action; open targeting/sacrifice/X sub-steps as needed.
   function startAction(a) {
     setAbilityMenu(null)
+    if (a.type === 'tapForMana') {
+      choose({ type: 'tapForMana', oid: a.oid, color: a.color })
+      return
+    }
     if (a.type === 'playLand' || a.type === 'plot') {
       choose(a.type === 'plot' ? { type: 'plot', oid: a.oid } : a)
       return
@@ -362,7 +368,7 @@ export default function EnginePlayArea() {
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: [] })
     else if (a.type === 'castFaceDown') choose({ type: 'castFaceDown', oid: a.oid })
     else if (a.type === 'turnFaceUp') choose({ type: 'turnFaceUp', oid: a.oid })
-    else choose({ type: 'cast', oid: a.oid })
+    else choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost })
   }
   const startActivate = startAction
 
@@ -373,7 +379,10 @@ export default function EnginePlayArea() {
   }
 
   // ---- click dispatch ----
+  // Online, only the player whose decision it is may interact; the other side
+  // just watches (the host/store would ignore the choice anyway).
   function onHandCard(card, pid, ev) {
+    if (!myTurn) return
     if ((kind === 'discard' || kind === 'discardCards') && pid === pending.player) {
       setDiscardSel((sel) =>
         sel.includes(card.oid)
@@ -413,6 +422,7 @@ export default function EnginePlayArea() {
   }
 
   function onBattlefieldCard(card, controllerPid, ev) {
+    if (!myTurn) return
     // Clone: "enter as a copy of…" — click a creature on the battlefield to copy it.
     if (kind === 'copyEnter' && pending.choices.includes(card.oid)) {
       choose({ copy: card.oid })
@@ -441,11 +451,12 @@ export default function EnginePlayArea() {
       else if (matchesArtifact(card, controllerPid)) addTarget({ kind: 'object', oid: card.oid })
       return
     }
-    // Activate an ability of a permanent you control. If it has more than one
-    // activatable ability (e.g. a planeswalker), pop a picker.
+    // Activate an ability of a permanent you control — including tapping it for
+    // mana. If it has more than one option (a planeswalker, a dual land), pop a
+    // picker.
     if (kind === 'priority' && controllerPid === pending.player) {
       const acts = pending.actions.filter(
-        (a) => (a.type === 'activate' || a.type === 'turnFaceUp') && a.oid === card.oid
+        (a) => (a.type === 'activate' || a.type === 'turnFaceUp' || a.type === 'tapForMana') && a.oid === card.oid
       )
       if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
@@ -475,6 +486,7 @@ export default function EnginePlayArea() {
   }
 
   function onPlayerTarget(pid) {
+    if (!myTurn) return
     if (targeting && wantsPlayer) {
       addTarget({ kind: 'player', pid })
       return
@@ -484,7 +496,7 @@ export default function EnginePlayArea() {
   }
 
   function onStackItem(item) {
-    if (targeting && wantsSpell) addTarget({ kind: 'spell', oid: item.oid })
+    if (myTurn && targeting && wantsSpell) addTarget({ kind: 'spell', oid: item.oid })
   }
 
   // Class flags for a battlefield card given the current mode.
@@ -492,8 +504,9 @@ export default function EnginePlayArea() {
     const cls = []
     if (card.attacking) cls.push('atk')
     if (card.blocking) cls.push('blk')
-    if (ninjutsu && ninjutsu.returns.includes(card.oid)) cls.push('targetable')
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
+    if (!myTurn) return cls.join(' ') // spectating the other player's decision: no affordances
+    if (ninjutsu && ninjutsu.returns.includes(card.oid)) cls.push('targetable')
     if (targeting && matchesCreature(card, controllerPid)) cls.push('targetable')
     if (targeting && matchesLand(card, controllerPid)) cls.push('targetable')
     if (targeting && matchesArtifact(card, controllerPid)) cls.push('targetable')
@@ -502,8 +515,10 @@ export default function EnginePlayArea() {
     if (kind === 'discardCards' && pending.orSacrificeLand && controllerPid === pending.player && isLand(card))
       cls.push('targetable')
     if (kind === 'copyEnter' && pending.choices.includes(card.oid)) cls.push('targetable')
-    if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player && actionFor(card.oid)?.type === 'activate')
-      cls.push('activatable')
+    if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player) {
+      if (pending.actions.some((a) => a.type === 'activate' && a.oid === card.oid)) cls.push('activatable')
+      else if (pending.actions.some((a) => a.type === 'tapForMana' && a.oid === card.oid)) cls.push('tappable')
+    }
     if (kind === 'declareAttackers') {
       if (controllerPid === view.activePlayer && pending.eligible.includes(card.oid))
         cls.push('selectable', attackers[card.oid] ? 'chosen' : '')
@@ -665,9 +680,21 @@ export default function EnginePlayArea() {
           <button className="mini" onClick={() => setShowStops((s) => !s)}>
             ⏹ Stops
           </button>
-          <button className="mini" onClick={endGame}>
-            Concede / exit
-          </button>
+          {confirmExit ? (
+            <span className="eng-confirm">
+              Concede{mode !== 'local' ? ' and end the game for both players' : ''}?
+              <button className="mini danger" onClick={() => endGame()}>
+                Yes, concede
+              </button>
+              <button className="mini" onClick={() => setConfirmExit(false)}>
+                No
+              </button>
+            </span>
+          ) : (
+            <button className="mini" onClick={() => setConfirmExit(true)}>
+              Concede / exit
+            </button>
+          )}
         </div>
         {showStops && (
           <StopsPanel
@@ -684,6 +711,7 @@ export default function EnginePlayArea() {
         <div className="eng-sidebar">
           {statusColumn(top)}
           {statusColumn(bottom)}
+          <GameLog log={view.log || []} />
         </div>
         <div className="eng-center">
           {seat(top, 'top')}
@@ -762,6 +790,7 @@ export default function EnginePlayArea() {
       <Prompt
         view={view}
         pending={pending}
+        myTurn={myTurn}
         targeting={
           targeting
             ? {
@@ -797,10 +826,29 @@ export default function EnginePlayArea() {
         cancelNinjutsu={() => setNinjutsu(null)}
         error={error}
         choose={choose}
-        endGame={endGame}
+        endGame={() => endGame()}
         onMadnessCast={onMadnessCast}
         cancelCast={() => setCast(null)}
       />
+    </div>
+  )
+}
+
+// The public game log, newest at the bottom, kept scrolled to the latest entry.
+function GameLog({ log }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    const el = ref.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [log.length])
+  return (
+    <div className="eng-log" ref={ref}>
+      {log.length === 0 && <div className="eng-log-line muted">Game log</div>}
+      {log.map((l) => (
+        <div key={l.n} className={'eng-log-line' + (l.marker ? ' marker' : '')}>
+          {l.text}
+        </div>
+      ))}
     </div>
   )
 }
@@ -835,12 +883,32 @@ function ModalPicker({ modal, cancelCast }) {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, targeting, sacrificing, discarding, choosingX, modal, attackers, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
+function Prompt({ view, pending, myTurn, targeting, sacrificing, discarding, choosingX, modal, attackers, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
   let body = null
-  if (modal) {
+  if (!myTurn && kind !== 'gameOver') {
+    // Online: the other player is deciding — show what we're waiting on, no
+    // buttons (they'd be ignored by the host anyway).
+    const WAIT = {
+      priority: 'has priority',
+      declareAttackers: 'is declaring attackers',
+      declareBlockers: 'is declaring blockers',
+      mulligan: 'is deciding on a mulligan',
+      bottom: 'is putting cards on the bottom',
+      discard: 'is discarding',
+      discardCards: 'is discarding',
+      scry: 'is scrying',
+      search: 'is searching their library',
+      chooseTargets: 'is choosing targets'
+    }
+    body = (
+      <span className="eng-waiting">
+        Waiting — <b>{nameOf(pending.player)}</b> {WAIT[kind] || 'is deciding'}…
+      </span>
+    )
+  } else if (modal) {
     body = <ModalPicker modal={modal} cancelCast={cancelCast} />
   } else if (ninjutsu) {
     body = (

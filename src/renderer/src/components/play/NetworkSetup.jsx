@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
 import { EXAMPLE_DECKS } from '../../lib/exampleDecks.js'
 import { resolveExampleDeck } from '../../lib/resolveDeck.js'
@@ -21,11 +21,24 @@ export default function NetworkSetup({ role }) {
   const [phase, setPhase] = useState('idle') // idle | working | waiting | connecting
   const [error, setError] = useState('')
   const transportRef = useRef(null)
+  const notice = useEngineGame((s) => s.notice)
 
   const fail = (err) => {
     setError(err.message || String(err))
     setPhase('idle')
   }
+
+  // The store ends the session (peer cancelled / connection dropped) while we're
+  // still in setup: fall back to the start and show why.
+  useEffect(() => {
+    if (!notice) return
+    transportRef.current = null
+    setMyCode('')
+    setTheirCode('')
+    setPhase('idle')
+    setError(notice)
+    useEngineGame.getState().clearNotice() // consumed here; don't show it again on the setup screen
+  }, [notice])
 
   // HOST: create the offer code and start listening for the guest.
   async function createOffer() {
@@ -153,7 +166,7 @@ export default function NetworkSetup({ role }) {
         <button
           className="mini"
           onClick={() => {
-            endGame()
+            endGame() // no reason: a deliberate cancel needs no notice
             transportRef.current = null
             setMyCode('')
             setTheirCode('')

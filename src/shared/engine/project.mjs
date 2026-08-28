@@ -136,6 +136,8 @@ export function projectGame(engine, viewerPid = null) {
     pending,
     priorityPlayer: pending?.kind === 'priority' ? pending.player : null,
     stack: zone(state, 'stack').map((oid) => stackView(state, oid)),
-    players
+    players,
+    // The public game log (never contains hidden information), most recent last.
+    log: state.log.slice(-200)
   }
 }

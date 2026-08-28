@@ -29,7 +29,7 @@ function makeEngine() {
   // Libraries just need enough cards to draw an opening hand.
   const deck = Array(12).fill('Forest')
   const e = new GameEngine({
-    seed: 'm0',
+    seed: 'm0', startingPlayer: 0,
     players: [{ name: 'A', deck }, { name: 'B', deck }]
   }).start()
   // Keep both opening hands (resolve the mulligan phase).

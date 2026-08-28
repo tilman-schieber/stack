@@ -22,6 +22,7 @@ export function makeEngine(deckName = 'Forest', size = 20) {
   const deck = Array(size).fill(deckName)
   const engine = new GameEngine({
     seed: 'test',
+    startingPlayer: 0,
     players: [{ name: 'A', deck }, { name: 'B', deck }]
   }).start()
   return keepAll(engine)
@@ -35,7 +36,17 @@ export function put(engine, pid, name, zoneName, status = {}) {
   if (zoneName === 'battlefield') o.controller = pid
   Object.assign(o.status, status)
   engine.state.zones[zoneKey(zoneName, pid)].push(o.oid)
+  refresh(engine)
   return o
+}
+
+// After a test mutates state behind the engine's back, recompute the offered
+// actions of a pending priority decision (the engine validates answers against
+// what it offered).
+export function refresh(engine) {
+  const p = engine.pending
+  if (p?.kind === 'priority') p.actions = engine._legalActions(p.player)
+  return engine
 }
 
 export const inZone = (engine, pid, zoneName, oid) => zone(engine.state, zoneName, pid).includes(oid)

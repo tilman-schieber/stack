@@ -21,6 +21,8 @@ const DeckSelect = ({ value, onChange, label }) => (
 // game (host or join) over a peer-to-peer WebRTC connection.
 export default function GameSetup() {
   const startEngineGame = useEngineGame((s) => s.startEngineGame)
+  const notice = useEngineGame((s) => s.notice)
+  const clearNotice = useEngineGame((s) => s.clearNotice)
   const [mode, setMode] = useState('local') // 'local' | 'host' | 'join'
   const [e0, setE0] = useState(EXAMPLE_DECKS[0].slug)
   const [e1, setE1] = useState(EXAMPLE_DECKS[1].slug)
@@ -44,6 +46,14 @@ export default function GameSetup() {
     <div className="game-setup">
       <div className="setup-card">
         <h2>New game</h2>
+        {notice && mode === 'local' && (
+          <div className="search-error setup-notice">
+            {notice}{' '}
+            <button className="mini" onClick={clearNotice}>
+              OK
+            </button>
+          </div>
+        )}
         <div className="mode-tabs">
           <button className={mode === 'local' ? 'active' : ''} onClick={() => setMode('local')}>
             Local hot-seat

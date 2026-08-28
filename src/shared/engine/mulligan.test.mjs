@@ -9,7 +9,7 @@ import { makeAsserter } from './_testutil.mjs'
 const { assert, stats } = makeAsserter()
 const deck = () => Array(40).fill('Forest')
 const make = () =>
-  new GameEngine({ seed: 'mull', players: [{ name: 'A', deck: deck() }, { name: 'B', deck: deck() }] }).start()
+  new GameEngine({ seed: 'mull', startingPlayer: 0, players: [{ name: 'A', deck: deck() }, { name: 'B', deck: deck() }] }).start()
 
 console.log('\n1. game begins in the mulligan phase')
 {

@@ -32,7 +32,8 @@ function settle(engine, stops) {
   let guard = 0
   while (engine.state.pending?.kind === 'priority' && guard++ < 4000) {
     const p = engine.state.pending
-    const canAct = (p.actions?.length || 0) > 1
+    // Tapping for mana is always available and never a reason to stop.
+    const canAct = (p.actions || []).some((a) => a.type !== 'pass' && !a.mana)
     const stopHere = stops[p.player]?.has(engine.state.step)
     if (canAct && stopHere) break // hand this player priority
     engine.choose({ type: 'pass' })
@@ -51,6 +52,7 @@ export const useEngineGame = create((set, get) => ({
   started: false,
   view: null,
   error: null,
+  notice: null, // why the last game ended unexpectedly (disconnect etc.), shown on the setup screen
   mode: 'local',
   netSeat: 0, // which player id the local human controls
   stops: defaultStops(),
@@ -66,25 +68,27 @@ export const useEngineGame = create((set, get) => ({
     })
     engine.start()
     settle(engine, get().stops)
-    set({ started: true, mode: 'local', netSeat: 0, _engine: engine, view: projectGame(engine), error: null })
+    set({ started: true, mode: 'local', netSeat: 0, _engine: engine, view: projectGame(engine), error: null, notice: null })
   },
+
+  clearNotice: () => set({ notice: null }),
 
   // ---- networked: host (owns the engine, seat 0) ---------------------------
   hostGame: ({ myDeck, transport }) => {
     transport.onMessage = (msg) => get()._onHostMessage(msg, myDeck)
-    transport.onClose = () => get().endGame()
-    set({ mode: 'host', netSeat: 0, _transport: transport, stops: defaultStops(2), started: false })
+    transport.onClose = () => get().endGame(LOST_CONNECTION)
+    set({ mode: 'host', netSeat: 0, _transport: transport, stops: defaultStops(2), started: false, notice: null })
   },
 
   // ---- networked: guest (no engine, seat 1) --------------------------------
   guestGame: ({ myDeck, transport }) => {
     transport.onMessage = (msg) => get()._onGuestMessage(msg)
-    transport.onClose = () => get().endGame()
+    transport.onClose = () => get().endGame(LOST_CONNECTION)
     transport.onOpen = () => transport.send({ t: 'deck', name: myDeck.name, cards: myDeck.cards })
     // If the channel is already open (connected before this ran), send now.
     if (transport.channel?.readyState === 'open')
       transport.send({ t: 'deck', name: myDeck.name, cards: myDeck.cards })
-    set({ mode: 'guest', netSeat: 1, _transport: transport, started: false })
+    set({ mode: 'guest', netSeat: 1, _transport: transport, started: false, notice: null })
   },
 
   choose: (answer) => {
@@ -115,6 +119,7 @@ export const useEngineGame = create((set, get) => ({
   _onHostMessage: (msg, myDeck) => {
     const { _engine, stops } = get()
     if (msg.t === 'deck') {
+      if (_engine) return // the game is already running; a second deck can't replace it
       const engine = new GameEngine({
         seed: 'game-' + Date.now(),
         players: [
@@ -141,13 +146,13 @@ export const useEngineGame = create((set, get) => ({
       set({ stops: next })
       get()._commit()
     } else if (msg.t === 'bye') {
-      get().endGame()
+      get().endGame(get().started ? 'Your opponent left the game.' : 'Your opponent cancelled.')
     }
   },
 
   _onGuestMessage: (msg) => {
     if (msg.t === 'view') set({ started: true, view: msg.view, error: null })
-    else if (msg.t === 'bye') get().endGame()
+    else if (msg.t === 'bye') get().endGame(get().started ? 'The host ended the game.' : 'The host cancelled.')
   },
 
   // Toggle a stop for the local seat. Local mode can toggle either seat.
@@ -168,14 +173,33 @@ export const useEngineGame = create((set, get) => ({
     if (_engine) get()._commit()
   },
 
-  endGame: () => {
+  // End the game (concede / exit / connection lost). `reason`, if given, is shown
+  // on the setup screen so an unexpected end isn't silent.
+  endGame: (reason = null) => {
     const { _transport } = get()
-    try {
-      _transport?.send({ t: 'bye' })
-      _transport?.close()
-    } catch {
-      /* ignore */
+    if (_transport) {
+      // Detach first so closing the channel doesn't re-enter endGame with a
+      // "connection lost" notice of its own.
+      _transport.onClose = null
+      _transport.onMessage = null
+      try {
+        _transport.send({ t: 'bye' })
+        _transport.close()
+      } catch {
+        /* ignore */
+      }
     }
-    set({ started: false, mode: 'local', netSeat: 0, _engine: null, _transport: null, view: null, error: null })
+    set({
+      started: false,
+      mode: 'local',
+      netSeat: 0,
+      _engine: null,
+      _transport: null,
+      view: null,
+      error: null,
+      notice: typeof reason === 'string' ? reason : null
+    })
   }
 }))
+
+const LOST_CONNECTION = 'Connection lost — the other player disconnected.'

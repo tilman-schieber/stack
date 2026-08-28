@@ -4,7 +4,7 @@
 // Run: node src/shared/engine/planeswalker.test.mjs
 
 import { zone } from './state.mjs'
-import { makeEngine, put, inZone, advanceToPriorityAt, makeAsserter } from './_testutil.mjs'
+import { makeEngine, put, inZone, advanceToPriorityAt, makeAsserter, refresh } from './_testutil.mjs'
 
 const { assert, stats } = makeAsserter()
 const section = (n) => console.log('\n' + n)
@@ -54,6 +54,7 @@ section('3. -3 needs enough loyalty; kills a creature')
   assert(!activateActions(e, chandra.oid).some((a) => a.loyalty === -3), '-3 not offered at 2 loyalty')
 
   chandra.status.counters.loyalty = 3
+  refresh(e)
   e.choose({ type: 'activate', oid: chandra.oid, ability: 1, targets: [{ kind: 'object', oid: angel.oid }] })
   // Paying -3 drops Chandra to 0 loyalty, so she dies to SBA immediately (the
   // ability is already on the stack and still resolves).

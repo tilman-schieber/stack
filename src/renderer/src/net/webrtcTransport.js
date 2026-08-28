@@ -28,17 +28,22 @@ export class WebrtcTransport {
   }
 
   // Resolve once ICE gathering is complete, so the local description we emit
-  // already contains every candidate (non-trickle / vanilla ICE).
-  _localDescriptionWhenReady() {
-    return new Promise((resolve) => {
-      if (this.pc.iceGatheringState === 'complete') return resolve(this.pc.localDescription)
-      const check = () => {
-        if (this.pc.iceGatheringState === 'complete') {
-          this.pc.removeEventListener('icegatheringstatechange', check)
-          resolve(this.pc.localDescription)
-        }
+  // already contains every candidate (non-trickle / vanilla ICE). Gathering can
+  // stall when the STUN server is unreachable, so after `timeoutMs` we go with
+  // whatever candidates we have (enough for a LAN) — or fail with a clear message.
+  _localDescriptionWhenReady(timeoutMs = 10000) {
+    return new Promise((resolve, reject) => {
+      const done = () => {
+        this.pc.removeEventListener('icegatheringstatechange', check)
+        clearTimeout(timer)
+        const desc = this.pc.localDescription
+        if (desc && /a=candidate:/.test(desc.sdp)) resolve(desc)
+        else reject(new Error('Could not find a network route (no connection candidates). Check your network and try again.'))
       }
+      const check = () => this.pc.iceGatheringState === 'complete' && done()
+      const timer = setTimeout(done, timeoutMs)
       this.pc.addEventListener('icegatheringstatechange', check)
+      check()
     })
   }
 

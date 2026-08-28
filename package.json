@@ -8,6 +8,7 @@
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
     "dev": "electron-vite dev",
+    "test": "for f in src/shared/engine/*.test.mjs; do node \"$f\" > /dev/null || { echo \"FAIL $f\"; exit 1; }; done; echo \"all engine suites green\"",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",

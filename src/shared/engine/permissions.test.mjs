@@ -36,7 +36,7 @@ const setup = (withOrrery) => {
 import { GameEngine } from './engine.mjs'
 function makeEngineFresh() {
   const deck = Array(20).fill('Forest')
-  const e = new GameEngine({ seed: 'perm', players: [{ name: 'A', deck }, { name: 'B', deck }] }).start()
+  const e = new GameEngine({ seed: 'perm', startingPlayer: 0, players: [{ name: 'A', deck }, { name: 'B', deck }] }).start()
   let g = 0
   while (e.pending && (e.pending.kind === 'mulligan' || e.pending.kind === 'bottom') && g++ < 50) {
     if (e.pending.kind === 'mulligan') e.choose({ keep: true })

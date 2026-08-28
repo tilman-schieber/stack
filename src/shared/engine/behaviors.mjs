@@ -526,7 +526,9 @@ export const BEHAVIORS = {
   // Eldrazi Spawn token (from Writhing Chrysalis): sacrifice for {C}. Modelled as a
   // manually-activated ability (so it isn't auto-sacrificed to pay for other spells).
   'Eldrazi Spawn': {
-    activated: [{ cost: { sacrifice: 'self' }, effect: [{ op: 'addMana', mana: 'C' }] }]
+    activated: [
+      { manaAbility: true, label: 'Sacrifice: add {C}', cost: { sacrifice: 'self' }, effect: [{ op: 'addMana', mana: 'C' }] }
+    ]
   },
   // Investigate produces a Clue token; its sacrifice-to-draw ability is authored
   // on the token by name.
