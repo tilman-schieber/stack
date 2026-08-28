@@ -1,80 +1,90 @@
-# MTG Deck Builder
+# Stack — MTG deck builder + rules-enforced play
 
 A cross-platform (Linux/macOS/Windows) Electron desktop app for building Magic: The
-Gathering decks from plain-text Arena decklists. Card data and high-res images come
-from [Scryfall](https://scryfall.com/docs/api); images are cached locally so decks
-render offline after a first load.
-
-This is **phase 1** of a larger goal — a playable MTG game vs. other players / AI. The
-deck builder is the foundation; the play area and rules engine come later. The bundled
-`MagicCompRules20260619.txt` is the seed reference for that future rules engine.
+Gathering decks and playing them — locally on one screen, or against a friend over
+the internet with no server — with a deterministic rules engine enforcing the game.
+Card data and images come from [Scryfall](https://scryfall.com/docs/api) and are cached
+locally, so everything works offline after the first load.
 
 ## Run
 
 ```bash
 npm install
 npm run dev        # launch with hot reload
+npm test           # run every headless engine suite (src/shared/engine/*.test.mjs)
+npm run build      # production build into out/
 ```
 
-Package installers:
+Package installers: `npm run pack:linux` (AppImage), `pack:mac` (dmg), `pack:win` (nsis).
 
-```bash
-npm run pack:linux   # AppImage
-npm run pack:mac     # dmg
-npm run pack:win     # nsis
-```
+## Build tab (deck builder)
 
-## Usage
-
-1. **Import** tab → paste an Arena/MTGO decklist (or click *Load sample*) → *Import deck*.
-   Lines like `4 Lightning Bolt`, `4x Lightning Bolt`, `Lightning Bolt`, and
-   `2 Snapcaster Mage (MM2) 42` all work. `Sideboard` / `Commander` headers are honored.
-2. **Add cards** tab → search with [Scryfall query syntax](https://scryfall.com/docs/syntax)
+1. **Import** → paste an Arena/MTGO decklist (or *Load sample*) → *Import deck*. Lines like
+   `4 Lightning Bolt`, `4x Lightning Bolt`, `2 Snapcaster Mage (MM2) 42` all work;
+   `Sideboard` / `Commander` headers are honored.
+2. **Add cards** → search with [Scryfall syntax](https://scryfall.com/docs/syntax)
    (e.g. `t:goblin cmc<=2`) and click a result to add it.
-3. Adjust quantities with the `–` / `+` buttons on each card; `✕` removes it.
-4. **Change art** — hover a card and click the 🖼 button to open the printing picker.
-   Click any printing to use it for that card. Mark printings ♥ to **favorite** them:
-   favorites appear first and can be **dragged to reorder**. The **first favorite is
-   the default** printing used on future imports (great for basic lands). Preferences
-   persist per card.
-5. **Stats** tab shows totals, mana curve, color breakdown, and type counts.
-6. Name the deck in the sidebar and **Save**. Saved decks reopen fully offline and
-   remember the exact printing chosen for each card.
-7. **Settings** (⚙ in the sidebar) controls which printings appear in the art picker:
-   ignore gold-bordered (World Championship) sets, ignore non-tournament-legal
-   printings (un-sets, silver-bordered, oversized, digital-only Alchemy/MTGO), and
-   an optional list of additional set codes to hide. Favorites and a card's current
-   printing are always shown even if a filter would otherwise hide them.
+3. Adjust quantities with `–` / `+`; `✕` removes. Hover a card and click 🖼 to pick a
+   printing; ♥ favorites a printing (favorites first, drag to reorder; the first favorite is
+   the default for future imports — handy for basic lands).
+4. **Stats** shows totals, mana curve, colors, types, and **rules-engine coverage** — which
+   cards the engine fully supports.
+5. Name the deck and **Save**. Saved decks reopen offline with their exact printings.
+6. **Settings** (⚙) filters which printings the art picker shows.
 
-## Play (manual two-player hotseat board)
+## Play tab
 
-Switch to the **Play** tab in the top bar. Pick two saved decks and **Start game** — each
-player draws 7 from a shuffled library. The board is manual (no rules enforcement):
+Pick a mode, pick decks (the built-in example decks or any deck you saved), start.
 
-- **Drag** cards between hand, battlefield, graveyard, exile, and library (drop onto the
-  piles or the felt). On the battlefield, place cards anywhere; **click** a card to tap
-  (rotate 90°).
-- **Right-click** a card for actions: tap, ±counters, flip (transform/DFC → back art),
-  face-down, duplicate (token), move to any zone, create token (Scryfall search).
-- **Player panel**: life (+/- or type), poison/energy counters, and library/graveyard/exile
-  piles (click to browse/search; library viewer supports tutoring and scrying).
-- **Turn bar** (light assist, no enforcement): untap-all, draw, mulligan, next-phase pills,
-  and **Pass turn** (flips the active player, untaps them, draws for turn). Seats swap so the
-  active player is always on the bottom with their hand shown.
-- The in-progress game **auto-saves** to `localStorage` and restores on reload.
+- **Local hot-seat** — two players on one screen, both hands visible.
+- **Host online / Join online** — serverless peer-to-peer over WebRTC. The host creates a
+  connection code, the guest pastes it and sends back an answer code, and the game
+  starts. The host's app runs the rules engine and pushes each player a view with the
+  other's hand hidden; the guest's choices are validated by the host's engine. Needs a
+  reachable STUN server (Google's public one) and a NAT that isn't symmetric — no relay.
 
-Not yet implemented: networked/AI opponents, rules/mana/combat enforcement, the stack.
+On the board: click a card in hand to cast it (targets are chosen by clicking), click a
+land to tap it for mana (or let the engine auto-tap when you cast), click a permanent to
+activate an ability, right-click to zoom. **Space / Enter** passes priority, **Escape**
+cancels. **Stops** sets the Magic Online-style steps at which you receive priority;
+everything else auto-passes. A public game log runs down the left.
+
+## Rules engine (`src/shared/engine/`)
+
+Pure, UI-agnostic, deterministic (seeded RNG, per-game object ids) and N-player. The whole
+game is driven through one call — `engine.choose(answer)` — against `state.pending`, a
+typed decision (priority, targets, attackers, blockers, scry, …), and every answer is
+validated against what the decision offered. `projectGame(engine, viewerPid)` produces a
+serializable, per-viewer redacted view for the UI.
+
+Implemented: the full turn structure and priority system, the stack, London mulligans, mana
+(pool, auto- and manual tapping, hybrid, X), combat with all evasion/damage keywords,
+multiple blockers, first/double strike, planeswalkers, all seven continuous-effect layers
+(copy, control, text, types, color, abilities, P/T), triggered/activated/static abilities,
+replacement and prevention effects, regeneration, ward, hexproof/shroud/protection,
+flashback, madness, morph, bestow, ninjutsu, plot, omens, storm, extra turns/combats,
+targeted modal and divided spells, state-based actions, and multiplayer elimination.
+
+Card characteristics come straight from Scryfall data; only cards whose text implies effects
+get an entry in `behaviors.mjs`, written against a small vocabulary of effect ops. Cards
+without an entry play with their printed characteristics. Simplifications: damage
+assignment order, the legend rule and mulligan sequencing are decided automatically; no
+TURN relay, reconnection or spectators online.
+
+Tests are plain Node scripts (`node src/shared/engine/<name>.test.mjs`, or `npm test`).
 
 ## Architecture
 
-- **`src/main/`** — Electron main process. Owns all network + disk access:
-  - `scryfall.js` — rate-limited batch card lookup (`POST /cards/collection`) + search.
-  - `imageCache.js` — a `card://<scryfallId>` custom protocol that lazily downloads and
-    caches card images to `userData/card-cache/`.
-  - `deckStore.js` — named decks as JSON in `userData/decks/`.
-  - `cardStore.js` — resolved card metadata cache (`userData/cards.json`).
-- **`src/preload/index.js`** — exposes a minimal typed `window.api` (contextIsolation on).
-- **`src/renderer/`** — React UI (zustand store, deck parser, grid/stats/search/sidebar).
+- **`src/main/`** — Electron main process; owns all network + disk access.
+  `scryfall.js` (rate-limited lookups), `db.js` (SQLite card cache + favorites),
+  `imageCache.js` (`card://<id>` protocol, lazily cached images), `deckStore.js`
+  (saved decks as JSON), `settings.js`.
+- **`src/preload/index.js`** — the minimal typed `window.api` (contextIsolation on).
+- **`src/renderer/`** — React UI. `views/DeckBuilder.jsx`, `views/PlayArea.jsx`,
+  `components/play/*` (setup, board, networking UI), `store/engineGame.js` (game modes:
+  local / host / guest), `net/webrtcTransport.js`.
+- **`src/shared/engine/`** — the rules engine, shared by the renderer and the tests.
 
 The renderer never touches the network or filesystem directly — everything goes through
-`window.api` IPC.
+`window.api` IPC. `MagicCompRules20260619.txt` is the comprehensive-rules reference the
+engine cites.

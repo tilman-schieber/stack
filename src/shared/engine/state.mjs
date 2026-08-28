@@ -13,8 +13,9 @@ export const PERSONAL_ZONES = ['library', 'hand', 'graveyard', 'exile']
 
 export const zoneKey = (name, pid) => (SHARED_ZONES.includes(name) ? name : `${pid}:${name}`)
 
-let OID = 0
-const nextOid = () => `o${++OID}`
+// Object ids are per game (not per process) so a seed reproduces the exact same
+// ids — replays and bug reports can name objects.
+const nextOid = (state) => `o${++state.oidCounter}`
 
 // Compute characteristics from printed base. M0 only applies layer 7c (counters)
 // on top of printed power/toughness; the full layer system lands in M3.
@@ -43,7 +44,7 @@ export function computeChars(obj) {
 // no printed characteristics and never uses moveObject — it is deleted when it
 // resolves (abilities don't go to any zone afterwards).
 export function createAbility(state, fields) {
-  const oid = nextOid()
+  const oid = nextOid(state)
   const o = {
     oid,
     kind: 'ability',
@@ -63,7 +64,7 @@ export function createAbility(state, fields) {
 export function createObject(state, sf, owner) {
   const printed = printedFromScryfall(sf)
   const obj = {
-    oid: nextOid(),
+    oid: nextOid(state),
     owner,
     controller: owner,
     zoneName: null,
@@ -161,6 +162,7 @@ export function createState({ players, seed = 'stack' }) {
     prevent: [], // active damage-prevention shields (rule 615)
     replacements: [], // active replacement effects: floating shields (rule 614/616)
     tsCounter: 0, // monotonic timestamps for layer ordering (rule 613)
+    oidCounter: 0, // object ids, per game
     log: [],
     players: [],
     objects: {},

@@ -21,9 +21,20 @@ const SUPPORTED_KEYWORDS = new Set(
     'indestructible',
     'flash',
     'defender',
-    'prowess'
+    'prowess',
+    'hexproof',
+    'shroud'
   ]
 )
+
+// Keyword lines with a parameter the engine parses from oracle text (see
+// behaviors.mjs / cards.mjs): ward costs, protection from a color, morph costs.
+const SUPPORTED_PATTERNS = [
+  /^ward\s*[—-]?\s*((\{[^}]+\})+|pay \d+ life)$/i,
+  /^protection from (white|blue|black|red|green)$/i,
+  /^morph\s*[—-]?\s*(\{[^}]+\})+$/i
+]
+const supportedToken = (t) => SUPPORTED_KEYWORDS.has(t) || SUPPORTED_PATTERNS.some((re) => re.test(t))
 
 // Is a permanent vanilla (no rules text) or French-vanilla (only supported
 // keyword abilities)? Reminder text in parentheses is ignored.
@@ -37,7 +48,7 @@ function isVanillaOrKeyword(sf) {
     .split(/[\n,]+/)
     .map((t) => t.trim().toLowerCase())
     .filter(Boolean)
-  return tokens.every((t) => SUPPORTED_KEYWORDS.has(t))
+  return tokens.every(supportedToken)
 }
 
 // Classify one Scryfall card → { name, supported, category }.
@@ -50,7 +61,7 @@ export function classifyCard(sf) {
 
   if (types.includes('Land')) {
     if (printed.supertypes.includes('Basic')) return { name, supported: true, category: 'basic land' }
-    return { name, supported: false, category: 'nonbasic land (mana ability not modeled)' }
+    return { name, supported: false, category: 'nonbasic land (not authored in behaviors.mjs)' }
   }
   if (types.includes('Instant') || types.includes('Sorcery'))
     return { name, supported: false, category: 'spell effect not implemented' }

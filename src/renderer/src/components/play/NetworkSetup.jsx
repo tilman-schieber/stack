@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
 import { EXAMPLE_DECKS } from '../../lib/exampleDecks.js'
-import { resolveExampleDeck } from '../../lib/resolveDeck.js'
+import { resolvePlayableDeck } from '../../lib/resolveDeck.js'
 import { WebrtcTransport } from '../../net/webrtcTransport.js'
+import DeckPicker from './DeckPicker.jsx'
 
 // Serverless peer-to-peer connection setup by copy-pasting one code each way.
 //   Host: pick a deck -> "Create game" -> copy the offer code to your friend ->
@@ -15,7 +16,7 @@ export default function NetworkSetup({ role }) {
   const hostGame = useEngineGame((s) => s.hostGame)
   const guestGame = useEngineGame((s) => s.guestGame)
   const endGame = useEngineGame((s) => s.endGame)
-  const [deck, setDeck] = useState(EXAMPLE_DECKS[0].slug)
+  const [deck, setDeck] = useState(`example:${EXAMPLE_DECKS[0].slug}`)
   const [myCode, setMyCode] = useState('') // code to hand to the other player
   const [theirCode, setTheirCode] = useState('') // code pasted from the other player
   const [phase, setPhase] = useState('idle') // idle | working | waiting | connecting
@@ -45,7 +46,7 @@ export default function NetworkSetup({ role }) {
     setError('')
     setPhase('working')
     try {
-      const myDeck = await resolveExampleDeck(deck)
+      const myDeck = await resolvePlayableDeck(deck)
       const t = new WebrtcTransport()
       transportRef.current = t
       const code = await t.createOffer()
@@ -73,7 +74,7 @@ export default function NetworkSetup({ role }) {
     setError('')
     setPhase('working')
     try {
-      const myDeck = await resolveExampleDeck(deck)
+      const myDeck = await resolvePlayableDeck(deck)
       const t = new WebrtcTransport()
       transportRef.current = t
       const code = await t.acceptOffer(theirCode)
@@ -85,18 +86,7 @@ export default function NetworkSetup({ role }) {
     }
   }
 
-  const deckSelect = (
-    <>
-      <label className="field-label">Your deck</label>
-      <select value={deck} onChange={(ev) => setDeck(ev.target.value)} disabled={phase !== 'idle'}>
-        {EXAMPLE_DECKS.map((d) => (
-          <option key={d.slug} value={d.slug}>
-            {d.name}
-          </option>
-        ))}
-      </select>
-    </>
-  )
+  const deckSelect = <DeckPicker label="Your deck" value={deck} onChange={setDeck} disabled={phase !== 'idle'} />
 
   const codeBox = (label, value, readOnly, onChange) => (
     <>

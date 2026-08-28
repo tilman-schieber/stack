@@ -622,3 +622,19 @@
   border-color: var(--danger);
   color: var(--danger);
 }
+
+/* Face-down permanent marker ("?" only for whoever knows what it is). */
+.eng-facedown {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}

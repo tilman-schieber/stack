@@ -1,21 +1,9 @@
 import React, { useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
 import { EXAMPLE_DECKS } from '../../lib/exampleDecks.js'
-import { resolveExampleDeck } from '../../lib/resolveDeck.js'
+import { resolvePlayableDeck } from '../../lib/resolveDeck.js'
+import DeckPicker from './DeckPicker.jsx'
 import NetworkSetup from './NetworkSetup.jsx'
-
-const DeckSelect = ({ value, onChange, label }) => (
-  <>
-    <label className="field-label">{label}</label>
-    <select value={value} onChange={(ev) => onChange(ev.target.value)}>
-      {EXAMPLE_DECKS.map((d) => (
-        <option key={d.slug} value={d.slug}>
-          {d.name}
-        </option>
-      ))}
-    </select>
-  </>
-)
 
 // Choose a play mode and set up a game: local hot-seat, or a serverless online
 // game (host or join) over a peer-to-peer WebRTC connection.
@@ -24,8 +12,8 @@ export default function GameSetup() {
   const notice = useEngineGame((s) => s.notice)
   const clearNotice = useEngineGame((s) => s.clearNotice)
   const [mode, setMode] = useState('local') // 'local' | 'host' | 'join'
-  const [e0, setE0] = useState(EXAMPLE_DECKS[0].slug)
-  const [e1, setE1] = useState(EXAMPLE_DECKS[1].slug)
+  const [e0, setE0] = useState(`example:${EXAMPLE_DECKS[0].slug}`)
+  const [e1, setE1] = useState(`example:${EXAMPLE_DECKS[1].slug}`)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -33,7 +21,7 @@ export default function GameSetup() {
     setBusy(true)
     setError('')
     try {
-      const [d0, d1] = await Promise.all([resolveExampleDeck(e0), resolveExampleDeck(e1)])
+      const [d0, d1] = await Promise.all([resolvePlayableDeck(e0), resolvePlayableDeck(e1)])
       startEngineGame({ decks: [d0, d1] })
     } catch (err) {
       setError(err.message)
@@ -69,10 +57,10 @@ export default function GameSetup() {
         {mode === 'local' && (
           <>
             <p className="muted" style={{ marginTop: 0 }}>
-              Two players on this screen, with automatic rule enforcement.
+              Two players on this screen, with automatic rule enforcement. Both hands are visible.
             </p>
-            <DeckSelect label="Player 1 deck" value={e0} onChange={setE0} />
-            <DeckSelect label="Player 2 deck" value={e1} onChange={setE1} />
+            <DeckPicker label="Player 1 deck" value={e0} onChange={setE0} />
+            <DeckPicker label="Player 2 deck" value={e1} onChange={setE1} />
             {error && <div className="search-error">{error}</div>}
             <button className="primary" onClick={startLocal} disabled={busy}>
               {busy ? 'Resolving cards…' : 'Start game'}

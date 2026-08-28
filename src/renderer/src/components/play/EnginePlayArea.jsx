@@ -1,6 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { useEngineGame, PRIORITY_STEPS } from '../../store/engineGame.js'
-import { useTokenArt, tokenKey } from '../../store/tokenArt.js'
+import React, { useEffect, useState } from 'react'
+import { useEngineGame } from '../../store/engineGame.js'
+import { EngineCard, Pile, ManaPool, isCreature, isLand } from './engine/EngineCard.jsx'
+import Prompt from './engine/Prompt.jsx'
+import { GameLog, StopsPanel } from './engine/Panels.jsx'
+import { ZoneViewer, SearchOverlay, ScryOverlay, ZoomOverlay, StackOverlay } from './engine/Overlays.jsx'
 import '../../play.css'
 import './engine.css'
 
@@ -19,84 +22,10 @@ const STEP_LABEL = {
   cleanup: 'Cleanup'
 }
 
-const cardImg = (c) => (c.cardId ? `card://${c.cardId}` : null)
-const isCreature = (c) => c.types?.includes('Creature')
-const isLand = (c) => c.types?.includes('Land')
-
-// One permanent / stack card, styled from play.css .board-card.
-// Right-click zooms (via onZoom); left-click acts (via onClick).
-function EngineCard({ card, className = '', onClick, onZoom, title }) {
-  // Tokens have no fixed printing — resolve their art from the token-art store.
-  const key = card.token && card.tokenDef ? tokenKey(card.tokenDef) : null
-  const artId = useTokenArt((s) => (key ? s.cache[key]?.chosenId : null))
-  const ensure = useTokenArt((s) => s.ensure)
-  useEffect(() => {
-    if (key) ensure(card.tokenDef)
-  }, [key, ensure]) // eslint-disable-line react-hooks/exhaustive-deps
-  const imgId = card.token ? artId : card.cardId
-  const img = imgId ? `card://${imgId}` : null
-  const pt = card.power != null ? `${card.power}/${card.toughness}` : null
-  return (
-    <div
-      className={'board-card ' + (card.tapped ? 'tapped ' : '') + className}
-      onClick={onClick}
-      onContextMenu={(e) => {
-        e.preventDefault()
-        onZoom?.(card)
-      }}
-      title={title || card.name}
-    >
-      {img ? <img src={img} alt={card.name} draggable={false} /> : <div className="cardback" />}
-      {isCreature(card) && pt && <span className="eng-pt">{pt}</span>}
-      {card.damage > 0 && <span className="eng-dmg">{card.damage}</span>}
-      {card.loyalty != null && <span className="eng-loyalty">◆ {card.loyalty}</span>}
-    </div>
-  )
-}
-
-function Pile({ label, count, topCard, faceDown, onOpen }) {
-  return (
-    <div className="rail-pile">
-      <div
-        className="rail-pile-card"
-        title={`${label} (${count})`}
-        onClick={onOpen}
-        style={onOpen ? { cursor: 'pointer' } : undefined}
-      >
-        {count === 0 ? (
-          <div className="pile-empty" />
-        ) : faceDown || !topCard?.cardId ? (
-          <div className="cardback" />
-        ) : (
-          <img src={cardImg(topCard)} alt="" draggable={false} />
-        )}
-        <span className="pile-count">{count}</span>
-      </div>
-      <div className="rail-pile-label">{label}</div>
-    </div>
-  )
-}
-
-function ManaPool({ pool }) {
-  const COLORS = { W: '#f6f3e0', U: '#b3d5f2', B: '#c9c1cf', R: '#f0b0a0', G: '#a8d6ab', C: '#cfc9c1' }
-  const active = Object.entries(pool || {}).filter(([, n]) => n > 0)
-  if (active.length === 0) return null
-  return (
-    <span className="eng-mana">
-      {active.map(([c, n]) => (
-        <span key={c} className="eng-mana-pip" style={{ background: COLORS[c] }}>
-          {n}
-          {c}
-        </span>
-      ))}
-    </span>
-  )
-}
-
 export default function EnginePlayArea() {
   const view = useEngineGame((s) => s.view)
   const error = useEngineGame((s) => s.error)
-  const choose = useEngineGame((s) => s.choose)
+  const chooseRaw = useEngineGame((s) => s.choose)
   const endGame = useEngineGame((s) => s.endGame)
   const stops = useEngineGame((s) => s.stops)
   const toggleStop = useEngineGame((s) => s.toggleStop)
@@ -124,7 +53,7 @@ export default function EnginePlayArea() {
   const [xInput, setXInput] = useState(0) // X value being chosen for an X spell
   const [ninjutsu, setNinjutsu] = useState(null) // pending ninjutsu action awaiting an attacker
 
-  useEffect(() => {
+  const resetSelections = () => {
     setCast(null)
     setAttackers({})
     setAttackTarget(null)
@@ -138,19 +67,50 @@ export default function EnginePlayArea() {
     setZoneView(null)
     setXInput(0)
     setNinjutsu(null)
-  }, [view])
+  }
+  // Reset when the *decision* changes — not on every view push. Online, the host
+  // re-sends the view for things like a stop toggle; that must not wipe the
+  // attackers you were halfway through picking. Our own choices reset explicitly.
+  const p0 = view?.pending || {}
+  const decisionKey = view
+    ? [p0.kind, p0.player, view.turnNumber, view.step, view.stack.length, (p0.eligible || []).join(), (p0.hand || []).length].join('|')
+    : ''
+  useEffect(resetSelections, [decisionKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const choose = (answer) => {
+    resetSelections()
+    chooseRaw(answer)
+  }
 
+  // Keyboard: Escape closes the zoom / cancels an in-progress cast; Space or
+  // Enter passes priority when it's yours and nothing else is being chosen.
+  const pendingKind = view?.pending?.kind
   useEffect(() => {
-    if (!zoom) return
-    const onKey = (e) => e.key === 'Escape' && setZoom(null)
+    const onKey = (e) => {
+      const tag = e.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key === 'Escape') {
+        if (zoom) setZoom(null)
+        else if (abilityMenu) setAbilityMenu(null)
+        else if (cast) setCast(null)
+        return
+      }
+      if ((e.key === ' ' || e.key === 'Enter') && pendingKind === 'priority' && myTurn && !cast && !abilityMenu && !zoom) {
+        e.preventDefault()
+        choose({ type: 'pass' })
+      }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [zoom])
+  }, [zoom, abilityMenu, cast, pendingKind, myTurn, chooseRaw]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!view) return null
   const pending = view.pending || {}
   const kind = pending.kind
-  const defenderPid = view.activePlayer === 0 ? 1 : 0
+  // Default defending player: the first opponent the engine offers, else whoever
+  // isn't the active player.
+  const defenderPid =
+    pending.defenders?.find((d) => d.kind === 'player')?.pid ??
+    view.players.find((p) => p.id !== view.activePlayer)?.id
   const actionFor = (oid) =>
     kind === 'priority' ? pending.actions?.find((a) => a.oid === oid) : null
   // Find any card view by oid across every zone (used to read a casting spell's
@@ -701,6 +661,7 @@ export default function EnginePlayArea() {
             stops={stops}
             toggleStop={toggleStop}
             players={view.players}
+            canToggle={(pid) => mode === 'local' || pid === mySeat}
             currentStep={view.step}
             onClose={() => setShowStops(false)}
           />
@@ -766,7 +727,7 @@ export default function EnginePlayArea() {
         />
       )}
 
-      {zoom && (zoom.cardId || zoom.token) && <ZoomOverlay card={zoom} onClose={() => setZoom(null)} />}
+      {zoom && (zoom.cardId || zoom.realCardId || zoom.token) && <ZoomOverlay card={zoom} onClose={() => setZoom(null)} />}
 
       {abilityMenu && (
         <div className="card-menu eng-ability-menu" style={{ left: abilityMenu.x, top: abilityMenu.y }}>
@@ -830,653 +791,6 @@ export default function EnginePlayArea() {
         onMadnessCast={onMadnessCast}
         cancelCast={() => setCast(null)}
       />
-    </div>
-  )
-}
-
-// The public game log, newest at the bottom, kept scrolled to the latest entry.
-function GameLog({ log }) {
-  const ref = useRef(null)
-  useEffect(() => {
-    const el = ref.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [log.length])
-  return (
-    <div className="eng-log" ref={ref}>
-      {log.length === 0 && <div className="eng-log-line muted">Game log</div>}
-      {log.map((l) => (
-        <div key={l.n} className={'eng-log-line' + (l.marker ? ' marker' : '')}>
-          {l.text}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// Mode selection for a modal spell ("Choose one/two —"). Click modes to select;
-// once `count` are chosen it commits (and the parent collects any per-mode targets).
-function ModalPicker({ modal, cancelCast }) {
-  const [sel, setSel] = useState([])
-  const toggle = (i) => {
-    const next = sel.includes(i) ? sel.filter((x) => x !== i) : [...sel, i]
-    if (next.length === modal.count) modal.pick(next)
-    else setSel(next)
-  }
-  return (
-    <>
-      <span>Choose {modal.count === 1 ? 'one' : modal.count === 2 ? 'two' : modal.count} —</span>
-      {modal.modes.map((m, i) => (
-        <button
-          key={i}
-          disabled={!m.castable && !sel.includes(i)}
-          className={sel.includes(i) ? 'primary' : 'mini'}
-          onClick={() => toggle(i)}
-        >
-          {m.label}
-        </button>
-      ))}
-      <button className="mini" onClick={cancelCast}>
-        Cancel
-      </button>
-    </>
-  )
-}
-
-// The contextual action bar at the bottom — what the current decision needs.
-function Prompt({ view, pending, myTurn, targeting, sacrificing, discarding, choosingX, modal, attackers, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
-  const kind = pending.kind
-  const nameOf = (pid) => view.players[pid]?.name
-
-  let body = null
-  if (!myTurn && kind !== 'gameOver') {
-    // Online: the other player is deciding — show what we're waiting on, no
-    // buttons (they'd be ignored by the host anyway).
-    const WAIT = {
-      priority: 'has priority',
-      declareAttackers: 'is declaring attackers',
-      declareBlockers: 'is declaring blockers',
-      mulligan: 'is deciding on a mulligan',
-      bottom: 'is putting cards on the bottom',
-      discard: 'is discarding',
-      discardCards: 'is discarding',
-      scry: 'is scrying',
-      search: 'is searching their library',
-      chooseTargets: 'is choosing targets'
-    }
-    body = (
-      <span className="eng-waiting">
-        Waiting — <b>{nameOf(pending.player)}</b> {WAIT[kind] || 'is deciding'}…
-      </span>
-    )
-  } else if (modal) {
-    body = <ModalPicker modal={modal} cancelCast={cancelCast} />
-  } else if (ninjutsu) {
-    body = (
-      <>
-        <span>Ninjutsu — click an unblocked attacker to return to hand.</span>
-        <button className="mini" onClick={cancelNinjutsu}>
-          Cancel
-        </button>
-      </>
-    )
-  } else if (choosingX) {
-    body = (
-      <>
-        <span>Choose X (max {choosingX.max}):</span>
-        <button className="mini" onClick={choosingX.dec}>
-          −
-        </button>
-        <b style={{ fontSize: 18, minWidth: 24, textAlign: 'center' }}>{choosingX.value}</b>
-        <button className="mini" onClick={choosingX.inc}>
-          +
-        </button>
-        <button className="primary" onClick={choosingX.confirm}>
-          OK
-        </button>
-        <button className="mini" onClick={cancelCast}>
-          Cancel
-        </button>
-      </>
-    )
-  } else if (sacrificing) {
-    body = (
-      <>
-        <span>Choose {sacrificing.types.join(' or ').toLowerCase()} to sacrifice.</span>
-        <button className="mini" onClick={cancelCast}>
-          Cancel
-        </button>
-      </>
-    )
-  } else if (discarding) {
-    body = (
-      <>
-        <span>Choose a card in hand to discard.</span>
-        <button className="mini" onClick={cancelCast}>
-          Cancel
-        </button>
-      </>
-    )
-  } else if (kind === 'mulligan') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — keep this hand{pending.mulligans > 0 ? ` (mulligans taken: ${pending.mulligans}, would bottom ${pending.mulligans})` : ''}?
-        </span>
-        <button className="primary" onClick={() => choose({ keep: true })}>
-          Keep
-        </button>
-        <button className="mini" onClick={() => choose({ keep: false })}>
-          Mulligan
-        </button>
-      </>
-    )
-  } else if (kind === 'bottom') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — put {pending.count} card(s) on the bottom (
-          {bottomSel.length}/{pending.count}).
-        </span>
-        <button
-          className="primary"
-          disabled={bottomSel.length !== pending.count}
-          onClick={() => choose({ bottom: bottomSel })}
-        >
-          Confirm
-        </button>
-      </>
-    )
-  } else if (targeting) {
-    const v = targeting.variadic
-    const slot = v || targeting.targets[targeting.chosen.length]
-    body = (
-      <>
-        <span>
-          {targeting.name ? <b>{targeting.name}</b> : 'Choose target'} — target{' '}
-          {v
-            ? `${targeting.chosen.length}/${v.max} chosen (pick ${v.min}–${v.max})`
-            : `${targeting.chosen.length + 1}/${targeting.targets.length} (${slot.type})`}
-        </span>
-        {targeting.confirm && (
-          <button className="primary" onClick={targeting.confirm}>
-            Confirm
-          </button>
-        )}
-        {targeting.cancelable && (
-          <button className="mini" onClick={cancelCast}>
-            Cancel
-          </button>
-        )}
-      </>
-    )
-  } else if (kind === 'priority') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> has priority — click a card to play it, or pass.
-        </span>
-        <button className="primary" onClick={() => choose({ type: 'pass' })}>
-          Pass priority
-        </button>
-      </>
-    )
-  } else if (kind === 'declareAttackers') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — declare attackers ({Object.keys(attackers).length} selected)
-          {pending.defenders?.length > 1 && (
-            <>
-              {' '}
-              · attacking <b>{attackTargetName}</b> (click a planeswalker or the player to retarget)
-            </>
-          )}
-          .
-        </span>
-        <button
-          className="primary"
-          onClick={() =>
-            choose({
-              attackers: Object.entries(attackers).map(([oid, defender]) => ({ oid, defender }))
-            })
-          }
-          disabled={Object.keys(attackers).length === 0}
-        >
-          Attack
-        </button>
-        <button className="mini" onClick={() => choose({ attackers: [] })}>
-          No attacks
-        </button>
-      </>
-    )
-  } else if (kind === 'declareBlockers') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — click a blocker, then the attacker it blocks (
-          {Object.keys(blocks).length} assigned).
-        </span>
-        <button className="primary" onClick={() => choose({ blocks })}>
-          Confirm blocks
-        </button>
-        <button className="mini" onClick={() => choose({ blocks: {} })}>
-          No blocks
-        </button>
-      </>
-    )
-  } else if (kind === 'discard') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — discard {pending.count} card(s) ({discardSel.length}/
-          {pending.count}).
-        </span>
-        <button
-          className="primary"
-          disabled={discardSel.length !== pending.count}
-          onClick={() => choose({ discard: discardSel })}
-        >
-          Discard
-        </button>
-      </>
-    )
-  } else if (kind === 'explore') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> explored — revealed <b>{pending.card?.name}</b> (nonland). Keep it on
-          top of your library or bin it?
-        </span>
-        <button className="primary" onClick={() => choose({ bin: false })}>
-          Keep on top
-        </button>
-        <button className="mini" onClick={() => choose({ bin: true })}>
-          Graveyard
-        </button>
-      </>
-    )
-  } else if (kind === 'copyEnter') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — click a highlighted creature to enter as a copy of it, or decline.
-        </span>
-        <button className="mini" onClick={() => choose({ copy: null })}>
-          Don’t copy
-        </button>
-      </>
-    )
-  } else if (kind === 'chooseValue') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — {pending.label}:
-        </span>
-        <select
-          defaultValue={pending.options[0]}
-          onChange={(ev) => {
-            if (ev.target.value) choose({ value: ev.target.value })
-          }}
-        >
-          {pending.options.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-        <button className="primary" onClick={() => choose({ value: pending.options[0] })}>
-          Choose
-        </button>
-      </>
-    )
-  } else if (kind === 'mayPay') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — pay {pending.cost}?
-        </span>
-        <button className="primary" disabled={!pending.canPay} onClick={() => choose({ pay: true })}>
-          Pay {pending.cost}
-        </button>
-        <button className="mini" onClick={() => choose({ pay: false })}>
-          Decline
-        </button>
-      </>
-    )
-  } else if (kind === 'wardPay') {
-    const cost = pending.life != null ? `${pending.life} life` : pending.mana
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — {pending.wardName} has ward. Pay {cost} or your spell/ability is countered.
-        </span>
-        <button className="primary" disabled={!pending.canPay} onClick={() => choose({ pay: true })}>
-          Pay {cost}
-        </button>
-        <button className="mini" onClick={() => choose({ pay: false })}>
-          Let it be countered
-        </button>
-      </>
-    )
-  } else if (kind === 'discardCards') {
-    const need = Math.min(pending.count, pending.hand.length)
-    body = pending.optional ? (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — you may discard up to {pending.count} card(s) (
-          {discardSel.length}/{pending.count})
-          {pending.orSacrificeLand ? ' or click a land to sacrifice' : ''}
-          {pending.draw ? `; if you do, draw ${pending.draw}` : ''}.
-        </span>
-        <button className="primary" onClick={() => choose({ discard: discardSel })}>
-          {discardSel.length ? 'Discard' : 'Decline'}
-        </button>
-      </>
-    ) : (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — discard {pending.count} card(s) ({discardSel.length}/
-          {pending.count}).
-        </span>
-        <button
-          className="primary"
-          disabled={discardSel.length !== need}
-          onClick={() => choose({ discard: discardSel })}
-        >
-          Discard
-        </button>
-      </>
-    )
-  } else if (kind === 'madness') {
-    body = (
-      <>
-        <span>
-          <b>{nameOf(pending.player)}</b> — cast <b>{pending.name}</b> for its madness cost{' '}
-          {pending.cost}?
-        </span>
-        <button className="primary" disabled={!pending.canPay} onClick={() => onMadnessCast(pending)}>
-          Cast (madness)
-        </button>
-        <button className="mini" onClick={() => choose({ cast: false })}>
-          Decline
-        </button>
-      </>
-    )
-  } else if (kind === 'gameOver') {
-    body = (
-      <>
-        <span className="eng-win">🏆 {nameOf(pending.winner)} wins!</span>
-        <button className="primary" onClick={endGame}>
-          New game
-        </button>
-      </>
-    )
-  }
-
-  return (
-    <div className="eng-prompt">
-      {error && <span className="eng-error">{error}</span>}
-      {body}
-    </div>
-  )
-}
-
-// Graveyard / exile viewer. Cards with a castable option (flashback from the
-// graveyard, or a plotted card in exile) are highlighted and clickable.
-function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose }) {
-  const castLabel = (a) => (a.type === 'castPlotted' ? 'Plotted' : 'Flashback')
-  return (
-    <div className="eng-zoneviewer" onClick={onClose}>
-      <div className="eng-zoneviewer-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="eng-zoneviewer-head">
-          <span style={{ textTransform: 'capitalize' }}>{title}</span>
-          <button className="mini" onClick={onClose}>
-            ✕
-          </button>
-        </div>
-        {cards.length === 0 ? (
-          <p className="muted">Empty.</p>
-        ) : (
-          <div className="eng-zoneviewer-grid">
-            {cards.map((c) => {
-              const fb = castableFor(c.oid)
-              return (
-                <div
-                  key={c.oid}
-                  className={'eng-zoneviewer-card' + (fb ? ' castable' : '')}
-                  onClick={() => fb && onCast(fb)}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    if (c.cardId) onZoom(c)
-                  }}
-                  title={fb ? `${castLabel(fb)}: ${c.name}` : c.name}
-                >
-                  {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
-                  {fb && <span className="eng-zoneviewer-fb">{castLabel(fb)}</span>}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Library search: pick one card (deduped by name), or take nothing if optional.
-function SearchOverlay({ pending, onPick, onNone }) {
-  const unique = []
-  const seen = new Set()
-  for (const c of pending.cards) {
-    if (!seen.has(c.name)) {
-      seen.add(c.name)
-      unique.push(c)
-    }
-  }
-  return (
-    <div className="eng-scry">
-      <div className="eng-scry-panel">
-        <div className="eng-scry-title">
-          Search your library — choose a card{pending.optional ? ' (or take nothing)' : ''}
-        </div>
-        <div className="eng-scry-cards">
-          {unique.map((c) => (
-            <div className="eng-scry-card" key={c.oid} onClick={() => onPick(c.oid)} title={c.name}>
-              {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
-              <div className="eng-scry-dest">{c.name}</div>
-            </div>
-          ))}
-        </div>
-        {pending.optional && (
-          <button className="mini" onClick={onNone}>
-            Take nothing
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Scry / Surveil: look at the top cards and send some to the bottom (or the
-// graveyard, for surveil). The rest stay on top in shown order.
-function ScryOverlay({ pending, bottom, setBottom, onConfirm }) {
-  const toggle = (oid) =>
-    setBottom((b) => (b.includes(oid) ? b.filter((o) => o !== oid) : [...b, oid]))
-  const dest = pending.surveil ? 'graveyard' : 'bottom'
-  return (
-    <div className="eng-scry">
-      <div className="eng-scry-panel">
-        <div className="eng-scry-title">
-          {pending.surveil ? 'Surveil' : 'Scry'} {pending.cards.length} — click a card to send it to
-          the {dest}
-        </div>
-        <div className="eng-scry-cards">
-          {pending.cards.map((c) => {
-            const toBottom = bottom.includes(c.oid)
-            return (
-              <div
-                key={c.oid}
-                className={'eng-scry-card' + (toBottom ? ' to-bottom' : '')}
-                onClick={() => toggle(c.oid)}
-                title={c.name}
-              >
-                {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
-                <div className="eng-scry-dest">{toBottom ? dest : 'top'}</div>
-              </div>
-            )
-          })}
-        </div>
-        <button className="primary" onClick={onConfirm}>
-          Confirm
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// Zoom preview. For tokens, arrows cycle through Scryfall art variants and the
-// choice is remembered for future tokens of the same type.
-function ZoomOverlay({ card, onClose }) {
-  const key = card.token && card.tokenDef ? tokenKey(card.tokenDef) : null
-  const entry = useTokenArt((s) => (key ? s.cache[key] : null))
-  const ensure = useTokenArt((s) => s.ensure)
-  const cycle = useTokenArt((s) => s.cycle)
-  useEffect(() => {
-    if (key) ensure(card.tokenDef)
-  }, [key, ensure]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const imgId = card.token ? entry?.chosenId : card.cardId
-  const prints = entry?.prints || []
-  const canCycle = card.token && prints.length > 1
-  const idx = imgId ? prints.findIndex((p) => p.id === imgId) : -1
-
-  return (
-    <div className="eng-zoom" onClick={onClose} title="Click to close">
-      {canCycle && (
-        <button
-          className="eng-zoom-arrow"
-          onClick={(e) => {
-            e.stopPropagation()
-            cycle(key, -1)
-          }}
-        >
-          ‹
-        </button>
-      )}
-      <div className="eng-zoom-body" onClick={(e) => card.token && e.stopPropagation()}>
-        {imgId ? (
-          <img src={`card://${imgId}`} alt={card.name} />
-        ) : (
-          <div className="eng-zoom-placeholder">
-            {card.token ? (entry?.loading ? 'Finding token art…' : 'No art found') : ''}
-          </div>
-        )}
-        {card.token && (
-          <div className="eng-zoom-hint">
-            {prints.length > 1
-              ? `${card.name} token — art ${idx + 1}/${prints.length} (use ‹ ›, remembered)`
-              : `${card.name} token`}
-          </div>
-        )}
-      </div>
-      {canCycle && (
-        <button
-          className="eng-zoom-arrow"
-          onClick={(e) => {
-            e.stopPropagation()
-            cycle(key, 1)
-          }}
-        >
-          ›
-        </button>
-      )}
-    </div>
-  )
-}
-
-// Floating stack, top-of-stack first ("resolves next"). Hidden when empty.
-function StackOverlay({ stack, targeting, onItem, onZoom }) {
-  if (!stack.length) return null
-  const topFirst = [...stack].reverse()
-  return (
-    <div className="eng-stack-overlay">
-      <div className="eng-stack-title">Stack ({stack.length})</div>
-      {topFirst.map((item, i) => (
-        <div
-          key={item.oid}
-          className={'eng-stack-card ' + (targeting ? 'targetable ' : '') + (i === 0 ? 'top' : '')}
-          onClick={() => onItem(item)}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            if (item.cardId) onZoom?.(item)
-          }}
-          title={item.name}
-        >
-          {item.cardId ? (
-            <img src={`card://${item.cardId}`} alt="" draggable={false} />
-          ) : (
-            <div className="eng-stack-ability">✦</div>
-          )}
-          <div className="eng-stack-info">
-            <div className="eng-stack-cardname">{item.name}</div>
-            {i === 0 && <div className="eng-stack-next">resolves next</div>}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-const STOP_STEP_LABEL = {
-  upkeep: 'Upkeep',
-  draw: 'Draw',
-  main1: 'Main 1',
-  beginCombat: 'Begin combat',
-  declareAttackers: 'Declare attackers',
-  declareBlockers: 'Declare blockers',
-  combatDamage: 'Combat damage',
-  endCombat: 'End of combat',
-  main2: 'Main 2',
-  end: 'End step'
-}
-
-// Magic Online-style stop matrix: each player picks the steps they want priority
-// at. Unstopped steps auto-pass (see settle() in the store).
-function StopsPanel({ stops, toggleStop, players, currentStep, onClose }) {
-  return (
-    <div className="eng-stops-panel" onMouseLeave={onClose}>
-      <div className="eng-stops-head">
-        <span>Priority stops</span>
-        <button className="mini" onClick={onClose}>
-          ✕
-        </button>
-      </div>
-      <div className="eng-stops-hint">Steps without a stop pass priority automatically.</div>
-      <table className="eng-stops-table">
-        <thead>
-          <tr>
-            <th>Step</th>
-            <th>{players[0].name}</th>
-            <th>{players[1].name}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {PRIORITY_STEPS.map((step) => (
-            <tr key={step} className={step === currentStep ? 'now' : ''}>
-              <td>{STOP_STEP_LABEL[step] || step}</td>
-              {[0, 1].map((pid) => (
-                <td key={pid}>
-                  <input
-                    type="checkbox"
-                    checked={stops[pid]?.has(step) || false}
-                    onChange={() => toggleStop(pid, step)}
-                  />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

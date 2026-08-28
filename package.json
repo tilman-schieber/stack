@@ -1,7 +1,7 @@
 {
-  "name": "mtg-deck-builder",
-  "version": "0.1.0",
-  "description": "Visual MTG deck builder — import Arena decklists, cache card images locally",
+  "name": "stack",
+  "version": "0.2.0",
+  "description": "MTG deck builder and rules-enforced play (local hot-seat or serverless peer-to-peer), built on Scryfall data",
   "main": "./out/main/index.js",
   "author": "",
   "license": "MIT",

@@ -847,8 +847,13 @@ export function loadBehavior(printed) {
   // turned face up any time for its morph cost.
   const morphMatch = (printed.oracleText || '').match(/morph\s*[—-]?\s*(\{[^}]+\})/i)
   const morph = authored.morph || (morphMatch ? { cost: morphMatch[1] } : null)
+  // Affinity (702.41): "Affinity for artifacts" — costs {1} less per artifact you
+  // control. Parsed here so the engine's cost computation reads a behavior flag
+  // rather than oracle text.
+  const affinity = authored.affinity || (/affinity for artifacts/i.test(printed.oracleText || '') ? 'artifact' : null)
 
   return {
+    affinity,
     spell: authored.spell || null,
     activated: authored.activated || [],
     triggered,

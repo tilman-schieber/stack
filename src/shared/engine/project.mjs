@@ -5,14 +5,19 @@
 import { zone } from './state.mjs'
 import { recompute } from './layers.mjs'
 
-function cardView(o) {
+function cardView(o, viewerPid = null) {
   // A face-down permanent (morph) shows only as an anonymous 2/2 creature — its
-  // real card, colors, and abilities are hidden from both players.
+  // real card, colors, and abilities are hidden from other players. Its controller
+  // (and the open local hot-seat view) additionally get the real identity in
+  // `realName`/`realCardId` so they know what they can turn face up.
   if (o.faceDown) {
+    const mine = viewerPid == null || viewerPid === o.controller
     return {
       oid: o.oid,
       name: 'Face-down creature',
       cardId: null,
+      realName: mine ? o.printed?.name || null : null,
+      realCardId: mine ? o.cardId || null : null,
       token: false,
       faceDown: true,
       types: ['Creature'],
@@ -108,7 +113,7 @@ export function projectGame(engine, viewerPid = null) {
       hand: zone(state, 'hand', p.id).map((oid) =>
         hidden ? hiddenHandCard(state.objects[oid]) : cardView(state.objects[oid])
       ),
-      battlefield: controlled.map(cardView),
+      battlefield: controlled.map((o) => cardView(o, viewerPid)),
       graveyard: zone(state, 'graveyard', p.id).map((oid) => cardView(state.objects[oid])),
       exile: zone(state, 'exile', p.id).map((oid) => cardView(state.objects[oid]))
     }

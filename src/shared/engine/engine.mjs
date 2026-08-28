@@ -1522,6 +1522,21 @@ export class GameEngine {
       this._log(`${this._objName(o)} resolves`)
       this._runResolution(o, o.spell.effect)
     } else if (isPermanent(o.printed)) {
+      // A permanent spell with targets (an Aura, a Bestow spell) whose targets are
+      // all illegal on resolution: an Aura is countered by the rules and goes to
+      // the graveyard (608.3b); a Bestow spell resolves as a creature instead
+      // (702.103e).
+      if (o.targets?.length && this._fizzles(o)) {
+        if (o.bestowCast) {
+          this._log(`${this._objName(o)} loses its target and resolves as a creature`)
+          o.bestowCast = false
+          o.targets = []
+        } else {
+          this._log(`${this._objName(o)} fizzles (no legal targets)`)
+          moveObject(s, oid, 'graveyard')
+          return
+        }
+      }
       this._log(`${this._objName(o)} enters the battlefield`)
       // "Enter as a copy of…" (rule 614.12): before the permanent is on the
       // battlefield, let its controller pick a permanent to copy. Pausing here
@@ -2438,7 +2453,7 @@ export class GameEngine {
   // The mana cost to cast `o`, after cost reductions (affinity for artifacts).
   _effectiveCost(pid, o) {
     const cost = { ...o.printed.manaCost }
-    if (/affinity for artifacts/i.test(o.printed.oracleText || '')) {
+    if (o.behavior?.affinity === 'artifact') {
       const artifacts = objectsIn(this.state, 'battlefield').filter(
         (x) => x.controller === pid && x.chars.types.includes('Artifact')
       ).length
@@ -2780,11 +2795,13 @@ export class GameEngine {
       }
     }
 
-    // Blockers deal damage to the attacker they block.
+    // Blockers deal damage to the attacker they block — unless it has been removed
+    // from combat (regenerated, 701.15c), in which case they deal none (506.4).
     for (const [blkOid, atkOid] of Object.entries(s.combat.blocks)) {
       const b = s.objects[blkOid]
       if (!onBf(blkOid) || !this._dealsInPass(b, pass)) continue
-      if (onBf(atkOid)) this._dealDamage(b, { obj: s.objects[atkOid] }, b.chars.power, { combat: true })
+      if (onBf(atkOid) && s.objects[atkOid].status.attacking)
+        this._dealDamage(b, { obj: s.objects[atkOid] }, b.chars.power, { combat: true })
     }
   }
 
@@ -3271,16 +3288,21 @@ export class GameEngine {
     const s = this.state
     p.hasLost = true
     this._log(`${p.name} loses the game`, { marker: true })
+    // Objects they own leave the game (to their exile zone; tokens cease to
+    // exist); anything they merely controlled reverts to its owner (800.4a/c).
     for (const key of ['battlefield', 'stack']) {
-      s.zones[key] = s.zones[key].filter((oid) => {
+      for (const oid of [...s.zones[key]]) {
         const o = s.objects[oid]
-        if (o && o.owner === p.id) {
-          o.zoneName = 'exile'
-          return false
-        }
-        return true
-      })
+        if (!o) continue
+        if (o.owner === p.id) {
+          if (o.kind === 'ability') {
+            s.zones[key] = s.zones[key].filter((x) => x !== oid)
+            delete s.objects[oid]
+          } else moveObject(s, oid, 'exile')
+        } else if (o.controller === p.id) o.controller = o.owner
+      }
     }
+    s.continuous = s.continuous.filter((e) => e.control !== p.id)
   }
 
   // Number of Faerie creatures a player controls (Spellstutter Sprite's X).
