@@ -113,7 +113,7 @@ section('107.4f Phyrexian mana: paid with the colour if available, else 2 life')
   put(f, 0, 'Island', 'battlefield')
   const probe = put(f, 0, 'Gitaxian Probe', 'hand')
   advanceToPriorityAt(f, 'main1')
-  f.choose({ type: 'cast', oid: probe.oid }) // (its look-at-hand effect isn't authored; only the cost matters here)
+  f.choose({ type: 'cast', oid: probe.oid, targets: [{ kind: 'player', pid: 1 }] })
   assert(f.state.players[0].life === 20, 'with an Island available the pip is paid with mana')
 
   const g = makeEngine()
