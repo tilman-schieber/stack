@@ -311,6 +311,9 @@ export class GameEngine {
         case 'orderBlockers':
           this._applyOrderBlockers(pending, answer)
           break
+        case 'legendChoice':
+          this._applyLegendChoice(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -515,6 +518,7 @@ export class GameEngine {
     switch (step) {
       case 'untap': {
         this._log(`— Turn ${s.turnNumber}: ${this._nameOf(s.activePlayer)} —`, { marker: true })
+        this._phasing()
         // "Until your next turn" effects created by the active player end now (611.2b).
         this._expireEffects((e) => e.duration === 'untilYourNextTurn' && e.owner === s.activePlayer)
         // 502: untap active player's permanents; clear summoning sickness for
@@ -683,6 +687,41 @@ export class GameEngine {
     }
   }
 
+  // Phasing (702.26): before the active player untaps, their permanents with
+  // phasing phase out and their phased-out permanents phase in. A phased-out
+  // permanent is treated as though it doesn't exist — we take it out of the
+  // battlefield zone (keeping the object, its counters and attachments intact)
+  // into state.phasedOut until it returns.
+  _phasing() {
+    const s = this.state
+    s.phasedOut ||= []
+    const ap = s.activePlayer
+    // Both directions happen simultaneously (702.26d): decide what phases out
+    // from the current battlefield first, so what phases in now stays.
+    const out = objectsIn(s, 'battlefield').filter((o) => o.controller === ap && this._hasKW(o, 'Phasing'))
+    const back = s.phasedOut.filter((p) => p.controller === ap)
+    s.phasedOut = s.phasedOut.filter((p) => p.controller !== ap)
+    for (const p of back) {
+      for (const oid of p.oids) {
+        const o = s.objects[oid]
+        if (!o) continue
+        o.zoneName = 'battlefield'
+        s.zones.battlefield.push(oid)
+      }
+      this._log(`${this._objName(s.objects[p.oids[0]])} phases in`)
+    }
+    for (const o of out) {
+      // It phases out together with anything attached to it (702.26h).
+      const group = [o.oid, ...objectsIn(s, 'battlefield').filter((x) => x.status.attachedTo === o.oid).map((x) => x.oid)]
+      for (const oid of group) {
+        s.zones.battlefield = s.zones.battlefield.filter((x) => x !== oid)
+        s.objects[oid].zoneName = 'phasedOut'
+      }
+      s.phasedOut.push({ controller: ap, oids: group })
+      this._log(`${this._objName(o)} phases out`)
+    }
+  }
+
   // Remove floating effects (continuous, prevention, replacement) that `pred`
   // says have expired — the single place durations end (611.2a).
   _expireEffects(pred) {
@@ -709,6 +748,17 @@ export class GameEngine {
     // control-changing ones revert control first (Act of Treason).
     this._expireEffects((e) => !e.duration || e.duration === 'eot' || e.duration === 'endOfCombat')
     this._emptyManaPools()
+    // 514.3a: if state-based actions or triggers happen now, players get priority
+    // (still in the cleanup step) and another cleanup step follows.
+    const acted = this._checkSBA()
+    if (s.winner != null) return
+    if (s.pending?.kind === 'legendChoice') return
+    if (acted || s.pendingTriggers.length) {
+      this._log('Cleanup: something happened — players receive priority, then another cleanup')
+      s.cleanupRepeat = true
+      this._grantPriority()
+      return
+    }
     // Extra turns (rule 500.7 / 720): a queued extra turn is taken by its owner
     // before the turn would pass to the other player.
     if (s.extraTurns?.length) {
@@ -724,6 +774,11 @@ export class GameEngine {
     const s = this.state
     const i = STEP_ORDER.indexOf(s.step)
     if (s.step === 'cleanup') {
+      if (s.cleanupRepeat) {
+        s.cleanupRepeat = false
+        this._enterStep('cleanup') // another cleanup step (514.3a)
+        return
+      }
       this._endCleanup()
       return
     }
@@ -762,6 +817,7 @@ export class GameEngine {
     const s = this.state
     this._checkSBA()
     if (s.winner != null) return // _checkSBA set a gameOver decision
+    if (s.pending?.kind === 'legendChoice') return // SBA needs a player's choice first
     // If the active player left the game mid-turn (rule 800.4a), that turn ends and
     // the next remaining player begins theirs.
     if (s.players[s.activePlayer].hasLost) {
@@ -1115,7 +1171,7 @@ export class GameEngine {
     const s = this.state
     const o = s.objects[oid]
     if (!o) return
-    if (o.behavior?.uncounterable && o.kind !== 'ability') return // "can't be countered"
+    if (o.kind !== 'ability' && this._uncounterable(o)) return // "can't be countered"
     this._log(`${this._objName(o)} is countered`)
     if (o.kind === 'ability') {
       const st = zone(s, 'stack')
@@ -1366,7 +1422,7 @@ export class GameEngine {
     // "As though" permission (rule 118 / 601.3e): Vedalken Orrery lets you cast
     // any spell as though it had flash — i.e. any time you have priority.
     const canCastNow = instantSpeed || sorcerySpeed || this._hasPermission(pid, 'castAnySpeed')
-    if (!canCastNow) return
+    if (!canCastNow || !this._castAllowed(pid, p)) return
     const targets = this._spellTargets(o, b)
     // Untargetability context: this spell's caster + its colors, so hexproof/
     // shroud/protection exclude illegal would-be targets from the gate.
@@ -2740,7 +2796,7 @@ export class GameEngine {
           if (t?.kind === 'object' && t.obj.zoneName === 'stack') {
             if (e.maxMv === 'faeries' && (t.obj.printed.manaValue || 0) > this._faerieCount(source.controller))
               break
-            if (t.obj.behavior?.uncounterable) break // "This spell can't be countered."
+            if (this._uncounterable(t.obj)) break // "This spell can't be countered."
             this._log(`${this._objName(t.obj)} is countered`)
             moveObject(s, t.obj.oid, 'graveyard')
           }
@@ -2938,6 +2994,23 @@ export class GameEngine {
           if (t?.kind === 'player') for (const oid of [...zone(s, 'graveyard', t.pid)]) moveObject(s, oid, 'exile')
           break
         }
+        case 'flipCoin': {
+          // 705: a coin flip; `win` / `lose` effects run accordingly.
+          const won = s.rng() < 0.5
+          this._log(`${this._nameOf(source.controller)} flips a coin: ${won ? 'won' : 'lost'}`)
+          this._runEffects(source, won ? e.win || [] : e.lose || [])
+          break
+        }
+        case 'rollDie': {
+          // 706: roll a die with `sides`; the first result whose [min,max] range
+          // matches runs.
+          const sides = e.sides || 6
+          const r = s.rng.int(sides) + 1
+          this._log(`${this._nameOf(source.controller)} rolls a d${sides}: ${r}`)
+          const hit = (e.results || []).find((x) => r >= (x.min ?? 1) && r <= (x.max ?? sides))
+          if (hit) this._runEffects(source, hit.effect || [])
+          break
+        }
         case 'becomeCreature': {
           // A crewed Vehicle is an artifact creature until end of turn (702.122).
           const t = this._resolveTargetRef(source, e.to || 'self')
@@ -3114,6 +3187,8 @@ export class GameEngine {
       const obj = this.state.objects[source.sourceOid]
       return obj ? { kind: 'object', obj } : null
     }
+    if (ref === 'activePlayer') return { kind: 'player', pid: this.state.activePlayer }
+    if (ref === 'controller') return { kind: 'player', pid: source.controller }
     // 'attached' — the permanent the source (an Aura/Equipment) is attached to.
     if (ref === 'attached') {
       const src = this.state.objects[source.sourceOid]
@@ -3305,6 +3380,31 @@ export class GameEngine {
     for (const { source, mod } of this._ruleMods())
       if (mod.restrict?.includes(action) && matchStatic(mod.affects, source, o)) return true
     return false
+  }
+
+  // A spell can't be countered: its own text, or a static such as "creature
+  // spells you control can't be countered".
+  _uncounterable(o) {
+    if (o.behavior?.uncounterable) return true
+    return this._ruleMods().some(
+      ({ source, mod }) => mod.spellsCantBeCountered && this._spellMatchesFilter(o.controller, o.printed, mod.spellsCantBeCountered, source)
+    )
+  }
+
+  // May `pid` cast spell `printed` right now, as far as "can't cast" statics go
+  // ("Your opponents can't cast spells during your turn", …)?
+  _castAllowed(pid, printed) {
+    const s = this.state
+    for (const { source, mod } of this._ruleMods()) {
+      const c = mod.cantCast
+      if (!c) continue
+      if (c.who === 'opponents' && pid === source.controller) continue
+      if (c.who === 'you' && pid !== source.controller) continue
+      if (c.duringYourTurn && s.activePlayer !== source.controller) continue
+      if (c.spell && !this._spellMatchesFilter(pid, printed, c.spell, source)) continue
+      return false
+    }
+    return true
   }
 
   // Does `pid` control a permanent that keeps them from losing (Platinum Angel)?
@@ -3749,15 +3849,17 @@ export class GameEngine {
     if (amount <= 0) return
     const s = this.state
     // Prevention (rule 615): "prevent all combat damage this turn" (Fog, etc.).
-    if (opts.combat && s.prevent.some((p) => p.type === 'allCombat')) return
+    // "Damage can't be prevented" (a rule-modifying static) turns off all prevention.
+    const noPrevent = this._ruleMods().some(({ mod }) => mod.damageCantBePrevented)
+    if (!noPrevent && opts.combat && s.prevent.some((p) => p.type === 'allCombat')) return
     // Protection is a prevention effect (615) — applied before general replacements.
-    if (target.obj) {
+    if (target.obj && !noPrevent) {
       const prot = target.obj.chars?.protections || []
       if (prot.includes('everything') || (prot.length && tags(source?.chars).some((c) => prot.includes(c)))) return
     }
     // General replacement effects (614/616): damage doubling (Furnace of Rath),
     // prevention shields (Samite Healer), etc. may change the amount or the target.
-    const ev = { kind: 'damage', source, target, amount, combat: !!opts.combat }
+    const ev = { kind: 'damage', source, target, amount, combat: !!opts.combat, noPrevent }
     this._applyReplacements(ev)
     this._sweepReplacements()
     amount = ev.amount
@@ -3853,6 +3955,11 @@ export class GameEngine {
   // ("if you would gain life, gain twice that much instead").
   _gainLife(pid, amount) {
     if (amount <= 0) return
+    // "If a player would gain life, that player gains no life instead" (Sulfuric Vortex).
+    if (this._ruleMods().some(({ mod }) => mod.noLifeGain)) {
+      this._log(`${this._nameOf(pid)} would gain ${amount} life, but can't`)
+      return
+    }
     const ev = { kind: 'gainLife', player: pid, amount }
     this._applyReplacements(ev)
     this.state.players[pid].life += ev.amount
@@ -3905,6 +4012,7 @@ export class GameEngine {
     list.sort((a, b) => (a.apply?.multiply ? 1 : 0) - (b.apply?.multiply ? 1 : 0))
     for (const r of list) {
       if (event.amount <= 0) break
+      if (event.noPrevent && !r.apply?.multiply) continue // prevention switched off
       if (r.apply?.multiply) {
         event.amount *= r.apply.multiply
       } else if (r.apply?.prevent === 'all') {
@@ -3932,8 +4040,10 @@ export class GameEngine {
   _checkSBA() {
     const s = this.state
     let repeat = true
+    let rounds = 0
     while (repeat) {
       repeat = false
+      rounds++
       recompute(s) // fresh characteristics (layers) before checking SBAs
       for (const p of s.players) {
         // "You can't lose the game and your opponents can't win" (Platinum Angel):
@@ -4042,6 +4152,16 @@ export class GameEngine {
       for (const group of Object.values(legends)) {
         if (group.length < 2) continue
         group.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        if (!this._autoOrder) {
+          // 704.5j: the controller chooses which one to keep.
+          s.pending = {
+            kind: 'legendChoice',
+            player: group[0].controller,
+            name: group[0].chars.name,
+            choices: group.map((o) => o.oid)
+          }
+          return true
+        }
         for (const o of group.slice(1)) {
           this._bury(o)
           repeat = true
@@ -4067,6 +4187,15 @@ export class GameEngine {
       this._log(draw ? 'The game is a draw' : `${this._nameOf(s.winner)} wins the game`, { marker: true })
       s.pending = { kind: 'gameOver', winner: draw ? null : s.winner, draw }
     }
+    return rounds > 1 // did any state-based action happen?
+  }
+
+  // 704.5j: the controller kept one of several same-named legendary permanents.
+  _applyLegendChoice(pending, answer) {
+    const s = this.state
+    const keep = pending.choices.includes(answer?.keep) ? answer.keep : pending.choices[0]
+    for (const oid of pending.choices) if (oid !== keep && s.objects[oid]?.zoneName === 'battlefield') this._bury(s.objects[oid])
+    this._grantPriorityTo(s.activePlayer)
   }
 
   // A player concedes (104.3a) — legal at any time, regardless of whose decision

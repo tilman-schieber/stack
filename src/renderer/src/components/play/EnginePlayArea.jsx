@@ -395,6 +395,11 @@ export default function EnginePlayArea() {
       choose({ copy: card.oid })
       return
     }
+    // Legend rule: click the one to keep.
+    if (kind === 'legendChoice' && pending.choices.includes(card.oid)) {
+      choose({ keep: card.oid })
+      return
+    }
     // An Edict: click one of your highlighted permanents to sacrifice it.
     if (kind === 'sacrificeChoice' && controllerPid === pending.player && pending.choices.includes(card.oid)) {
       choose({ sacrifice: [card.oid] })
@@ -485,6 +490,7 @@ export default function EnginePlayArea() {
     if (kind === 'discardCards' && pending.orSacrificeLand && controllerPid === pending.player && isLand(card))
       cls.push('targetable')
     if (kind === 'sacrificeChoice' && controllerPid === pending.player && pending.choices.includes(card.oid)) cls.push('targetable')
+    if (kind === 'legendChoice' && pending.choices.includes(card.oid)) cls.push('targetable')
     if (kind === 'copyEnter' && pending.choices.includes(card.oid)) cls.push('targetable')
     if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player) {
       if (pending.actions.some((a) => a.type === 'activate' && a.oid === card.oid)) cls.push('activatable')
@@ -565,6 +571,11 @@ export default function EnginePlayArea() {
           />
         )}
       </div>
+      {p.phasedOut?.length > 0 && (
+        <div className="eng-count" title="Phased out — treated as though they don't exist until they phase in">
+          ◌ phased out: {p.phasedOut.map((c) => c.name).join(', ')}
+        </div>
+      )}
       {Object.keys(p.commanderDamage || {}).length > 0 && (
         <div className="eng-count" title="Combat damage taken from each commander (21 loses)">
           ⚔ commander damage: {Object.values(p.commanderDamage).join(' / ')}

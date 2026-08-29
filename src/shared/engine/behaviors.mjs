@@ -614,6 +614,11 @@ export const BEHAVIORS = {
       }
     ]
   },
+  // Batch 5: "can't gain life" static + each-upkeep trigger.
+  'Sulfuric Vortex': {
+    staticRules: [{ noLifeGain: true }],
+    triggered: [{ trigger: { event: 'upkeep' }, effect: [{ op: 'dealDamage', to: 'activePlayer', amount: 2 }] }]
+  },
   // Batch 4 showcases: a Siege battle (its ETB simplified to the 4 damage to an
   // opponent), Redirect, overload, miracle.
   'Invasion of Regatha': {

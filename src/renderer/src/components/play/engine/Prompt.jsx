@@ -53,6 +53,7 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       playOrDraw: 'is choosing to play or draw',
       sacrificeChoice: 'is choosing what to sacrifice',
       orderBlockers: 'is ordering blockers for damage',
+      legendChoice: 'is applying the legend rule',
       optionalTrigger: 'is deciding on an optional ability',
       mayPay: 'is deciding whether to pay',
       wardPay: 'is deciding whether to pay ward',
@@ -289,6 +290,12 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
           Graveyard
         </button>
       </>
+    )
+  } else if (kind === 'legendChoice') {
+    body = (
+      <span>
+        <b>{nameOf(pending.player)}</b> — legend rule: click the <b>{pending.name}</b> to keep; the others go to the graveyard.
+      </span>
     )
   } else if (kind === 'sacrificeChoice') {
     body = (

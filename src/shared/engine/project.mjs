@@ -124,7 +124,12 @@ export function projectGame(engine, viewerPid = null) {
       command: zone(state, 'command')
         .filter((oid) => state.objects[oid]?.owner === p.id)
         .map((oid) => ({ ...cardView(state.objects[oid]), commanderCasts: state.objects[oid].commanderCasts || 0 })),
-      commanderDamage: p.commanderDamage || {}
+      commanderDamage: p.commanderDamage || {},
+      // Phased-out permanents (702.26): out of the game until they phase back in.
+      phasedOut: (state.phasedOut || [])
+        .filter((x) => x.controller === p.id)
+        .flatMap((x) => x.oids)
+        .map((oid) => cardView(state.objects[oid], viewerPid))
     }
   })
 

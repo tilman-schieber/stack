@@ -71,7 +71,7 @@ Implemented: the full turn structure and priority system, the stack, London mull
 activation costs, delve, convoke, kicker, evoke, cycling, buyback, suspend, unearth, echo, {Q}, counter-removal and energy costs), the play/draw choice, combat with
 the evasion keywords (flying/reach, fear, intimidate, skulk, shadow, horsemanship, landwalk,
 menace, "can't be blocked", protection from colours/types/everything) and attack/block requirements, multiple blockers, first/double
-strike (with the second combat damage step), exalted, fight, undying/persist, cascade, rebound, extort, split second, changeling, Vehicles/crew, overload, miracle, battles (Sieges), the attacker's damage assignment order, changing a spell's targets, trample, deathtouch, lifelink, infect/wither/toxic and poison, planeswalkers, all
+strike (with the second combat damage step), exalted, fight, undying/persist, cascade, rebound, extort, split second, changeling, Vehicles/crew, overload, miracle, battles (Sieges), the attacker's damage assignment order, changing a spell's targets, phasing, coin flips and dice, trample, deathtouch, lifelink, infect/wither/toxic and poison, planeswalkers, all
 seven continuous-effect layers (copy, control, text, types, color, abilities incl. "loses all
 abilities", P/T) with timestamp *and* dependency ordering, triggered/activated/static
 abilities (blocks, becomes blocked/tapped, draw, discard, life gain/loss, phase triggers;
@@ -79,14 +79,14 @@ optional and intervening-if triggers; the controller orders simultaneous trigger
 replacement and prevention effects, regeneration, ward, hexproof/shroud/protection,
 flashback, madness, morph, bestow, ninjutsu, plot, omens, storm, split cards, modal and
 transforming double-faced cards, Sagas, emblems, Edict effects (the affected player chooses), extra turns/combats/land drops, hand-size modifiers,
-"instead of the graveyard" replacements, "enters tapped unless",
+"instead of the graveyard" replacements, "enters tapped unless", "can't gain life / be countered / cast / be prevented" statics, the legend rule as a choice, the repeated cleanup step (514.3a),
 targeted modal and divided spells, partial target legality on resolution, state-based
 actions, draws and concessions, multiplayer elimination, and the Commander format (command
 zone, tax, 21-damage rule, 40 life).
 
 Card characteristics come straight from Scryfall data; only cards whose text implies effects
 get an entry in `behaviors.mjs`, written against a small vocabulary of effect ops. Cards
-without an entry play with their printed characteristics. Simplifications: the legend rule, proliferate choices and mulligan sequencing are decided automatically; no
+without an entry play with their printed characteristics. Simplifications: proliferate choices and mulligan sequencing are decided automatically; dredge and other draw replacements are not modelled; no
 TURN relay, reconnection or spectators online.
 
 Tests are plain Node scripts (`node src/shared/engine/<name>.test.mjs`, or `npm test`).
