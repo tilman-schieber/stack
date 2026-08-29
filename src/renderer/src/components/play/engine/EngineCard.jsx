@@ -36,6 +36,7 @@ export function EngineCard({ card, className = '', onClick, onZoom, title }) {
       {isCreature(card) && pt && <span className="eng-pt">{pt}</span>}
       {card.damage > 0 && <span className="eng-dmg">{card.damage}</span>}
       {card.loyalty != null && <span className="eng-loyalty">◆ {card.loyalty}</span>}
+      {card.defense != null && <span className="eng-loyalty" title="Defense">🛡 {card.defense}</span>}
     </div>
   )
 }

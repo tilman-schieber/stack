@@ -71,7 +71,7 @@ Implemented: the full turn structure and priority system, the stack, London mull
 activation costs, delve, convoke, kicker, evoke, cycling, buyback, suspend, unearth, echo, {Q}, counter-removal and energy costs), the play/draw choice, combat with
 the evasion keywords (flying/reach, fear, intimidate, skulk, shadow, horsemanship, landwalk,
 menace, "can't be blocked", protection from colours/types/everything) and attack/block requirements, multiple blockers, first/double
-strike (with the second combat damage step), exalted, fight, undying/persist, cascade, rebound, extort, split second, changeling, Vehicles/crew, trample, deathtouch, lifelink, infect/wither/toxic and poison, planeswalkers, all
+strike (with the second combat damage step), exalted, fight, undying/persist, cascade, rebound, extort, split second, changeling, Vehicles/crew, overload, miracle, battles (Sieges), the attacker's damage assignment order, changing a spell's targets, trample, deathtouch, lifelink, infect/wither/toxic and poison, planeswalkers, all
 seven continuous-effect layers (copy, control, text, types, color, abilities incl. "loses all
 abilities", P/T) with timestamp *and* dependency ordering, triggered/activated/static
 abilities (blocks, becomes blocked/tapped, draw, discard, life gain/loss, phase triggers;
@@ -86,8 +86,7 @@ zone, tax, 21-damage rule, 40 life).
 
 Card characteristics come straight from Scryfall data; only cards whose text implies effects
 get an entry in `behaviors.mjs`, written against a small vocabulary of effect ops. Cards
-without an entry play with their printed characteristics. Simplifications: damage
-assignment order, the legend rule and mulligan sequencing are decided automatically; no
+without an entry play with their printed characteristics. Simplifications: the legend rule, proliferate choices and mulligan sequencing are decided automatically; no
 TURN relay, reconnection or spectators online.
 
 Tests are plain Node scripts (`node src/shared/engine/<name>.test.mjs`, or `npm test`).

@@ -126,7 +126,7 @@ export default function EnginePlayArea() {
     kind === 'declareAttackers'
       ? !attackTarget || attackTarget.player != null
         ? view.players[defenderPid]?.name
-        : pending.defenders?.find((d) => d.oid === attackTarget.planeswalker)?.name || 'planeswalker'
+        : pending.defenders?.find((d) => d.oid === (attackTarget.planeswalker ?? attackTarget.battle))?.name || 'planeswalker'
       : null
 
   // ---- targeting helpers ----
@@ -217,7 +217,7 @@ export default function EnginePlayArea() {
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: chosen })
     else if (a.type === 'castBestow') choose({ type: 'castBestow', oid: a.oid, targets: chosen, x: c.x })
     else
-      choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, face: a.face, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
+      choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, buyback: !!a.buyback, overload: !!a.overload, face: a.face, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
   }
 
   // Finalize a modal cast once every selected mode has its targets.
@@ -335,7 +335,7 @@ export default function EnginePlayArea() {
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: [] })
     else if (a.type === 'castFaceDown') choose({ type: 'castFaceDown', oid: a.oid })
     else if (a.type === 'turnFaceUp') choose({ type: 'turnFaceUp', oid: a.oid })
-    else choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, face: a.face })
+    else choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, buyback: !!a.buyback, overload: !!a.overload, face: a.face })
   }
   const startActivate = startAction
 
@@ -444,6 +444,8 @@ export default function EnginePlayArea() {
         })
       } else if (controllerPid !== view.activePlayer && card.loyalty != null) {
         setAttackTarget({ planeswalker: card.oid })
+      } else if (card.defense != null && card.protector != null && card.protector !== view.activePlayer) {
+        setAttackTarget({ battle: card.oid }) // a battle protected by an opponent (310.11c)
       }
     } else if (kind === 'declareBlockers') {
       if (controllerPid === pending.player && pending.eligible.includes(card.oid)) {
@@ -493,6 +495,8 @@ export default function EnginePlayArea() {
         cls.push('selectable', attackers[card.oid] ? 'chosen' : '')
       if (controllerPid !== view.activePlayer && card.loyalty != null)
         cls.push('selectable', attackTarget?.planeswalker === card.oid ? 'assigned' : '')
+      if (card.defense != null && card.protector != null && card.protector !== view.activePlayer)
+        cls.push('selectable', attackTarget?.battle === card.oid ? 'assigned' : '')
     }
     if (kind === 'declareBlockers') {
       if (controllerPid === pending.player && pending.eligible.includes(card.oid))

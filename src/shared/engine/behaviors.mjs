@@ -614,6 +614,22 @@ export const BEHAVIORS = {
       }
     ]
   },
+  // Batch 4 showcases: a Siege battle (its ETB simplified to the 4 damage to an
+  // opponent), Redirect, overload, miracle.
+  'Invasion of Regatha': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, targets: [{ type: 'player', controller: 'opponent' }], effect: [{ op: 'dealDamage', to: 'target0', amount: 4 }] }
+    ]
+  },
+  Redirect: { spell: { targets: [{ type: 'spell' }], effect: [{ op: 'changeTargets', to: 'target0' }] } },
+  Electrickery: {
+    spell: {
+      targets: [{ type: 'creature', controller: 'opponent' }],
+      effect: [{ op: 'dealDamage', to: 'target0', amount: 1 }],
+      overloadEffect: [{ op: 'dealDamageEach', filter: 'creature', who: 'opponents', amount: 1 }]
+    }
+  },
+  'Thunderous Wrath': { spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', to: 'target0', amount: 5 }] } },
   // Batch 3 showcases: a Vehicle, a Saga, buyback, an Edict, echo, split second,
   // rebound, suspend.
   'Renegade Freighter': {
@@ -1102,6 +1118,8 @@ export function loadBehavior(printed) {
   const echo = authored.echo || costKw('Echo')
   const susMatch = /^Suspend (\d+)\s*[—-]\s*((?:\{[^}]+\})+)/m.exec(text)
   const suspend = authored.suspend || (susMatch ? { count: Number(susMatch[1]), cost: susMatch[2] } : null)
+  const overload = authored.overload || costKw('Overload')
+  const miracle = authored.miracle || costKw('Miracle')
   // Extort (702.100): a keyword-derived cast trigger.
   if ((printed.keywords || []).includes('Extort'))
     triggered.push({
@@ -1119,6 +1137,8 @@ export function loadBehavior(printed) {
     unearth,
     echo,
     suspend,
+    overload,
+    miracle,
     saga: authored.saga || null, // { chapters: [effects | { targets, effect }] } (714)
     cantBeBlocked,
     cantBlock,

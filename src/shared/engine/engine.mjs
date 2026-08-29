@@ -78,6 +78,23 @@ export class GameEngine {
     return this
   }
 
+  // Damage assignment order (509.2): `order` maps attacker oid -> blocker oids,
+  // first to be assigned damage first. Missing/partial orders keep the default.
+  _applyOrderBlockers(pending, answer) {
+    const s = this.state
+    const order = {}
+    for (const atk of pending.attackers) {
+      const given = Array.isArray(answer?.order?.[atk.oid]) ? answer.order[atk.oid] : []
+      const ids = atk.blockers.map((b) => b.oid)
+      const chosen = [...new Set(given.filter((b) => ids.includes(b)))]
+      for (const b of ids) if (!chosen.includes(b)) chosen.push(b)
+      order[atk.oid] = chosen
+    }
+    s.combat.order = order
+    this._combatDamage()
+    this._grantPriority()
+  }
+
   _applyPlayOrDraw(pending, answer) {
     const s = this.state
     if (answer?.play === false) {
@@ -291,6 +308,9 @@ export class GameEngine {
         case 'playOrDraw':
           this._applyPlayOrDraw(pending, answer)
           break
+        case 'orderBlockers':
+          this._applyOrderBlockers(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -376,6 +396,7 @@ export class GameEngine {
 
   _defenderOffered(defenders, d) {
     if (d.planeswalker != null) return defenders.some((x) => x.kind === 'planeswalker' && x.oid === d.planeswalker)
+    if (d.battle != null) return defenders.some((x) => x.kind === 'battle' && x.oid === d.battle)
     return defenders.some((x) => x.kind === 'player' && x.pid === d.player)
   }
 
@@ -402,6 +423,7 @@ export class GameEngine {
         !!x.kicker === !!a.kicker &&
         !!x.evoke === !!a.evoke &&
         !!x.buyback === !!a.buyback &&
+        !!x.overload === !!a.overload &&
         !!x.altCost === !!a.altCost
     )
     if (!match) throw new Error(`illegal action: ${type} is not available`)
@@ -462,7 +484,10 @@ export class GameEngine {
     if (ref.kind === 'player') {
       if (spec.type !== 'player' && spec.type !== 'any') return false
       const p = s.players[ref.pid]
-      return !!p && !p.hasLost
+      if (!p || p.hasLost) return false
+      if (spec.controller === 'opponent' && ref.pid === ctx.byPid) return false // "target opponent"
+      if (spec.controller === 'you' && ref.pid !== ctx.byPid) return false
+      return true
     }
     if (ref.kind === 'spell') return spec.type === 'spell' && zone(s, 'stack').includes(ref.oid)
     if (ref.kind === 'object') {
@@ -600,6 +625,23 @@ export class GameEngine {
         break
       }
       case 'combatDamage': {
+        // 509.2 / 510.1c: an attacker blocked by several creatures has its
+        // controller order them for damage assignment first (unless auto).
+        const multi = s.combat.attackers
+          .map((oid) => ({ oid, blockers: Object.keys(s.combat.blocks).filter((b) => s.combat.blocks[b] === oid && s.objects[b]?.zoneName === 'battlefield') }))
+          .filter((x) => x.blockers.length > 1)
+        if (multi.length && !this._autoOrder && !s.combat.order) {
+          s.pending = {
+            kind: 'orderBlockers',
+            player: s.activePlayer,
+            attackers: multi.map((x) => ({
+              oid: x.oid,
+              name: this._objName(s.objects[x.oid]),
+              blockers: x.blockers.map((b) => ({ oid: b, name: this._objName(s.objects[b]) }))
+            }))
+          }
+          return
+        }
         // 510.4: with first/double strike there are two combat damage steps —
         // players get priority after the first-strike damage, then the regular
         // damage is dealt (see _advanceStep).
@@ -727,6 +769,12 @@ export class GameEngine {
       this._endCleanup()
       return
     }
+    // Cast opportunities queued outside a resolution (a miracle just drawn, a
+    // defeated Siege) are offered before priority is handed out.
+    if (s.pendingMadness.length && !this._castPaused) {
+      this._processMadness(() => this._grantPriorityTo(pid))
+      return
+    }
     s.priorityAfter = pid
     this._advanceTriggerPlacement() // may pause for a target choice, else grants
   }
@@ -829,6 +877,16 @@ export class GameEngine {
   }
 
   _applyChooseTargets(pending, answer) {
+    if (pending._retarget) {
+      // Changing a spell's targets (115.7) mid-resolution of the changing effect.
+      const sp = this.state.objects[pending._retarget]
+      if (!answer?.decline && sp?.zoneName === 'stack') {
+        sp.targets = answer.targets
+        this._log(`${this._objName(sp)} now targets${this._describeTargets(sp.targets).replace(' targeting', '')}`)
+      }
+      this._resumeResolution()
+      return
+    }
     if (pending.optional && answer?.decline) {
       this._advanceTriggerPlacement() // "you may": declined, the trigger does nothing
       return
@@ -1362,6 +1420,9 @@ export class GameEngine {
     // Buyback (702.27): the same spell with its buyback cost paid (returns to hand).
     if (b.buyback && this._canPay(pid, addCosts(base, parseManaCost(b.buyback.cost)), extra))
       actions.push(withFace({ ...castAction(false), buyback: true, label: `${p.name} (buyback)` }))
+    // Overload (702.96): an alternative cost that turns "target" into "each".
+    if (b.overload && b.spell?.overloadEffect && this._canPay(pid, parseManaCost(b.overload.cost), extra))
+      actions.push(withFace({ ...castAction(false), overload: true, targets: [], needsTargets: 0, variadic: null, label: `${p.name} (overload)` }))
     // Alternative cost (e.g. Fireblast: sacrifice two Mountains instead of mana).
     const alt = b.spell?.alternativeCost
     if (alt?.sacrifice && this._sacrificeCandidates(pid, alt.sacrifice).length >= (alt.sacrifice.count || 1)) {
@@ -1596,8 +1657,12 @@ export class GameEngine {
         } else {
           const xCost = o.printed.manaCost.X || 0
           o.xValue = xCost ? action.x || 0 : 0
-          // Evoke (702.74) replaces the mana cost entirely.
-          let cost = action.evoke ? parseManaCost(o.behavior.evoke.cost) : this._effectiveCost(pid, o)
+          // Evoke (702.74) / overload (702.96) replace the mana cost entirely.
+          let cost = action.evoke
+            ? parseManaCost(o.behavior.evoke.cost)
+            : action.overload
+              ? parseManaCost(o.behavior.overload.cost)
+              : this._effectiveCost(pid, o)
           // Kicker (702.33) / buyback (702.27): optional additional costs.
           if (action.kicker) cost = addCosts(cost, parseManaCost(o.behavior.kicker.cost))
           if (action.buyback) cost = addCosts(cost, parseManaCost(o.behavior.buyback.cost))
@@ -1630,6 +1695,9 @@ export class GameEngine {
         if (fromCommand) o.commanderCasts = (o.commanderCasts || 0) + 1
         if (o.behavior.spell?.modal) {
           this._applyModalCast(o, action)
+        } else if (action.overload) {
+          o.targets = []
+          o.spell = { ...o.behavior.spell, targets: [], effect: o.behavior.spell.overloadEffect }
         } else {
           o.targets = action.targets || []
           o.spell = o.behavior.spell
@@ -2189,6 +2257,12 @@ export class GameEngine {
     if (ew) o.status.counters[ew.counter] = (o.status.counters[ew.counter] || 0) + this._amount(o, ew.amount)
     // A planeswalker enters with loyalty counters equal to its printed loyalty.
     if (o.printed.loyalty != null) o.status.counters.loyalty = o.printed.loyalty
+    // A battle enters with defense counters (310.4); a Siege's protector is an
+    // opponent of its controller (310.11a — the next one in seat order).
+    if (o.printed.defense != null) {
+      o.status.counters.defense = o.printed.defense
+      o.protector = this._opponentsOf(controller)[0] ?? null
+    }
     // An Aura enters attached to the permanent it targeted as it was cast.
     if (o.behavior?.enchant && o.targets?.[0]?.oid) o.status.attachedTo = o.targets[0].oid
     // A Bestow spell enters attached as an Aura (it's not a creature while attached).
@@ -2299,6 +2373,24 @@ export class GameEngine {
             ? this._opponentsOf(source.controller)
             : [this._resolvePlayerRef(source, e.to || 'target0')]
         return this._nextSacrificeChoice(queue, e.filter || { types: ['Creature'] }, e.count || 1)
+      }
+      case 'changeTargets': {
+        // 115.7 (Redirect): the controller may choose new targets for target spell.
+        const t = this._resolveTargetRef(source, e.to || 'target0')
+        const sp = t?.kind === 'object' ? t.obj : null
+        if (!sp || sp.zoneName !== 'stack' || !sp.targets?.length || sp.behavior?.spell?.modal) return false
+        const specs = this._spellTargets(sp)
+        if (!specs.length) return false
+        s.pending = {
+          kind: 'chooseTargets',
+          player: source.controller,
+          sourceOid: sp.oid,
+          name: `${this._objName(sp)} — new targets`,
+          targets: specs,
+          optional: true,
+          _retarget: sp.oid
+        }
+        return true
       }
       case 'castFree': {
         // Cast a specific exiled card without paying its mana cost (rebound,
@@ -2499,7 +2591,9 @@ export class GameEngine {
             if (!t) continue
             if (e.filter === 'creature' && !t.chars.types.includes('Creature')) continue
             if (e.excludeFlying && this._hasKW(t, 'Flying')) continue
-            this._dealDamage(source, { obj: t }, e.amount)
+            if (e.who === 'opponents' && t.controller === source.controller) continue // "you don't control"
+            if (e.who === 'you' && t.controller !== source.controller) continue
+            this._dealDamage(source, { obj: t }, this._amount(source, e.amount))
           }
           break
         }
@@ -3404,9 +3498,13 @@ export class GameEngine {
     const out = []
     for (const pid of this._opponentsOf(s.activePlayer)) {
       out.push({ kind: 'player', pid, name: s.players[pid].name })
-      for (const o of objectsIn(s, 'battlefield'))
+      for (const o of objectsIn(s, 'battlefield')) {
         if (o.controller === pid && o.chars.types.includes('Planeswalker'))
           out.push({ kind: 'planeswalker', oid: o.oid, name: o.chars.name, loyalty: o.status.counters.loyalty })
+        // A battle protected by that opponent (310.11c) — whoever controls it.
+        if (o.chars.types.includes('Battle') && o.protector === pid)
+          out.push({ kind: 'battle', oid: o.oid, name: o.chars.name, defense: o.status.counters.defense || 0 })
+      }
     }
     return out
   }
@@ -3416,6 +3514,7 @@ export class GameEngine {
   _defenderOfAttacker(a) {
     const t = a.status.attackingTarget
     if (t?.planeswalker) return this.state.objects[t.planeswalker]?.controller
+    if (t?.battle) return this.state.objects[t.battle]?.protector
     return t?.player
   }
 
@@ -3438,6 +3537,7 @@ export class GameEngine {
   // Resolve an attacker's declared target into a _dealDamage target.
   _attackTargetOf(atk) {
     const t = atk.status.attackingTarget
+    if (t?.battle && this.state.objects[t.battle]?.zoneName === 'battlefield') return { obj: this.state.objects[t.battle] }
     if (t?.planeswalker && this.state.objects[t.planeswalker]?.zoneName === 'battlefield')
       return { obj: this.state.objects[t.planeswalker] }
     return { player: t?.player ?? this._defendingPlayer() }
@@ -3597,7 +3697,13 @@ export class GameEngine {
             .filter(([, a]) => a === atkOid)
             .map(([b]) => b)
         : []
-      ).filter((b) => onBf(b) && s.objects[b].status.blocking === atkOid)
+      )
+        .filter((b) => onBf(b) && s.objects[b].status.blocking === atkOid)
+        // 509.2 / 510.1c: the attacker's declared damage assignment order.
+        .sort((x, y) => {
+          const ord = s.combat.order?.[atkOid] || []
+          return (ord.indexOf(x) === -1 ? 99 : ord.indexOf(x)) - (ord.indexOf(y) === -1 ? 99 : ord.indexOf(y))
+        })
 
       const tgt = this._attackTargetOf(atk)
       if (!atk.status.blocked) {
@@ -3677,6 +3783,9 @@ export class GameEngine {
       if (target.obj.chars?.types.includes('Planeswalker')) {
         // Damage to a planeswalker removes that many loyalty counters (306.8).
         target.obj.status.counters.loyalty = (target.obj.status.counters.loyalty || 0) - amount
+      } else if (target.obj.chars?.types.includes('Battle')) {
+        // Damage to a battle removes that many defense counters (310.8).
+        target.obj.status.counters.defense = (target.obj.status.counters.defense || 0) - amount
       } else {
         if (infect || wither) target.obj.status.counters['-1/-1'] = (target.obj.status.counters['-1/-1'] || 0) + amount
         else target.obj.status.damage += amount
@@ -3866,6 +3975,16 @@ export class GameEngine {
           repeat = true
         }
       }
+      // A battle with no defense counters is defeated (704.5v / 310.11e): a Siege is
+      // exiled and its controller may cast it transformed without paying its cost.
+      for (const o of objectsIn(s, 'battlefield')) {
+        if (!o.chars.types.includes('Battle') || (o.status.counters.defense || 0) > 0) continue
+        this._log(`${this._objName(o)} is defeated`)
+        const ctrl = o.controller
+        this._relocate(o, 'exile')
+        if (o.faces?.length > 1) s.pendingMadness.push({ pid: ctrl, oid: o.oid, cost: null, free: true, keep: true, face: 1 })
+        repeat = true
+      }
       // A planeswalker with no loyalty is put into its owner's graveyard (704.5i).
       for (const o of objectsIn(s, 'battlefield')) {
         if (o.chars.types.includes('Planeswalker') && (o.status.counters.loyalty || 0) <= 0) {
@@ -4024,8 +4143,11 @@ export class GameEngine {
       targets: this._spellTargets(o),
       _after: m.after || null,
       _keep: !!m.keep, // declined: stays where it is (rebound/suspend) vs. bottom of library (cascade)
-      _haste: !!m.haste // suspend: a creature cast this way has haste
+      _haste: !!m.haste, // suspend: a creature cast this way has haste
+      _face: m.face ?? null, // a defeated Siege is cast transformed
+      miracle: !!m.miracle // cast for its miracle cost as it was drawn
     }
+    if (m.face != null) s.pending.targets = this._spellTargets(o, loadBehavior(o.faces[m.face]))
   }
 
   _applyMadness(pending, answer) {
@@ -4034,10 +4156,11 @@ export class GameEngine {
     if (answer?.cast) {
       if (!pending.free) this._pay(pending.player, parseManaCost(pending.cost))
       moveObject(s, pending.oid, 'stack')
+      if (pending._face != null) setFace(o, pending._face) // cast transformed (a defeated Siege)
       o.controller = pending.player
       o.targets = answer.targets || []
       o.spell = o.behavior.spell
-      o.madnessCast = !pending.free // madness spells are exiled when they leave the stack
+      o.madnessCast = !pending.free && !pending.miracle // madness spells are exiled when they leave the stack
       this._assertTargetsLegal(o.targets, o.controller, tags(o.printed))
       this._log(`${this._nameOf(pending.player)} casts ${this._objName(o)}${pending.free ? ' without paying its mana cost' : ' (madness)'}`)
       if (pending._haste) o.suspendHaste = true
@@ -4289,6 +4412,11 @@ export class GameEngine {
       p.drewThisTurn = (p.drewThisTurn || 0) + 1
       if (p.drewThisTurn === 3) this._onThirdDraw(pid)
       if (s.step && s.step !== 'mulligan') this._firePlayerEvent('draw', pid)
+      // Miracle (702.94): the first card drawn this turn may be cast for its
+      // miracle cost right away (offered before priority is next granted).
+      const drawn = s.objects[zone(s, 'hand', pid)[zone(s, 'hand', pid).length - 1]]
+      if (drawn?.behavior?.miracle && p.drewThisTurn === 1 && s.step && s.step !== 'mulligan')
+        s.pendingMadness.push({ pid, oid: drawn.oid, cost: drawn.behavior.miracle.cost, miracle: true })
     }
   }
 

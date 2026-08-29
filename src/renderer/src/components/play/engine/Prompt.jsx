@@ -52,6 +52,7 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       orderTriggers: 'is ordering their triggers',
       playOrDraw: 'is choosing to play or draw',
       sacrificeChoice: 'is choosing what to sacrifice',
+      orderBlockers: 'is ordering blockers for damage',
       optionalTrigger: 'is deciding on an optional ability',
       mayPay: 'is deciding whether to pay',
       wardPay: 'is deciding whether to pay ward',
@@ -187,6 +188,8 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
     )
   } else if (kind === 'orderTriggers') {
     body = <TriggerOrderer pending={pending} nameOf={nameOf} onDone={(order) => choose({ order })} />
+  } else if (kind === 'orderBlockers') {
+    body = <BlockerOrderer pending={pending} nameOf={nameOf} onDone={(order) => choose({ order })} />
   } else if (kind === 'optionalTrigger') {
     body = (
       <>
@@ -373,6 +376,10 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
             <>
               cast <b>{pending.name}</b> without paying its mana cost?
             </>
+          ) : pending.miracle ? (
+            <>
+              cast <b>{pending.name}</b> for its miracle cost {pending.cost}?
+            </>
           ) : (
             <>
               cast <b>{pending.name}</b> for its madness cost {pending.cost}?
@@ -380,7 +387,7 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
           )}
         </span>
         <button className="primary" disabled={!pending.canPay} onClick={() => onMadnessCast(pending)}>
-          {pending.free ? 'Cast for free' : 'Cast (madness)'}
+          {pending.free ? 'Cast for free' : pending.miracle ? 'Cast (miracle)' : 'Cast (madness)'}
         </button>
         <button className="mini" onClick={() => choose({ cast: false })}>
           Decline
@@ -427,6 +434,39 @@ function TriggerOrderer({ pending, nameOf, onDone }) {
         </button>
       ))}
       {order.length > 0 && <span className="muted">{order.length}/{pending.triggers.length} placed</span>}
+    </>
+  )
+}
+
+// 509.2: for each attacker blocked by several creatures, click its blockers in
+// the order damage is assigned to them.
+function BlockerOrderer({ pending, nameOf, onDone }) {
+  const [order, setOrder] = useState({}) // attackerOid -> [blockerOids]
+  const [idx, setIdx] = useState(0)
+  const atk = pending.attackers[idx]
+  const done = order[atk.oid] || []
+  const pick = (b) => {
+    const next = { ...order, [atk.oid]: [...done, b] }
+    if (next[atk.oid].length === atk.blockers.length) {
+      if (idx + 1 >= pending.attackers.length) onDone(next)
+      else {
+        setOrder(next)
+        setIdx(idx + 1)
+      }
+    } else setOrder(next)
+  }
+  return (
+    <>
+      <span>
+        <b>{nameOf(pending.player)}</b> — damage assignment order for <b>{atk.name}</b>: click its blockers first to last.
+      </span>
+      {atk.blockers
+        .filter((b) => !done.includes(b.oid))
+        .map((b) => (
+          <button key={b.oid} className="mini" onClick={() => pick(b.oid)}>
+            {b.name}
+          </button>
+        ))}
     </>
   )
 }
