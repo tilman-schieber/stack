@@ -111,6 +111,7 @@ export function projectGame(engine, viewerPid = null) {
       name: p.name,
       life: p.life,
       manaPool: p.manaPool,
+      restrictedMana: (p.restrictedPool || []).map((r) => r.color),
       counters: p.counters,
       handCount: zone(state, 'hand', p.id).length,
       libraryCount: zone(state, 'library', p.id).length,

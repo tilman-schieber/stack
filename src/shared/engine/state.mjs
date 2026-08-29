@@ -185,6 +185,21 @@ export function moveObject(state, oid, toName, { toTop = false } = {}) {
     obj.echoDue = false
     if (toName !== 'exile') obj.suspended = false
     obj.chosen = null // "as this enters, choose…" is chosen anew next time
+    obj.mutateCast = false
+    // A mutated pile (702.140) comes apart: each merged card goes to the same zone
+    // as its own object again.
+    if (obj.mergedCards?.length) {
+      const cards = obj.mergedCards
+      obj.mergedCards = []
+      obj.mergeOrder = null
+      for (const moid of cards) {
+        const c = state.objects[moid]
+        if (!c) continue
+        c.mergedInto = null
+        c.zoneName = null
+        moveObject(state, moid, toName)
+      }
+    }
     // A copy (Clone) reverts to its own printed card off the battlefield (707.2 / 400.7).
     if (obj.origPrinted) {
       obj.printed = obj.origPrinted
@@ -237,6 +252,7 @@ export function createState({ players, seed = 'stack', format = null, startingLi
       landsPlayed: 0,
       mulligans: 0,
       manaPool: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 },
+      restrictedPool: [], // floating mana that may be spent only on certain spells (106.6)
       counters: {}
     })
     for (const name of PERSONAL_ZONES) state.zones[zoneKey(name, pid)] = []

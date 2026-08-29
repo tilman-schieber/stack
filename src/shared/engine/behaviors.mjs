@@ -614,6 +614,23 @@ export const BEHAVIORS = {
       }
     ]
   },
+  // Batch 6: multi-mana and restricted mana, proliferate, mutate, Lab Man, dredge.
+  'Sol Ring': { manaOptions: [{ colors: ['C'], amount: 2 }] },
+  'Eldrazi Temple': {
+    mana: ['C'],
+    manaOptions: [{ colors: ['C'], amount: 2, only: { colorless: true, subtype: 'Eldrazi' } }]
+  },
+  Thrummingbird: { triggered: [{ trigger: { event: 'dealsCombatDamageToPlayer', self: true }, effect: [{ op: 'proliferate' }] }] },
+  Gemrazer: {
+    triggered: [
+      {
+        trigger: { event: 'mutates', self: true },
+        targets: [{ type: 'permanent', types: ['Artifact', 'Enchantment'], controller: 'opponent' }],
+        effect: [{ op: 'destroy', to: 'target0' }]
+      }
+    ]
+  },
+  'Laboratory Maniac': { staticRules: [{ winOnEmptyDraw: true }] },
   // Batch 5: "can't gain life" static + each-upkeep trigger.
   'Sulfuric Vortex': {
     staticRules: [{ noLifeGain: true }],
@@ -1125,6 +1142,9 @@ export function loadBehavior(printed) {
   const suspend = authored.suspend || (susMatch ? { count: Number(susMatch[1]), cost: susMatch[2] } : null)
   const overload = authored.overload || costKw('Overload')
   const miracle = authored.miracle || costKw('Miracle')
+  const dredgeMatch = /^Dredge (\d+)/m.exec(text)
+  const dredge = authored.dredge ?? (dredgeMatch ? Number(dredgeMatch[1]) : null)
+  const mutate = authored.mutate || costKw('Mutate')
   // Extort (702.100): a keyword-derived cast trigger.
   if ((printed.keywords || []).includes('Extort'))
     triggered.push({
@@ -1144,6 +1164,9 @@ export function loadBehavior(printed) {
     suspend,
     overload,
     miracle,
+    dredge,
+    mutate,
+    manaOptions: authored.manaOptions || null, // [{ colors, amount, only }] — multi-mana / restricted mana (106.6)
     saga: authored.saga || null, // { chapters: [effects | { targets, effect }] } (714)
     cantBeBlocked,
     cantBlock,

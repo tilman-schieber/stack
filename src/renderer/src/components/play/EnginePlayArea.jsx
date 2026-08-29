@@ -53,6 +53,8 @@ export default function EnginePlayArea() {
   const [zoneView, setZoneView] = useState(null) // { pid, zone } graveyard/exile viewer
   const [xInput, setXInput] = useState(0) // X value being chosen for an X spell
   const [ninjutsu, setNinjutsu] = useState(null) // pending ninjutsu action awaiting an attacker
+  const [prolifSel, setProlifSel] = useState([]) // proliferate: chosen permanents (oids) and players ('p<pid>')
+  const [bandAttack, setBandAttack] = useState(false) // declare the selected attackers as one band
 
   const resetSelections = () => {
     setCast(null)
@@ -68,6 +70,8 @@ export default function EnginePlayArea() {
     setZoneView(null)
     setXInput(0)
     setNinjutsu(null)
+    setProlifSel([])
+    setBandAttack(false)
   }
   // Reset when the *decision* changes — not on every view push. Online, the host
   // re-sends the view for things like a stop toggle; that must not wipe the
@@ -395,6 +399,12 @@ export default function EnginePlayArea() {
       choose({ copy: card.oid })
       return
     }
+    // Proliferate: toggle a permanent with counters.
+    if (kind === 'proliferate') {
+      if (pending.choices.some((c) => c.kind === 'object' && c.oid === card.oid))
+        setProlifSel((sel) => (sel.includes(card.oid) ? sel.filter((x) => x !== card.oid) : [...sel, card.oid]))
+      return
+    }
     // Legend rule: click the one to keep.
     if (kind === 'legendChoice' && pending.choices.includes(card.oid)) {
       choose({ keep: card.oid })
@@ -464,6 +474,11 @@ export default function EnginePlayArea() {
 
   function onPlayerTarget(pid) {
     if (!myTurn) return
+    if (kind === 'proliferate') {
+      if (pending.choices.some((c) => c.kind === 'player' && c.pid === pid))
+        setProlifSel((sel) => (sel.includes('p' + pid) ? sel.filter((x) => x !== 'p' + pid) : [...sel, 'p' + pid]))
+      return
+    }
     if (targeting && wantsPlayer) {
       addTarget({ kind: 'player', pid })
       return
@@ -491,6 +506,8 @@ export default function EnginePlayArea() {
       cls.push('targetable')
     if (kind === 'sacrificeChoice' && controllerPid === pending.player && pending.choices.includes(card.oid)) cls.push('targetable')
     if (kind === 'legendChoice' && pending.choices.includes(card.oid)) cls.push('targetable')
+    if (kind === 'proliferate' && pending.choices.some((c) => c.kind === 'object' && c.oid === card.oid))
+      cls.push('selectable', prolifSel.includes(card.oid) ? 'chosen' : '')
     if (kind === 'copyEnter' && pending.choices.includes(card.oid)) cls.push('targetable')
     if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player) {
       if (pending.actions.some((a) => a.type === 'activate' && a.oid === card.oid)) cls.push('activatable')
@@ -547,7 +564,7 @@ export default function EnginePlayArea() {
             </span>
           ))}
       </div>
-      <ManaPool pool={p.manaPool} />
+      <ManaPool pool={p.manaPool} restricted={p.restrictedMana} />
       <div className="eng-zones">
         <Pile label="Library" count={p.libraryCount} faceDown />
         <Pile
@@ -834,6 +851,16 @@ export default function EnginePlayArea() {
             : null
         }
         attackers={attackers}
+        band={{ on: bandAttack, toggle: () => setBandAttack((v) => !v), possible: Object.keys(attackers).length > 1 && Object.keys(attackers).some((oid) => cardByOid(oid)?.keywords?.includes('Banding')) }}
+        proliferate={
+          kind === 'proliferate'
+            ? {
+                count: prolifSel.length,
+                confirm: () =>
+                  choose({ picks: prolifSel.map((x) => (x.startsWith('p') ? { pid: Number(x.slice(1)) } : { oid: x })) })
+              }
+            : null
+        }
         attackTargetName={attackTargetName}
         blocks={blocks}
         discardSel={discardSel}

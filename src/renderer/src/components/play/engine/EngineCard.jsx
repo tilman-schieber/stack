@@ -64,14 +64,18 @@ export function Pile({ label, count, topCard, faceDown, onOpen }) {
   )
 }
 
-export function ManaPool({ pool }) {
+export function ManaPool({ pool, restricted = [] }) {
   const COLORS = { W: '#f6f3e0', U: '#b3d5f2', B: '#c9c1cf', R: '#f0b0a0', G: '#a8d6ab', C: '#cfc9c1' }
   const active = Object.entries(pool || {}).filter(([, n]) => n > 0)
+  // Restricted mana (106.6: spendable only on certain spells) is shown with a star.
+  const byColor = {}
+  for (const c of restricted || []) byColor[c] = (byColor[c] || 0) + 1
+  for (const [c, n] of Object.entries(byColor)) active.push([c + '*', n])
   if (active.length === 0) return null
   return (
     <span className="eng-mana">
       {active.map(([c, n]) => (
-        <span key={c} className="eng-mana-pip" style={{ background: COLORS[c] }}>
+        <span key={c} className="eng-mana-pip" style={{ background: COLORS[c.replace('*', '')] }} title={c.endsWith('*') ? 'Restricted mana' : undefined}>
           {n}
           {c}
         </span>

@@ -95,6 +95,67 @@ export class GameEngine {
     this._grantPriority()
   }
 
+  // Proliferate (701.27): +1 of each counter kind on every chosen permanent/player.
+  _applyProliferate(pending, answer) {
+    const s = this.state
+    const picks = Array.isArray(answer?.picks) ? answer.picks : []
+    const chosen = pending.choices.filter((c) => picks.some((p) => (c.kind === 'object' ? p.oid === c.oid : p.pid === c.pid)))
+    for (const c of chosen) {
+      const counters = c.kind === 'object' ? s.objects[c.oid]?.status?.counters : s.players[c.pid]?.counters
+      if (!counters) continue
+      for (const k of Object.keys(counters)) if (counters[k] > 0) counters[k]++
+    }
+    this._log(`${this._nameOf(pending.player)} proliferates${chosen.length ? ': ' + chosen.map((c) => c.name).join(', ') : ' nothing'}`)
+    this._resumeResolution()
+  }
+
+  // Mutate (702.140): the merged permanent is the target object; the mutating
+  // card joins it (on top or under) and no longer exists as a separate object
+  // until the pile leaves the battlefield.
+  _applyMutateOrder(pending, answer) {
+    const s = this.state
+    const card = s.objects[pending.oid]
+    const target = s.objects[pending.target]
+    if (!card || !target || target.zoneName !== 'battlefield') {
+      if (card?.zoneName === 'stack') {
+        moveObject(s, card.oid, 'battlefield')
+        this._enterBattlefield(card, card.controller ?? card.owner)
+      }
+    } else this._merge(card, target, answer?.onTop !== false)
+    if (!this._resume) this._grantPriorityTo(s.activePlayer)
+  }
+
+  _merge(card, target, onTop) {
+    const s = this.state
+    const st = zone(s, 'stack')
+    const i = st.indexOf(card.oid)
+    if (i >= 0) st.splice(i, 1)
+    card.zoneName = 'merged'
+    card.mergedInto = target.oid
+    target.origPrinted ||= target.printed // restored when the pile leaves (state.moveObject)
+    target.mergedCards ||= []
+    if (onTop) target.mergedCards.push(card.oid)
+    else target.mergedCards.unshift(card.oid)
+    // The pile: bottom-most first; the top card gives the characteristics, every
+    // card contributes its abilities.
+    const pile = onTop ? [...target.mergedCards.slice(0, -1), target.oid, card.oid] : [target.oid, ...target.mergedCards]
+    const printedOf = (oid) => (oid === target.oid ? target.origPrinted : s.objects[oid].printed)
+    const top = printedOf(pile[pile.length - 1])
+    const all = pile.map(printedOf)
+    target.printed = {
+      ...top,
+      keywords: [...new Set(all.flatMap((p) => p.keywords))],
+      protections: [...new Set(all.flatMap((p) => p.protections || []))]
+    }
+    const behaviors = all.map((p) => loadBehavior(p))
+    const cat = (k) => behaviors.flatMap((b) => b[k] || [])
+    target.behavior = { ...loadBehavior(top), triggered: cat('triggered'), activated: cat('activated'), static: cat('static'), staticRules: cat('staticRules'), replacement: cat('replacement') }
+    target.mergeOrder = pile
+    computeChars(target)
+    this._log(`${this._objName(s.objects[card.oid])} mutates ${onTop ? 'onto' : 'under'} ${this._objName(target)}`)
+    this._fireTriggers('mutates', target)
+  }
+
   _applyPlayOrDraw(pending, answer) {
     const s = this.state
     if (answer?.play === false) {
@@ -296,6 +357,15 @@ export class GameEngine {
         case 'chooseValue':
           this._applyChooseValue(pending, answer)
           break
+        case 'dredge':
+          this._applyDredge(pending, answer)
+          break
+        case 'proliferate':
+          this._applyProliferate(pending, answer)
+          break
+        case 'mutateOrder':
+          this._applyMutateOrder(pending, answer)
+          break
         case 'sacrificeChoice':
           this._applySacrificeChoice(pending, answer)
           break
@@ -349,6 +419,19 @@ export class GameEngine {
           seen.add(oid)
           const d = typeof ent === 'string' ? null : ent.defender
           if (d && !this._defenderOffered(pending.defenders, d)) throw new Error('illegal attack: no such defender')
+        }
+        // Banding (702.22b): a band is any number of creatures with banding plus up
+        // to one without, all attacking the same defender.
+        const bands = {}
+        for (const ent of a.attackers || []) {
+          if (typeof ent === 'string' || !ent.band) continue
+          ;(bands[ent.band] ||= []).push(ent)
+        }
+        for (const members of Object.values(bands)) {
+          const noBanding = members.filter((m) => !this._hasKW(this.state.objects[m.oid], 'Banding'))
+          if (noBanding.length > 1) throw new Error('illegal band: at most one creature without banding')
+          const key = (d) => JSON.stringify(d || null)
+          if (new Set(members.map((m) => key(m.defender))).size > 1) throw new Error('illegal band: all members must attack the same defender')
         }
         // Attack requirements (508.1d): a creature that "attacks each combat if
         // able" and is able must be declared.
@@ -422,11 +505,13 @@ export class GameEngine {
         (x.oid ?? null) === (a.oid ?? null) &&
         (x.ability ?? null) === (a.ability ?? null) &&
         (x.color ?? null) === (a.color ?? null) &&
+        (x.option ?? 0) === (a.option ?? 0) &&
         (x.face ?? null) === (a.face ?? null) &&
         !!x.kicker === !!a.kicker &&
         !!x.evoke === !!a.evoke &&
         !!x.buyback === !!a.buyback &&
         !!x.overload === !!a.overload &&
+        !!x.mutate === !!a.mutate &&
         !!x.altCost === !!a.altCost
     )
     if (!match) throw new Error(`illegal action: ${type} is not available`)
@@ -584,9 +669,10 @@ export class GameEngine {
       case 'draw': {
         // 103.8a: the starting player skips only the very first draw step of the
         // game (turn 1). Every later turn — including all of theirs — draws.
-        if (s.turnNumber !== 1) this.draw(s.activePlayer, 1)
-        this._firePhaseTriggers('drawStep')
-        this._grantPriority()
+        if (s.turnNumber !== 1) {
+          // The draw may be replaced (dredge): pause for the choice if there is one.
+          if (!this._drawSeries(s.activePlayer, 1, () => this._afterDrawStep())) return
+        } else this._afterDrawStep()
         break
       }
       case 'beginCombat': {
@@ -1049,6 +1135,8 @@ export class GameEngine {
     if (spec.type === 'land' && !o.chars.types.includes('Land')) return false
     if (spec.type === 'artifact' && !o.chars.types.includes('Artifact')) return false
     if (spec.noncreature && o.chars.types.includes('Creature')) return false
+    if (spec.nonHuman && hasSub(o.chars, 'Human')) return false
+    if (spec.types && !spec.types.some((t) => o.chars.types.includes(t))) return false
     if (spec.exclude?.some((t) => o.chars.types.includes(t))) return false
     if (spec.excludeSuper?.some((t) => o.chars.supertypes.includes(t))) return false
     // Color restriction (Doom Blade: "target nonblack creature"). Reads the current
@@ -1098,6 +1186,7 @@ export class GameEngine {
   // "target creature you control" / "an opponent controls" — matches the target's
   // controller against the targeting player (from ctx.byPid). No restriction passes.
   _controllerMatches(spec, o, ctx) {
+    if (spec.owner === 'you' && ctx && o.owner !== ctx.byPid) return false
     if (!spec.controller || !ctx) return true
     return spec.controller === 'you' ? o.controller === ctx.byPid : o.controller !== ctx.byPid
   }
@@ -1345,9 +1434,21 @@ export class GameEngine {
     // Manual mana: tap a mana source for one of its colors (605). Auto-payment
     // taps sources too, so this is only needed to float mana deliberately (e.g.
     // to choose which land pays, or to pool mana before a sacrifice outlet).
-    for (const src of this._manaSources(pid))
-      for (const color of src.colors)
-        actions.push({ type: 'tapForMana', oid: src.oid, color, mana: true, label: `Tap for {${color}}` })
+    for (const o of objectsIn(s, 'battlefield')) {
+      if (o.controller !== pid || o.status.tapped) continue
+      if (o.printed.types.includes('Creature') && !this._canTap(o)) continue
+      this._manaOptionsOf(o).forEach((m, option) => {
+        for (const color of m.colors)
+          actions.push({
+            type: 'tapForMana',
+            oid: o.oid,
+            color,
+            option,
+            mana: true,
+            label: `Tap for ${Array(m.amount).fill(`{${color}}`).join('')}${m.only ? ' (restricted)' : ''}`
+          })
+      })
+    }
 
     // Activated abilities of permanents this player controls (instant speed).
     for (const oid of zone(s, 'battlefield')) {
@@ -1466,16 +1567,22 @@ export class GameEngine {
       modal: modal || null,
       modes: modal ? modes.map((m, i) => ({ index: i, label: m.label, targets: m.targets || [], castable: modeCastable(m) })) : null
     })
-    if (this._canPay(pid, base, extra)) actions.push(withFace(castAction(false)))
+    if (this._canPay(pid, base, extra, null, p)) actions.push(withFace(castAction(false)))
     // Kicker (702.33): the same spell with its optional additional cost paid.
     const kicker = b.kicker
-    if (kicker && this._canPay(pid, addCosts(base, parseManaCost(kicker.cost)), extra)) actions.push(withFace(castAction(true)))
+    if (kicker && this._canPay(pid, addCosts(base, parseManaCost(kicker.cost)), extra, null, p)) actions.push(withFace(castAction(true)))
     // Evoke (702.74): an alternative cost; the creature is sacrificed as it enters.
     if (b.evoke && p.types.includes('Creature') && this._canPay(pid, parseManaCost(b.evoke.cost), extra))
       actions.push(withFace({ ...castAction(false), evoke: true, label: `${p.name} (evoke)`, hasX: false, maxX: 0 }))
     // Buyback (702.27): the same spell with its buyback cost paid (returns to hand).
     if (b.buyback && this._canPay(pid, addCosts(base, parseManaCost(b.buyback.cost)), extra))
       actions.push(withFace({ ...castAction(false), buyback: true, label: `${p.name} (buyback)` }))
+    // Mutate (702.140): cast for its mutate cost targeting a non-Human creature you own.
+    if (b.mutate && p.types.includes('Creature')) {
+      const mspec = [{ type: 'creature', nonHuman: true, owner: 'you' }]
+      if (mspec.every((t) => this._legalTargetsExist(t, ctx)) && this._canPay(pid, parseManaCost(b.mutate.cost), extra, null, p))
+        actions.push(withFace({ ...castAction(false), mutate: true, targets: mspec, needsTargets: 1, variadic: null, hasX: false, maxX: 0, label: `${p.name} (mutate)` }))
+    }
     // Overload (702.96): an alternative cost that turns "target" into "each".
     if (b.overload && b.spell?.overloadEffect && this._canPay(pid, parseManaCost(b.overload.cost), extra))
       actions.push(withFace({ ...castAction(false), overload: true, targets: [], needsTargets: 0, variadic: null, label: `${p.name} (overload)` }))
@@ -1694,11 +1801,15 @@ export class GameEngine {
         // A {T} mana ability (605.3): no stack; the mana goes straight into the
         // pool, where _pay spends it before tapping anything else.
         const o = s.objects[action.oid]
-        const colors = this._manaColorsOf(o)
-        const color = colors.length === 1 ? colors[0] : action.color
-        if (!colors.includes(color)) throw new Error('choose a color this permanent can produce')
+        const opts = this._manaOptionsOf(o)
+        const m = opts[action.option ?? 0] || opts[0]
+        const color = m.colors.length === 1 ? m.colors[0] : action.color
+        if (!m || !m.colors.includes(color)) throw new Error('choose a color this permanent can produce')
         this._setTapped(o, true)
-        s.players[pid].manaPool[color]++
+        for (let i = 0; i < (m.amount || 1); i++) {
+          if (m.only) (s.players[pid].restrictedPool ||= []).push({ color, only: m.only, source: o })
+          else s.players[pid].manaPool[color]++
+        }
         break
       }
       case 'cast': {
@@ -1718,11 +1829,13 @@ export class GameEngine {
             ? parseManaCost(o.behavior.evoke.cost)
             : action.overload
               ? parseManaCost(o.behavior.overload.cost)
-              : this._effectiveCost(pid, o)
+              : action.mutate
+                ? parseManaCost(o.behavior.mutate.cost)
+                : this._effectiveCost(pid, o)
           // Kicker (702.33) / buyback (702.27): optional additional costs.
           if (action.kicker) cost = addCosts(cost, parseManaCost(o.behavior.kicker.cost))
           if (action.buyback) cost = addCosts(cost, parseManaCost(o.behavior.buyback.cost))
-          this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost }, this._extraSources(pid, o.printed))
+          this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost }, this._extraSources(pid, o.printed), null, o.printed)
           // Additional cost: sacrifice a permanent (e.g. Fanatical Offering,
           // Reckoner's Bargain — which then pays off the sacrifice's mana value).
           const addl = o.behavior.spell?.additionalCost
@@ -1748,6 +1861,7 @@ export class GameEngine {
         o.evoked = !!action.evoke
         o.buyback = !!action.buyback
         o.castFromHand = fromHand
+        o.mutateCast = !!action.mutate
         if (fromCommand) o.commanderCasts = (o.commanderCasts || 0) + 1
         if (o.behavior.spell?.modal) {
           this._applyModalCast(o, action)
@@ -2050,6 +2164,20 @@ export class GameEngine {
       this._log(`${this._objName(o)} resolves`)
       this._runResolution(o, o.spell.effect)
     } else if (isPermanent(o.printed)) {
+      // Mutate (702.140b): onto/under its target if that's still legal, else it
+      // simply enters as a creature.
+      if (o.mutateCast) {
+        const t = o.targets?.[0]
+        if (t && this._targetStillLegal(o.controller, tags(o.printed), t)) {
+          if (this._autoOrder) {
+            this._merge(o, s.objects[t.oid], true)
+            return
+          }
+          s.pending = { kind: 'mutateOrder', player: o.controller, oid, target: t.oid, name: this._objName(o), targetName: this._objName(s.objects[t.oid]) }
+          return
+        }
+        o.targets = []
+      }
       // A permanent spell with targets (an Aura, a Bestow spell) whose targets are
       // all illegal on resolution: an Aura is countered by the rules and goes to
       // the graveyard (608.3b); a Bestow spell resolves as a creature instead
@@ -2245,6 +2373,54 @@ export class GameEngine {
     if (!this._resume) this._grantPriorityTo(this.state.activePlayer)
   }
 
+  _afterDrawStep() {
+    this._firePhaseTriggers('drawStep')
+    this._grantPriority()
+  }
+
+  // Dredge (702.52): graveyard cards whose dredge number the library can cover.
+  _dredgeChoices(pid) {
+    const s = this.state
+    const lib = zone(s, 'library', pid).length
+    return zone(s, 'graveyard', pid)
+      .map((oid) => s.objects[oid])
+      .filter((o) => o.behavior?.dredge && lib >= o.behavior.dredge)
+      .map((o) => ({ oid: o.oid, name: o.printed.name, n: o.behavior.dredge }))
+  }
+
+  // Draw `n` cards one at a time, offering a dredge replacement before each when
+  // one is available. Returns true if all draws happened synchronously (and
+  // `after` ran); false if a `dredge` decision is pending and `after` will run
+  // once the series completes.
+  _drawSeries(pid, n, after) {
+    const s = this.state
+    while (n > 0) {
+      const choices = this._dredgeChoices(pid)
+      if (choices.length) {
+        s.pending = { kind: 'dredge', player: pid, choices, _remaining: n, _after: after }
+        return false
+      }
+      this.draw(pid, 1)
+      n--
+    }
+    after()
+    return true
+  }
+
+  _applyDredge(pending, answer) {
+    const s = this.state
+    const pid = pending.player
+    const pick = pending.choices.find((c) => c.oid === answer?.oid)
+    if (pick) {
+      const lib = zone(s, 'library', pid)
+      const milled = lib.slice(0, pick.n)
+      for (const oid of milled) this._relocate(s.objects[oid], 'graveyard')
+      moveObject(s, pick.oid, 'hand')
+      this._log(`${this._nameOf(pid)} dredges ${pick.name} (mills ${pick.n})`)
+    } else this.draw(pid, 1)
+    this._drawSeries(pid, pending._remaining - 1, pending._after)
+  }
+
   // Saga (714): add a lore counter and trigger the matching chapter.
   _addLore(o) {
     const saga = o.behavior.saga
@@ -2429,6 +2605,33 @@ export class GameEngine {
             ? this._opponentsOf(source.controller)
             : [this._resolvePlayerRef(source, e.to || 'target0')]
         return this._nextSacrificeChoice(queue, e.filter || { types: ['Creature'] }, e.count || 1)
+      }
+      case 'draw': {
+        // A draw an effect performs may be replaced by dredge (702.52).
+        const pid = this._resolvePlayerRef(source, e.to || 'controller')
+        const n = this._amount(source, e.amount ?? 1)
+        if (!this._dredgeChoices(pid).length) {
+          this.draw(pid, n)
+          return false
+        }
+        return !this._drawSeries(pid, n, () => this._resumeResolution())
+      }
+      case 'proliferate': {
+        // Proliferate (701.27): the controller chooses any number of permanents
+        // and players with counters. Auto-resolved in tests (autoOrderTriggers).
+        if (this._autoOrder) {
+          this._runEffects(source, [{ op: 'proliferateAuto' }])
+          return false
+        }
+        const me = source.controller
+        const choices = []
+        for (const o of objectsIn(s, 'battlefield'))
+          if (Object.values(o.status.counters).some((v) => v > 0)) choices.push({ kind: 'object', oid: o.oid, name: this._objName(o), counters: { ...o.status.counters } })
+        for (const p of s.players)
+          if (!p.hasLost && Object.values(p.counters).some((v) => v > 0)) choices.push({ kind: 'player', pid: p.id, name: p.name, counters: { ...p.counters } })
+        if (!choices.length) return false
+        s.pending = { kind: 'proliferate', player: me, choices }
+        return true
       }
       case 'changeTargets': {
         // 115.7 (Redirect): the controller may choose new targets for target spell.
@@ -2692,7 +2895,7 @@ export class GameEngine {
           else this._addPlayerCounter(this._resolvePlayerRef(source, e.to || 'controller'), kind, n)
           break
         }
-        case 'proliferate': {
+        case 'proliferateAuto': {
           // Proliferate (701.27), resolved the way its controller always wants:
           // one more of each counter on every permanent they control that has
           // any, on themselves, and poison on each opponent who has poison.
@@ -3220,16 +3423,30 @@ export class GameEngine {
     return [...new Set((o.chars.subtypes || []).map((st) => BASIC_LAND_MANA[st]).filter(Boolean))]
   }
 
-  _manaSources(pid) {
+  // Every way a permanent can tap for mana: [{ colors, amount, only }]. Basic
+  // land types and authored `mana` colours form one option; `manaOptions` adds
+  // multi-mana or restricted ones (Sol Ring: {C}{C}; Eldrazi Temple: {C}{C} to be
+  // spent only on colourless Eldrazi — rule 106.6).
+  _manaOptionsOf(o) {
+    const colors = this._manaColorsOf(o)
+    const opts = colors.length ? [{ colors, amount: 1, only: null }] : []
+    if (!o.chars?.lostAbilities) for (const m of o.behavior?.manaOptions || []) opts.push({ colors: [...m.colors], amount: m.amount || 1, only: m.only || null })
+    return opts
+  }
+
+  // Untapped mana sources of `pid`, each reduced to the one option best suited to
+  // paying for `printed` (a restricted option is used only if the spell qualifies).
+  _manaSources(pid, printed = null) {
     const s = this.state
     const out = []
     for (const o of objectsIn(s, 'battlefield')) {
       if (o.controller !== pid || o.status.tapped) continue
-      const colors = this._manaColorsOf(o)
-      if (!colors.length) continue
       // creatures with a {T} mana ability need no summoning sickness (haste ok)
       if (o.printed.types.includes('Creature') && !this._canTap(o)) continue
-      out.push({ oid: o.oid, colors })
+      const usable = this._manaOptionsOf(o).filter((m) => !m.only || (printed && this._spellMatchesFilter(pid, printed, m.only, o)))
+      if (!usable.length) continue
+      const best = usable.reduce((a, b) => (b.amount > a.amount ? b : a))
+      out.push({ oid: o.oid, colors: best.colors, amount: best.amount, only: best.only })
     }
     return out
   }
@@ -3238,10 +3455,23 @@ export class GameEngine {
   // pips, then hybrid, then generic), then by tapping `sources` — colored pips
   // from the most-constrained matching source first, generic from whatever's
   // left. Returns { spend: {W..C}, tap: [oid] }, or null if unpayable.
-  _planPayment(cost, sources, pool = null, life = null) {
+  _planPayment(cost, sources, pool = null, life = null, restricted = []) {
     const COLORS = ['W', 'U', 'B', 'R', 'G', 'C']
     const spend = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }
+    const spendR = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 } // from restricted floating mana
     const have = { ...spend, ...(pool || {}) }
+    // Restricted floating mana that may be spent on this cost counts too, and is
+    // used before the unrestricted mana of the same colour.
+    for (const r of restricted) have[r.color] = (have[r.color] || 0) + 1
+    const haveR = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }
+    for (const r of restricted) haveR[r.color]++
+    const useHave = (c, k) => {
+      const fromR = Math.min(k, haveR[c])
+      haveR[c] -= fromR
+      spendR[c] += fromR
+      spend[c] += k - fromR
+      have[c] -= k
+    }
     const need = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }
     for (const c of COLORS) need[c] = cost[c] || 0
     let generic = cost.generic || 0
@@ -3249,24 +3479,22 @@ export class GameEngine {
     for (const c of COLORS) {
       const k = Math.min(need[c], have[c])
       need[c] -= k
-      have[c] -= k
-      spend[c] += k
+      useHave(c, k)
     }
     hybrid = hybrid.filter((options) => {
       const c = options.find((x) => have[x] > 0)
       if (!c) return true
-      have[c]--
-      spend[c]++
+      useHave(c, 1)
       return false
     })
     for (const c of COLORS) {
       const k = Math.min(generic, have[c])
       generic -= k
-      have[c] -= k
-      spend[c] += k
+      useHave(c, k)
     }
 
-    const avail = sources.map((s) => ({ oid: s.oid, colors: s.colors }))
+    // A source producing several mana (Sol Ring) is several units sharing one oid.
+    const avail = sources.flatMap((s) => Array.from({ length: s.amount || 1 }, () => ({ oid: s.oid, colors: s.colors })))
     const chosen = []
     for (const c of COLORS) {
       let n = need[c]
@@ -3301,28 +3529,35 @@ export class GameEngine {
     // which needs a life total of at least that much (119.4).
     let lifeCost = 0
     for (const c of cost.phyrexian || []) {
-      if (have[c] > 0) {
-        have[c]--
-        spend[c]++
-      } else if (!takeColor(c)) lifeCost += 2
+      if (have[c] > 0) useHave(c, 1)
+      else if (!takeColor(c)) lifeCost += 2
     }
     if (lifeCost > 0 && (life == null || life < lifeCost)) return null
     // Two-brid pips (107.4e): the colour if available, else two generic.
     for (const c of cost.twobrid || []) {
-      if (have[c] > 0) {
-        have[c]--
-        spend[c]++
-      } else if (!takeColor(c)) generic += 2
+      if (have[c] > 0) useHave(c, 1)
+      else if (!takeColor(c)) generic += 2
     }
     if (avail.length < generic) return null
     for (let i = 0; i < generic; i++) chosen.push(avail[i].oid)
-    return { spend, tap: chosen, life: lifeCost }
+    return { spend, spendR, tap: [...new Set(chosen)], life: lifeCost }
   }
 
-  // Mana available to `pid` right now: floating in the pool + one per untapped source.
-  _manaAvailable(pid) {
+  // Restricted floating mana of `pid` that may be spent on `printed` (106.6).
+  _usableRestricted(pid, printed) {
+    const p = this.state.players[pid]
+    return (p.restrictedPool || []).filter((r) => printed && this._spellMatchesFilter(pid, printed, r.only, r.source))
+  }
+
+  // Mana available to `pid` right now for `printed`: floating (incl. usable
+  // restricted mana) + what untapped sources produce.
+  _manaAvailable(pid, printed = null) {
     const pool = this.state.players[pid].manaPool
-    return this._manaSources(pid).length + Object.values(pool).reduce((a, b) => a + b, 0)
+    return (
+      this._manaSources(pid, printed).reduce((a, s) => a + (s.amount || 1), 0) +
+      Object.values(pool).reduce((a, b) => a + b, 0) +
+      this._usableRestricted(pid, printed).length
+    )
   }
 
   // The mana cost to cast `o`, after cost reductions (affinity for artifacts).
@@ -3371,6 +3606,7 @@ export class GameEngine {
     if (f.subtype && !hasSub(p, f.subtype)) return false
     if (f.type && !p.types.includes(f.type)) return false
     if (f.noncreature && p.types.includes('Creature')) return false
+    if (f.colorless && (p.colors || []).length) return false
     return true
   }
 
@@ -3423,7 +3659,7 @@ export class GameEngine {
   // Largest X affordable for an X spell given current mana (X is generic).
   _maxX(pid, o, xCost, printed = o.printed, extraSources = 0) {
     const base = this._effectiveCost(pid, o, printed)
-    const sources = this._manaAvailable(pid) + extraSources
+    const sources = this._manaAvailable(pid, printed) + extraSources
     return Math.max(0, Math.floor((sources - manaValue(base)) / xCost))
   }
 
@@ -3488,19 +3724,24 @@ export class GameEngine {
 
   // `extra`: delve/convoke sources; `exclude`: a source that can't help pay
   // (a permanent tapping itself as part of the same cost).
-  _canPay(pid, cost, extra = [], exclude = null) {
+  _canPay(pid, cost, extra = [], exclude = null, printed = null) {
     const p = this.state.players[pid]
-    const sources = this._manaSources(pid).filter((x) => x.oid !== exclude)
-    return this._planPayment(cost, [...extra, ...sources], p.manaPool, p.life) != null
+    const sources = this._manaSources(pid, printed).filter((x) => x.oid !== exclude)
+    return this._planPayment(cost, [...extra, ...sources], p.manaPool, p.life, this._usableRestricted(pid, printed)) != null
   }
 
-  _pay(pid, cost, extra = [], exclude = null) {
+  _pay(pid, cost, extra = [], exclude = null, printed = null) {
     const s = this.state
     const p = s.players[pid]
-    const sources = this._manaSources(pid).filter((x) => x.oid !== exclude)
-    const plan = this._planPayment(cost, [...extra, ...sources], p.manaPool, p.life)
+    const sources = this._manaSources(pid, printed).filter((x) => x.oid !== exclude)
+    const usableR = this._usableRestricted(pid, printed)
+    const plan = this._planPayment(cost, [...extra, ...sources], p.manaPool, p.life, usableR)
     if (!plan) throw new Error('cannot pay cost')
     for (const c of Object.keys(plan.spend)) p.manaPool[c] -= plan.spend[c]
+    for (const c of Object.keys(plan.spendR)) {
+      let k = plan.spendR[c]
+      p.restrictedPool = (p.restrictedPool || []).filter((r) => !(k > 0 && r.color === c && usableR.includes(r) && k-- > 0))
+    }
     const kindOf = new Map(extra.map((x) => [x.oid, x.kind]))
     for (const oid of plan.tap) {
       const kind = kindOf.get(oid)
@@ -3516,8 +3757,10 @@ export class GameEngine {
   }
 
   _emptyManaPools() {
-    for (const p of this.state.players)
+    for (const p of this.state.players) {
       p.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }
+      p.restrictedPool = []
+    }
   }
 
   // ---- combat (rules 508–510) -----------------------------------------
@@ -3551,8 +3794,11 @@ export class GameEngine {
     const entries = (answer?.attackers || []).map((a) =>
       typeof a === 'string' ? { oid: a, defender: { player: def } } : a
     )
-    for (const { oid, defender } of entries) {
+    s.combat.bands = {}
+    for (const { oid, defender, band } of entries) {
       const o = s.objects[oid]
+      o.status.band = band || null
+      if (band) (s.combat.bands[band] ||= []).push(oid)
       o.status.attacking = true
       o.status.attackedThisTurn = true // for "untap all creatures that attacked"
       o.status.attackingTarget = defender || { player: def }
@@ -3736,9 +3982,16 @@ export class GameEngine {
     )
     this._log(desc.length ? `${this._nameOf(defender)}: ${desc.join(', ')}` : `${this._nameOf(defender)} doesn't block`)
     Object.assign((s.combat.blocks ||= {}), blocks)
+    s.combat.bandBlocks ||= {}
     for (const [blockerOid, attackerOid] of Object.entries(blocks)) {
       s.objects[blockerOid].status.blocking = attackerOid
       s.objects[attackerOid].status.blocked = true // stays blocked even if blockers leave
+      // Banding (702.22c): blocking one member of a band blocks all of them.
+      const band = s.objects[attackerOid].status.band
+      if (band && s.combat.bands?.[band]) {
+        s.combat.bandBlocks[blockerOid] = [...s.combat.bands[band]]
+        for (const m of s.combat.bands[band]) s.objects[m].status.blocked = true
+      }
     }
     // "Whenever this blocks" / "becomes blocked" (509.1h) — one per block, and
     // one per attacker that became blocked.
@@ -3792,13 +4045,15 @@ export class GameEngine {
       const atk = s.objects[atkOid]
       if (!onBf(atkOid) || !this._dealsInPass(atk, pass)) continue
       const power = atk.chars.power
+      // A creature blocking one member of a band blocks the whole band (702.22c).
+      const blocksAtk = (b, a) => a === atkOid || !!s.combat.bandBlocks?.[b]?.includes(atkOid)
       const blockers = (s.combat.blocks
         ? Object.entries(s.combat.blocks)
-            .filter(([, a]) => a === atkOid)
+            .filter(([b, a]) => blocksAtk(b, a))
             .map(([b]) => b)
         : []
       )
-        .filter((b) => onBf(b) && s.objects[b].status.blocking === atkOid)
+        .filter((b) => onBf(b) && blocksAtk(b, s.objects[b].status.blocking))
         // 509.2 / 510.1c: the attacker's declared damage assignment order.
         .sort((x, y) => {
           const ord = s.combat.order?.[atkOid] || []
@@ -3838,8 +4093,20 @@ export class GameEngine {
     for (const [blkOid, atkOid] of Object.entries(s.combat.blocks)) {
       const b = s.objects[blkOid]
       if (!onBf(blkOid) || !this._dealsInPass(b, pass)) continue
-      if (onBf(atkOid) && s.objects[atkOid].status.attacking)
-        this._dealDamage(b, { obj: s.objects[atkOid] }, b.chars.power, { combat: true })
+      // Banding (702.22c): the band's controller assigns the blocker's damage among
+      // the band — to the member most able to absorb it.
+      const band = s.combat.bandBlocks?.[blkOid]
+      let victim = atkOid
+      if (band?.length) {
+        const alive = band.filter((m) => onBf(m) && s.objects[m].status.attacking)
+        if (alive.length)
+          victim = alive.reduce((best, m) => {
+            const room = (o) => (o.chars.toughness ?? 0) - o.status.damage
+            return room(s.objects[m]) > room(s.objects[best]) ? m : best
+          }, alive[0])
+      }
+      if (onBf(victim) && s.objects[victim].status.attacking)
+        this._dealDamage(b, { obj: s.objects[victim] }, b.chars.power, { combat: true })
     }
   }
 
@@ -4533,6 +4800,12 @@ export class GameEngine {
     for (let i = 0; i < n; i++) {
       const lib = zone(s, 'library', pid)
       if (lib.length === 0) {
+        if (this._ruleMods().some(({ source, mod }) => mod.winOnEmptyDraw && source.controller === pid)) {
+          this._log(`${p.name} would draw from an empty library and wins the game instead`, { marker: true })
+          s.winner = pid
+          for (const q of s.players) if (q.id !== pid) q.loses = true
+          return
+        }
         p.loses = true // drew from an empty library (SBA, rule 704.5c)
         continue
       }

@@ -30,7 +30,7 @@ function ModalPicker({ modal, cancelCast }) {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-export default function Prompt({ view, pending, myTurn, targeting, sacrificing, discarding, choosingX, modal, attackers, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
+export default function Prompt({ view, pending, myTurn, targeting, sacrificing, discarding, choosingX, modal, attackers, band, proliferate, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
@@ -54,6 +54,9 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       sacrificeChoice: 'is choosing what to sacrifice',
       orderBlockers: 'is ordering blockers for damage',
       legendChoice: 'is applying the legend rule',
+      dredge: 'is deciding whether to dredge',
+      proliferate: 'is proliferating',
+      mutateOrder: 'is choosing how to mutate',
       optionalTrigger: 'is deciding on an optional ability',
       mayPay: 'is deciding whether to pay',
       wardPay: 'is deciding whether to pay ward',
@@ -228,12 +231,17 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
             </>
           )}
           .
+          {band?.possible && (
+            <label className="eng-band" title="Banding: attack as one band (blocked as a group; you assign damage dealt to the band)">
+              <input type="checkbox" checked={band.on} onChange={band.toggle} /> band
+            </label>
+          )}
         </span>
         <button
           className="primary"
           onClick={() =>
             choose({
-              attackers: Object.entries(attackers).map(([oid, defender]) => ({ oid, defender }))
+              attackers: Object.entries(attackers).map(([oid, defender]) => ({ oid, defender, band: band?.on ? 'A' : undefined }))
             })
           }
           disabled={Object.keys(attackers).length === 0}
@@ -288,6 +296,47 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
         </button>
         <button className="mini" onClick={() => choose({ bin: true })}>
           Graveyard
+        </button>
+      </>
+    )
+  } else if (kind === 'dredge') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — draw a card, or dredge instead?
+        </span>
+        <button className="primary" onClick={() => choose({})}>
+          Draw
+        </button>
+        {pending.choices.map((c) => (
+          <button key={c.oid} className="mini" onClick={() => choose({ oid: c.oid })}>
+            Dredge {c.n}: {c.name}
+          </button>
+        ))}
+      </>
+    )
+  } else if (kind === 'proliferate') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — proliferate: click permanents and players with counters ({proliferate?.count || 0} chosen), then confirm.
+        </span>
+        <button className="primary" onClick={proliferate?.confirm}>
+          Confirm
+        </button>
+      </>
+    )
+  } else if (kind === 'mutateOrder') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — mutate <b>{pending.name}</b> onto <b>{pending.targetName}</b>: on top (its characteristics) or under (keep the target's)?
+        </span>
+        <button className="primary" onClick={() => choose({ onTop: true })}>
+          On top
+        </button>
+        <button className="mini" onClick={() => choose({ onTop: false })}>
+          Under
         </button>
       </>
     )
