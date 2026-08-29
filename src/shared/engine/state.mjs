@@ -7,6 +7,7 @@
 import { makeRng } from './rng.mjs'
 import { printedFromScryfall, facesFromScryfall, combinedPrinted, SAMPLE_CARDS } from './cards.mjs'
 import { loadBehavior } from './behaviors.mjs'
+import { classifyCard } from './classify.mjs'
 
 export const SHARED_ZONES = ['battlefield', 'stack', 'command']
 export const PERSONAL_ZONES = ['library', 'hand', 'graveyard', 'exile']
@@ -61,6 +62,14 @@ export function createAbility(state, fields) {
   return o
 }
 
+function safeClassify(sf) {
+  try {
+    return classifyCard(sf).supported
+  } catch {
+    return true
+  }
+}
+
 // Point a multi-faced object at one of its faces (or `null` for its default
 // off-stack/off-battlefield form): printed characteristics and behavior follow.
 export function setFace(obj, idx) {
@@ -85,6 +94,9 @@ export function createObject(state, sf, owner) {
     controller: owner,
     zoneName: null,
     cardId: sf.id || null, // Scryfall print id, for rendering card:// images
+    // Does the engine enforce everything printed on this card? (The UI flags
+    // cards whose text it only partly models.)
+    supported: safeClassify(sf),
     printed,
     faces, // split / double-faced: printed characteristics per face (709, 712)
     layout,

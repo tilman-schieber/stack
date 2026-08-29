@@ -202,6 +202,7 @@ export function StackOverlay({ stack, targeting, onItem, onZoom }) {
           )}
           <div className="eng-stack-info">
             <div className="eng-stack-cardname">{item.name}</div>
+            {item.targetNames?.length > 0 && <div className="eng-stack-targets">→ {item.targetNames.join(', ')}</div>}
             {i === 0 && <div className="eng-stack-next">resolves next</div>}
           </div>
         </div>

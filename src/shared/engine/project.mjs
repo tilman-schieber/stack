@@ -5,7 +5,7 @@
 import { zone } from './state.mjs'
 import { recompute } from './layers.mjs'
 
-function cardView(o, viewerPid = null) {
+function cardView(o, viewerPid = null, engine = null) {
   // A face-down permanent (morph) shows only as an anonymous 2/2 creature — its
   // real card, colors, and abilities are hidden from other players. Its controller
   // (and the open local hot-seat view) additionally get the real identity in
@@ -60,7 +60,17 @@ function cardView(o, viewerPid = null) {
     counters: o.status?.counters || {},
     loyalty: o.chars?.types?.includes('Planeswalker') ? o.status?.counters?.loyalty ?? null : null,
     defense: o.chars?.types?.includes('Battle') ? o.status?.counters?.defense ?? null : null,
-    protector: o.chars?.types?.includes('Battle') ? o.protector ?? null : undefined
+    protector: o.chars?.types?.includes('Battle') ? o.protector ?? null : undefined,
+    // For the card inspector: rules text, which keywords are granted rather than
+    // printed, whether the engine enforces all of this card's text, and any
+    // attack/block restrictions currently applying to it.
+    oracleText: o.printed?.oracleText || '',
+    printedKeywords: o.printed?.keywords || [],
+    supported: o.supported !== false,
+    restrictions:
+      engine && o.zoneName === 'battlefield' && o.chars?.types?.includes('Creature')
+        ? ['attack', 'block'].filter((a) => engine._restricted(o, a) || (a === 'block' && engine._ability(o, 'cantBlock')))
+        : []
   }
 }
 
@@ -78,9 +88,11 @@ function stackView(state, oid) {
     return {
       oid: o.oid,
       kind: 'ability',
-      name: (src?.printed?.name || 'Ability') + ' — triggered ability',
+      name: (src?.printed?.name || 'Ability') + ' — ability',
+      cardId: src?.cardId || null,
       controller: o.controller,
-      targets: o.targets || []
+      targets: o.targets || [],
+      targetNames: targetNames(state, o.targets)
     }
   }
   return {
@@ -90,8 +102,14 @@ function stackView(state, oid) {
     cardId: o.cardId || null,
     face: o.layout === 'transform' || o.layout === 'modal_dfc' ? o.face || 0 : 0,
     controller: o.controller,
-    targets: o.targets || []
+    targets: o.targets || [],
+    targetNames: targetNames(state, o.targets)
   }
+}
+
+// Readable names for a stack object's targets (players, permanents, spells).
+function targetNames(state, targets) {
+  return (targets || []).map((t) => (t?.kind === 'player' ? state.players[t.pid]?.name || 'a player' : state.objects[t?.oid]?.chars?.name || state.objects[t?.oid]?.printed?.name || '?'))
 }
 
 // Build the serializable view. `viewerPid` (default null) redacts hidden
@@ -118,7 +136,7 @@ export function projectGame(engine, viewerPid = null) {
       hand: zone(state, 'hand', p.id).map((oid) =>
         hidden ? hiddenHandCard(state.objects[oid]) : cardView(state.objects[oid])
       ),
-      battlefield: controlled.map((o) => cardView(o, viewerPid)),
+      battlefield: controlled.map((o) => cardView(o, viewerPid, engine)),
       graveyard: zone(state, 'graveyard', p.id).map((oid) => cardView(state.objects[oid])),
       exile: zone(state, 'exile', p.id).map((oid) => cardView(state.objects[oid])),
       // Commander: this player's cards in the (shared) command zone.

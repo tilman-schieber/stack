@@ -60,6 +60,9 @@ export class GameEngine {
     this._startingPlayer = opts.startingPlayer
     // Tests: never pause to ask a player to order simultaneous triggers (603.3b).
     this._autoOrder = !!opts.autoOrderTriggers
+    // Static abilities with an `if` condition ("as long as …") are evaluated by
+    // the engine's condition vocabulary from inside the layer system.
+    this.state._condFn = (cond, w) => this._cond(cond, w)
   }
 
   // ---- lifecycle -------------------------------------------------------
@@ -1534,7 +1537,7 @@ export class GameEngine {
           type: 'activate',
           oid,
           ability: i,
-          label: ab.label,
+          label: ab.label || this._describeAbility(ab),
           targets,
           needsTargets: targets.length,
           loyalty: ab.loyalty, // present for planeswalker loyalty abilities
@@ -1604,9 +1607,14 @@ export class GameEngine {
     // that can help pay.
     const extra = this._extraSources(pid, p)
     const base = this._effectiveCost(pid, o, p)
+    const paysFor = (cost) => {
+      const pl = this._planPayment(cost, [...extra, ...this._manaSources(pid, p)], s.players[pid].manaPool, s.players[pid].life, this._usableRestricted(pid, p))
+      return pl ? pl.tap.map((t) => this._objName(s.objects[t])) : []
+    }
     const castAction = (kicked) => ({
       type: 'cast',
       oid,
+      pays: paysFor(kicked ? addCosts(base, parseManaCost(b.kicker.cost)) : base), // auto-tap preview
       label: (face == null ? p.name : `Cast ${p.name}`) + (kicked ? ' (kicked)' : ''),
       targets,
       needsTargets: variadic ? variadic.min ?? 1 : targets.length,
@@ -1656,6 +1664,51 @@ export class GameEngine {
         })
       )
     }
+  }
+
+  // A human-readable label for an activated ability without an authored one:
+  // its cost, then a summary of its effects.
+  _describeAbility(ab) {
+    const c = ab.cost || {}
+    const cost = []
+    if (ab.loyalty != null) cost.push(ab.loyalty > 0 ? `+${ab.loyalty}` : String(ab.loyalty))
+    if (c.mana) cost.push(c.mana)
+    if (c.tap) cost.push('{T}')
+    if (c.untap) cost.push('{Q}')
+    if (c.payLife != null) cost.push(`Pay ${c.payLife} life`)
+    if (c.energy) cost.push('{E}'.repeat(c.energy))
+    if (c.sacrifice === 'self') cost.push('Sacrifice this')
+    else if (c.sacrifice) cost.push(`Sacrifice a ${(c.sacrifice.types || [c.sacrifice.type || c.sacrifice.subtype || 'permanent']).join('/').toLowerCase()}`)
+    if (c.removeCounters) cost.push(`Remove ${c.removeCounters.amount || 1} ${c.removeCounters.counter} counter`)
+    const EFFECT = {
+      dealDamage: (e) => `deal ${typeof e.amount === 'number' ? e.amount : 'X'} damage`,
+      draw: (e) => `draw ${e.amount || 1}`,
+      gainLife: (e) => `gain ${typeof e.amount === 'number' ? e.amount : 'X'} life`,
+      loseLife: (e) => `lose ${e.amount} life`,
+      destroy: () => 'destroy',
+      bounce: () => 'return to hand',
+      pump: (e) => `${e.power >= 0 ? '+' : ''}${e.power}/${e.toughness >= 0 ? '+' : ''}${e.toughness}`,
+      grantKeyword: (e) => `gains ${e.keyword}`,
+      addCounter: (e) => `${e.amount || 1} ${e.counter || '+1/+1'} counter`,
+      createToken: (e) => `create ${e.count || 1} ${e.token?.name || 'token'}`,
+      regenerate: () => 'regenerate',
+      tap: () => 'tap',
+      untapLands: (e) => `untap ${e.amount} lands`,
+      scry: (e) => `scry ${e.amount}`,
+      surveil: (e) => `surveil ${e.amount}`,
+      mill: (e) => `mill ${e.amount || 1}`,
+      transform: () => 'transform',
+      addMana: (e) => `add {${e.mana}}`,
+      attach: () => 'equip',
+      counter: () => 'counter',
+      returnFromGraveyard: () => 'return from graveyard',
+      search: () => 'search your library',
+      exileGraveyard: () => 'exile a graveyard',
+      createEmblem: () => 'get an emblem',
+      preventNextDamage: (e) => `prevent the next ${e.amount ?? 1} damage`
+    }
+    const fx = (ab.effect || []).map((e) => (EFFECT[e.op] ? EFFECT[e.op](e) : e.op)).join(', ')
+    return `${cost.join(', ') || 'Activate'}: ${fx || '…'}`
   }
 
   // Untapped creatures that could crew a vehicle with crew `n` — smallest first —
@@ -2401,6 +2454,14 @@ export class GameEngine {
     const s = this.state
     const ctx = this._resolveObject
     this._resolveObject = null
+    if (s.endTurnNow) {
+      // The spell that ended the turn is already exiled with the rest of the stack.
+      s.endTurnNow = false
+      s.prio = null
+      this._resume = null
+      this._enterStep('cleanup')
+      return
+    }
     if (!ctx) return
     const o = s.objects[ctx.oid]
     if (ctx.kind === 'ability' || o?.isCopy) {
@@ -3269,6 +3330,30 @@ export class GameEngine {
           if (t?.kind === 'player') for (const oid of [...zone(s, 'graveyard', t.pid)]) moveObject(s, oid, 'exile')
           break
         }
+        case 'endTurn': {
+          // "End the turn" (724): exile everything on the stack, remove creatures
+          // from combat, and skip straight to the cleanup step; "until end of
+          // turn" effects still end there.
+          for (const oid of [...zone(s, 'stack')]) {
+            const x = s.objects[oid]
+            if (!x) continue
+            if (x.kind === 'ability') {
+              s.zones.stack = s.zones.stack.filter((y) => y !== oid)
+              delete s.objects[oid]
+            } else this._relocate(x, 'exile')
+          }
+          s.pendingTriggers = []
+          s.combat = null
+          for (const o of objectsIn(s, 'battlefield')) {
+            o.status.attacking = false
+            o.status.attackingTarget = null
+            o.status.blocked = false
+            o.status.blocking = null
+          }
+          this._log('The turn ends')
+          s.endTurnNow = true
+          break
+        }
         case 'flipCoin': {
           // 705: a coin flip; `win` / `lose` effects run accordingly.
           const won = s.rng() < 0.5
@@ -3815,13 +3900,18 @@ export class GameEngine {
       p.restrictedPool = (p.restrictedPool || []).filter((r) => !(k > 0 && r.color === c && usableR.includes(r) && k-- > 0))
     }
     const kindOf = new Map(extra.map((x) => [x.oid, x.kind]))
+    const tapped = []
     for (const oid of plan.tap) {
       const kind = kindOf.get(oid)
       if (kind === 'delve') {
         this._log(`${p.name} exiles ${this._objName(s.objects[oid])} from their graveyard (delve)`)
         moveObject(s, oid, 'exile')
-      } else this._setTapped(s.objects[oid], true) // mana sources and convoked creatures
+      } else {
+        this._setTapped(s.objects[oid], true) // mana sources and convoked creatures
+        tapped.push(this._objName(s.objects[oid]))
+      }
     }
+    if (tapped.length) this._log(`${p.name} taps ${tapped.join(', ')}`)
     if (plan.life) {
       p.life -= plan.life
       this._log(`${p.name} pays ${plan.life} life (${p.life})`)

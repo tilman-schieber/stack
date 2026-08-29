@@ -160,6 +160,8 @@ export function recompute(state) {
   for (const src of [...bf, ...emblems]) {
     if (lost.has(src.oid)) continue
     for (const ab of src.behavior?.static || []) {
+      // "As long as …" (a conditional static): skipped while its condition is false.
+      if (ab.if && state._condFn && !state._condFn(ab.if, src)) continue
       const e = { source: src, ability: ab, timestamp: src.timestamp || 0 }
       if (ab.setSubtypes) layer3.push(e)
       if (ab.addTypes || ab.addSubtypes) layer4.push(e)

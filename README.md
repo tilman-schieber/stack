@@ -54,8 +54,12 @@ Pick a mode, pick decks (the built-in example decks or any deck you saved), star
 
 On the board: click a card in hand to cast it (targets are chosen by clicking), click a
 land to tap it for mana (or let the engine auto-tap when you cast), click a permanent to
-activate an ability, right-click to zoom. **Space / Enter** passes priority, **Escape**
-cancels. **Stops** sets the Magic Online-style steps at which you receive priority;
+activate an ability, right-click to zoom. Hovering a card fills the **inspector** in the
+sidebar: rules text, current P/T, printed vs. granted keywords, counters, damage, and any
+"can't attack/block" restriction; a yellow **!** marks a card whose text the engine does not
+fully enforce (it plays with its printed characteristics only). Ability menus show what
+auto-payment would tap — tap lands yourself first to choose how a hybrid pip is paid.
+**Space / Enter** passes priority, **Escape** cancels. **Stops** sets the Magic Online-style steps at which you receive priority;
 everything else auto-passes. A public game log runs down the left.
 
 ## Rules engine (`src/shared/engine/`)
@@ -71,7 +75,7 @@ Implemented: the full turn structure and priority system, the stack, London mull
 activation costs, delve, convoke, kicker, evoke, cycling, buyback, suspend, unearth, echo, {Q}, counter-removal and energy costs), the play/draw choice, combat with
 the evasion keywords (flying/reach, fear, intimidate, skulk, shadow, horsemanship, landwalk,
 menace, "can't be blocked", protection from colours/types/everything) and attack/block requirements, multiple blockers, first/double
-strike (with the second combat damage step), exalted, fight, undying/persist, cascade, rebound, extort, split second, changeling, Vehicles/crew, overload, miracle, battles (Sieges), the attacker's damage assignment order, changing a spell's targets, phasing, banding, mutate, coin flips and dice, trample, deathtouch, lifelink, infect/wither/toxic and poison, planeswalkers, all
+strike (with the second combat damage step), exalted, fight, undying/persist, cascade, rebound, extort, split second, changeling, Vehicles/crew, overload, miracle, battles (Sieges), the attacker's damage assignment order, changing a spell's targets, phasing, banding, mutate, coin flips and dice, conditional ("as long as") statics, "end the turn", trample, deathtouch, lifelink, infect/wither/toxic and poison, planeswalkers, all
 seven continuous-effect layers (copy, control, text, types, color, abilities incl. "loses all
 abilities", P/T) with timestamp *and* dependency ordering, triggered/activated/static
 abilities (blocks, becomes blocked/tapped, draw, discard, life gain/loss, phase triggers;

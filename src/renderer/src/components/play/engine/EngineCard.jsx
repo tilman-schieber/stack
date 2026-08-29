@@ -10,7 +10,7 @@ export const isLand = (c) => c.types?.includes('Land')
 
 // One permanent / stack card, styled from play.css .board-card.
 // Right-click zooms (via onZoom); left-click acts (via onClick).
-export function EngineCard({ card, className = '', onClick, onZoom, title }) {
+export function EngineCard({ card, className = '', onClick, onZoom, onHover, title }) {
   // Tokens have no fixed printing — resolve their art from the token-art store.
   const key = card.token && card.tokenDef ? tokenKey(card.tokenDef) : null
   const artId = useTokenArt((s) => (key ? s.cache[key]?.chosenId : null))
@@ -30,6 +30,8 @@ export function EngineCard({ card, className = '', onClick, onZoom, title }) {
         onZoom?.(card)
       }}
       title={card.faceDown && card.realName ? `Face-down: ${card.realName}` : title || card.name}
+      onMouseEnter={onHover ? () => onHover(card) : undefined}
+      onMouseLeave={onHover ? () => onHover(null) : undefined}
     >
       {img ? <img src={img} alt={card.name} draggable={false} /> : <div className="cardback" />}
       {card.faceDown && <span className="eng-facedown">{card.realName ? '?' : ''}</span>}
@@ -37,6 +39,16 @@ export function EngineCard({ card, className = '', onClick, onZoom, title }) {
       {card.damage > 0 && <span className="eng-dmg">{card.damage}</span>}
       {card.loyalty != null && <span className="eng-loyalty">◆ {card.loyalty}</span>}
       {card.defense != null && <span className="eng-loyalty" title="Defense">🛡 {card.defense}</span>}
+      {card.supported === false && !card.hidden && (
+        <span className="eng-badge warn" title="Part of this card's text is not enforced by the rules engine — it plays with its printed characteristics only">
+          !
+        </span>
+      )}
+      {card.restrictions?.length > 0 && (
+        <span className="eng-badge stop" title={`Can't ${card.restrictions.join(' or ')}`}>
+          ⛔
+        </span>
+      )}
     </div>
   )
 }

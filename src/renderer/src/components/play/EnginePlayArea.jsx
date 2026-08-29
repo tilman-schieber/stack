@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
 import { EngineCard, Pile, ManaPool, isCreature, isLand } from './engine/EngineCard.jsx'
 import Prompt from './engine/Prompt.jsx'
-import { GameLog, StopsPanel } from './engine/Panels.jsx'
+import { GameLog, StopsPanel, Inspector } from './engine/Panels.jsx'
 import { ZoneViewer, SearchOverlay, ScryOverlay, ZoomOverlay, StackOverlay } from './engine/Overlays.jsx'
 import '../../play.css'
 import './engine.css'
@@ -37,6 +37,7 @@ export default function EnginePlayArea() {
   const [showStops, setShowStops] = useState(false)
   const [confirmExit, setConfirmExit] = useState(false) // "Concede?" two-step confirmation
   const [zoom, setZoom] = useState(null) // card being previewed (right-click)
+  const [hover, setHover] = useState(null) // card under the mouse (inspector)
   const [abilityMenu, setAbilityMenu] = useState(null) // { actions, x, y } picker
 
   // Transient selection state; reset whenever the engine produces a new view
@@ -624,6 +625,7 @@ export default function EnginePlayArea() {
             }
             onClick={(ev) => onHandCard(c, p.id, ev)}
             onZoom={setZoom}
+            onHover={setHover}
           />
         )
       })}
@@ -651,6 +653,7 @@ export default function EnginePlayArea() {
                   className={bfClass(c, p.id)}
                   onClick={(ev) => onBattlefieldCard(c, p.id, ev)}
                   onZoom={setZoom}
+                  onHover={setHover}
                   title={c.name + (c.keywords?.length ? ' — ' + c.keywords.join(', ') : '')}
                 />
               ))}
@@ -740,6 +743,7 @@ export default function EnginePlayArea() {
         <div className="eng-sidebar">
           {statusColumn(top)}
           {statusColumn(bottom)}
+          <Inspector card={hover || zoom} />
           <GameLog log={view.log || []} />
         </div>
         <div className="eng-center">
@@ -809,6 +813,7 @@ export default function EnginePlayArea() {
                 : a.loyalty != null
                   ? (a.loyalty > 0 ? `+${a.loyalty}` : `${a.loyalty}`) + ' loyalty'
                   : 'Activate'}
+              {a.pays?.length > 0 && <span className="muted small"> — taps {a.pays.join(', ')}</span>}
             </button>
           ))}
           <button className="eng-menu-cancel" onClick={() => setAbilityMenu(null)}>
