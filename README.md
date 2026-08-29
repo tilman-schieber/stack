@@ -86,7 +86,7 @@ zone, tax, 21-damage rule, 40 life).
 
 Card characteristics come straight from Scryfall data; only cards whose text implies effects
 get an entry in `behaviors.mjs`, written against a small vocabulary of effect ops. Cards
-without an entry play with their printed characteristics. Dredge replaces draws; proliferate is a real choice. Simplifications: mulligan sequencing is sequential per player, and the band controller's damage split is chosen automatically; no
+without an entry play with their printed characteristics. Dredge replaces draws; proliferate, the band controller's damage split, a Siege's protector and London mulligan rounds are all real player decisions. Two-Headed Giant is the one variant not implemented; no
 TURN relay, reconnection or spectators online.
 
 Tests are plain Node scripts (`node src/shared/engine/<name>.test.mjs`, or `npm test`).

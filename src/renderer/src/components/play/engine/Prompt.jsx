@@ -57,6 +57,8 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       dredge: 'is deciding whether to dredge',
       proliferate: 'is proliferating',
       mutateOrder: 'is choosing how to mutate',
+      bandDamage: 'is dividing damage among their band',
+      chooseProtector: 'is choosing a protector for their Siege',
       optionalTrigger: 'is deciding on an optional ability',
       mayPay: 'is deciding whether to pay',
       wardPay: 'is deciding whether to pay ward',
@@ -299,6 +301,21 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
         </button>
       </>
     )
+  } else if (kind === 'bandDamage') {
+    body = <BandDamage pending={pending} nameOf={nameOf} onDone={(assignment) => choose({ assignment })} />
+  } else if (kind === 'chooseProtector') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — choose an opponent to protect the Siege:
+        </span>
+        {pending.choices.map((c) => (
+          <button key={c.pid} className="mini" onClick={() => choose({ pid: c.pid })}>
+            {c.name}
+          </button>
+        ))}
+      </>
+    )
   } else if (kind === 'dredge') {
     body = (
       <>
@@ -490,6 +507,36 @@ function TriggerOrderer({ pending, nameOf, onDone }) {
         </button>
       ))}
       {order.length > 0 && <span className="muted">{order.length}/{pending.triggers.length} placed</span>}
+    </>
+  )
+}
+
+// 702.22c: divide a blocker's damage among the band it is blocking.
+function BandDamage({ pending, nameOf, onDone }) {
+  const [amounts, setAmounts] = useState(() => Object.fromEntries(pending.members.map((m) => [m.oid, 0])))
+  const total = Object.values(amounts).reduce((a, b) => a + b, 0)
+  const left = pending.blocker.power - total
+  const bump = (oid, d) => setAmounts((a) => ({ ...a, [oid]: Math.max(0, a[oid] + d) }))
+  return (
+    <>
+      <span>
+        <b>{nameOf(pending.player)}</b> — divide <b>{pending.blocker.name}</b>'s {pending.blocker.power} damage among the band ({left} left):
+      </span>
+      {pending.members.map((m) => (
+        <span key={m.oid} className="eng-confirm">
+          {m.name} ({m.toughness - m.damage} to lethal)
+          <button className="mini" onClick={() => bump(m.oid, -1)}>
+            −
+          </button>
+          <b>{amounts[m.oid]}</b>
+          <button className="mini" disabled={left <= 0} onClick={() => bump(m.oid, 1)}>
+            +
+          </button>
+        </span>
+      ))}
+      <button className="primary" disabled={left !== 0} onClick={() => onDone(amounts)}>
+        Confirm
+      </button>
     </>
   )
 }

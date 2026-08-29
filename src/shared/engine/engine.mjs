@@ -91,6 +91,62 @@ export class GameEngine {
       order[atk.oid] = chosen
     }
     s.combat.order = order
+    if (this._combatDecisions()) return
+    this._combatDamage()
+    this._grantPriority()
+  }
+
+  // The decisions owed before combat damage is dealt. Returns true if one is
+  // now pending (auto-resolved in tests).
+  _combatDecisions() {
+    const s = this.state
+    if (this._autoOrder) return false
+    const onBf = (oid) => s.objects[oid]?.zoneName === 'battlefield'
+    // 509.2 / 510.1c: an attacker blocked by several creatures has its controller
+    // order them for damage assignment.
+    const multi = s.combat.attackers
+      .map((oid) => ({ oid, blockers: Object.keys(s.combat.blocks).filter((b) => s.combat.blocks[b] === oid && onBf(b)) }))
+      .filter((x) => x.blockers.length > 1)
+    if (multi.length && !s.combat.order) {
+      s.pending = {
+        kind: 'orderBlockers',
+        player: s.activePlayer,
+        attackers: multi.map((x) => ({
+          oid: x.oid,
+          name: this._objName(s.objects[x.oid]),
+          blockers: x.blockers.map((b) => ({ oid: b, name: this._objName(s.objects[b]) }))
+        }))
+      }
+      return true
+    }
+    // Banding (702.22c): the band's controller divides each blocker's damage.
+    s.combat.bandAssign ||= {}
+    for (const [b, members] of Object.entries(s.combat.bandBlocks || {})) {
+      if (s.combat.bandAssign[b] || !onBf(b)) continue
+      const alive = members.filter((m) => onBf(m) && s.objects[m].status.attacking)
+      if (alive.length < 2) continue
+      const blocker = s.objects[b]
+      s.pending = {
+        kind: 'bandDamage',
+        player: s.objects[alive[0]].controller,
+        blocker: { oid: b, name: this._objName(blocker), power: blocker.chars.power || 0 },
+        members: alive.map((m) => ({ oid: m, name: this._objName(s.objects[m]), toughness: s.objects[m].chars.toughness, damage: s.objects[m].status.damage }))
+      }
+      return true
+    }
+    return false
+  }
+
+  _applyBandDamage(pending, answer) {
+    const s = this.state
+    const total = pending.blocker.power
+    const given = answer?.assignment || {}
+    const ids = pending.members.map((m) => m.oid)
+    const sum = Object.values(given).reduce((a, b) => a + b, 0)
+    if (Object.keys(given).some((k) => !ids.includes(k)) || Object.values(given).some((v) => !Number.isInteger(v) || v < 0) || sum !== total)
+      throw new Error(`divide exactly ${total} damage among the band`)
+    s.combat.bandAssign[pending.blocker.oid] = { ...given }
+    if (this._combatDecisions()) return
     this._combatDamage()
     this._grantPriority()
   }
@@ -172,8 +228,8 @@ export class GameEngine {
     const n = s.players.length
     s.activePlayer = s.startingPlayer
     s.mulliganOrder = Array.from({ length: n }, (_, i) => (s.startingPlayer + i) % n)
-    s.mulliganIdx = 0
-    s.mulliganPlayer = s.mulliganOrder[0]
+    s.mulliganDeciding = [...s.mulliganOrder]
+    s.mulliganRound = []
     this._log(`${s.players[s.startingPlayer].name} plays first`)
     this._askMulligan()
     return this
@@ -212,9 +268,14 @@ export class GameEngine {
 
   // ---- London mulligan (rule 103.5) -----------------------------------
 
+  // London mulligan (103.5), in rounds: in turn order each undecided player
+  // says keep or mulligan; everyone who mulliganed shuffles and redraws seven,
+  // and decides again next round. Once all have kept, each player who took
+  // mulligans puts that many cards on the bottom, in turn order.
   _askMulligan() {
     const s = this.state
-    const pid = s.mulliganPlayer
+    if (!s.mulliganDeciding.length) return this._endMulliganRound()
+    const pid = (s.mulliganPlayer = s.mulliganDeciding[0])
     s.pending = {
       kind: 'mulligan',
       player: pid,
@@ -225,32 +286,45 @@ export class GameEngine {
 
   _applyMulligan(answer) {
     const s = this.state
-    const pid = s.mulliganPlayer
-    if (answer?.keep) {
-      const n = s.players[pid].mulligans
-      const handLen = zone(s, 'hand', pid).length
-      const count = Math.min(n, handLen)
-      this._log(`${this._nameOf(pid)} keeps ${handLen} cards${count ? ` (bottoms ${count})` : ''}`)
-      if (count > 0) {
-        s.pending = {
-          kind: 'bottom',
-          player: pid,
-          count,
-          hand: [...zone(s, 'hand', pid)]
-        }
-      } else {
-        this._nextMulliganPlayer()
+    const pid = s.mulliganDeciding.shift()
+    if (answer?.keep) this._log(`${this._nameOf(pid)} keeps`)
+    else s.mulliganRound.push(pid)
+    this._askMulligan()
+  }
+
+  _endMulliganRound() {
+    const s = this.state
+    if (s.mulliganRound.length) {
+      // Everyone who mulliganed this round redraws, then decides again.
+      for (const pid of s.mulliganRound) {
+        for (const oid of [...zone(s, 'hand', pid)]) moveObject(s, oid, 'library')
+        const libKey = zoneKey('library', pid)
+        s.zones[libKey] = s.rng.shuffle(s.zones[libKey])
+        this.draw(pid, this.handSize || 7)
+        s.players[pid].mulligans++
+        this._log(`${this._nameOf(pid)} mulligans (${s.players[pid].mulligans})`)
       }
-    } else {
-      // Mulligan: shuffle the whole hand back and draw a fresh seven.
-      for (const oid of [...zone(s, 'hand', pid)]) moveObject(s, oid, 'library')
-      const libKey = zoneKey('library', pid)
-      s.zones[libKey] = s.rng.shuffle(s.zones[libKey])
-      this.draw(pid, this.handSize || 7)
-      s.players[pid].mulligans++
-      this._log(`${this._nameOf(pid)} mulligans (${s.players[pid].mulligans})`)
-      this._askMulligan()
+      s.mulliganDeciding = [...s.mulliganRound]
+      s.mulliganRound = []
+      return this._askMulligan()
     }
+    // All kept: bottoming, in turn order.
+    s.bottomQueue = s.mulliganOrder.filter((pid) => s.players[pid].mulligans > 0 && zone(s, 'hand', pid).length > 0)
+    this._askBottom()
+  }
+
+  _askBottom() {
+    const s = this.state
+    if (!s.bottomQueue.length) {
+      s.mulliganPlayer = null
+      s.turnNumber = 1
+      s.activePlayer = s.startingPlayer
+      this._enterStep('untap') // _pump (in choose) advances into the game
+      return
+    }
+    const pid = (s.mulliganPlayer = s.bottomQueue[0])
+    const count = Math.min(s.players[pid].mulligans, zone(s, 'hand', pid).length)
+    s.pending = { kind: 'bottom', player: pid, count, hand: [...zone(s, 'hand', pid)] }
   }
 
   _applyBottom(pending, answer) {
@@ -259,21 +333,9 @@ export class GameEngine {
     if (bottom.length !== pending.count)
       throw new Error(`must put exactly ${pending.count} card(s) on the bottom`)
     for (const oid of bottom) moveObject(s, oid, 'library') // to the bottom
-    this._nextMulliganPlayer()
-  }
-
-  _nextMulliganPlayer() {
-    const s = this.state
-    if (s.mulliganIdx < s.mulliganOrder.length - 1) {
-      s.mulliganIdx++
-      s.mulliganPlayer = s.mulliganOrder[s.mulliganIdx]
-      this._askMulligan()
-    } else {
-      s.mulliganPlayer = null
-      s.turnNumber = 1
-      s.activePlayer = s.startingPlayer
-      this._enterStep('untap') // _pump (in choose) advances into the game
-    }
+    this._log(`${this._nameOf(pending.player)} puts ${pending.count} card${pending.count > 1 ? 's' : ''} on the bottom`)
+    s.bottomQueue.shift()
+    this._askBottom()
   }
 
   get pending() {
@@ -383,6 +445,12 @@ export class GameEngine {
           break
         case 'legendChoice':
           this._applyLegendChoice(pending, answer)
+          break
+        case 'bandDamage':
+          this._applyBandDamage(pending, answer)
+          break
+        case 'chooseProtector':
+          this._applyChooseProtector(pending, answer)
           break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
@@ -715,23 +783,8 @@ export class GameEngine {
         break
       }
       case 'combatDamage': {
-        // 509.2 / 510.1c: an attacker blocked by several creatures has its
-        // controller order them for damage assignment first (unless auto).
-        const multi = s.combat.attackers
-          .map((oid) => ({ oid, blockers: Object.keys(s.combat.blocks).filter((b) => s.combat.blocks[b] === oid && s.objects[b]?.zoneName === 'battlefield') }))
-          .filter((x) => x.blockers.length > 1)
-        if (multi.length && !this._autoOrder && !s.combat.order) {
-          s.pending = {
-            kind: 'orderBlockers',
-            player: s.activePlayer,
-            attackers: multi.map((x) => ({
-              oid: x.oid,
-              name: this._objName(s.objects[x.oid]),
-              blockers: x.blockers.map((b) => ({ oid: b, name: this._objName(s.objects[b]) }))
-            }))
-          }
-          return
-        }
+        // Decisions before damage: blocker order (509.2), band damage splits (702.22c).
+        if (this._combatDecisions()) return
         // 510.4: with first/double strike there are two combat damage steps —
         // players get priority after the first-strike damage, then the regular
         // damage is dealt (see _advanceStep).
@@ -2203,6 +2256,13 @@ export class GameEngine {
         s.pending = { kind: 'copyEnter', oid, player: o.controller ?? o.owner, choices, optional: true }
         return
       }
+      // A Siege chooses an opponent to protect it as it enters (310.11a) — a real
+      // choice with several opponents (auto: the next in seat order).
+      if (o.printed.defense != null && o.protectorChoice == null && !this._autoOrder && this._opponentsOf(o.controller ?? o.owner).length > 1) {
+        const ctrl = o.controller ?? o.owner
+        s.pending = { kind: 'chooseProtector', oid, player: ctrl, choices: this._opponentsOf(ctrl).map((pid) => ({ pid, name: this._nameOf(pid) })) }
+        return
+      }
       // "As this enters, choose a [value]" (rule 614.12b): a remembered value that
       // the permanent's own abilities read (Adaptive Automaton's chosen type).
       const ch = o.behavior?.chooseOnEnter
@@ -2306,6 +2366,17 @@ export class GameEngine {
     const present = new Set(common)
     for (const o of objectsIn(this.state, 'battlefield')) for (const st of o.chars?.subtypes || []) present.add(st)
     return [...present]
+  }
+
+  _applyChooseProtector(pending, answer) {
+    const s = this.state
+    const o = s.objects[pending.oid]
+    const pick = pending.choices.find((c) => c.pid === answer?.pid)
+    if (!pick) throw new Error('choose an opponent to protect the Siege')
+    o.protectorChoice = pick.pid
+    moveObject(s, pending.oid, 'battlefield')
+    this._enterBattlefield(o, o.controller ?? o.owner)
+    if (!this._resume) this._grantPriorityTo(s.activePlayer)
   }
 
   _applyChooseValue(pending, answer) {
@@ -2493,7 +2564,8 @@ export class GameEngine {
     // opponent of its controller (310.11a — the next one in seat order).
     if (o.printed.defense != null) {
       o.status.counters.defense = o.printed.defense
-      o.protector = this._opponentsOf(controller)[0] ?? null
+      o.protector = o.protectorChoice ?? this._opponentsOf(controller)[0] ?? null
+      o.protectorChoice = null
     }
     // An Aura enters attached to the permanent it targeted as it was cast.
     if (o.behavior?.enchant && o.targets?.[0]?.oid) o.status.attachedTo = o.targets[0].oid
@@ -4096,8 +4168,16 @@ export class GameEngine {
       // Banding (702.22c): the band's controller assigns the blocker's damage among
       // the band — to the member most able to absorb it.
       const band = s.combat.bandBlocks?.[blkOid]
+      const assign = s.combat.bandAssign?.[blkOid]
+      if (assign) {
+        // The band controller's chosen split (702.22c).
+        for (const [m, amt] of Object.entries(assign))
+          if (amt > 0 && onBf(m) && s.objects[m].status.attacking) this._dealDamage(b, { obj: s.objects[m] }, amt, { combat: true })
+        continue
+      }
       let victim = atkOid
       if (band?.length) {
+        // Auto (tests): to the member with the most room.
         const alive = band.filter((m) => onBf(m) && s.objects[m].status.attacking)
         if (alive.length)
           victim = alive.reduce((best, m) => {

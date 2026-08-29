@@ -172,10 +172,14 @@ section('702.22 banding: blocked as a group; the band controller assigns the blo
   e.choose({ blocks: { [blocker.oid]: hero.oid } }) // block the Hero: the Angel is blocked too
   assert(angel.status.blocked, 'blocking one member blocks the whole band')
   g = 0
+  while (e.pending.kind === 'priority' && e.state.step !== 'combatDamage' && g++ < 30) e.choose({ type: 'pass' })
+  assert(e.pending.kind === 'bandDamage', 'the band controller is asked to divide the blocker\'s damage')
+  e.choose({ assignment: { [angel.oid]: 5 } })
+  g = 0
   while (e.pending.kind === 'priority' && e.state.step !== 'main2' && g++ < 30) e.choose({ type: 'pass' })
   assert(e.state.players[1].life === 20, 'no damage got through: the Angel was blocked')
   assert(blocker.status.damage === 5 || inZone(e, 1, 'graveyard', blocker.oid), 'both attackers hit the blocker (1 + 4)')
-  assert(angel.zoneName === 'battlefield' && angel.status.damage === 5 || angel.zoneName === 'graveyard', 'the band controller put all 5 on the Angel (most room), which dies')
+  assert(angel.zoneName === 'battlefield' && angel.status.damage === 5 || angel.zoneName === 'graveyard', 'all 5 went to the Angel, which dies')
   assert(hero.zoneName === 'battlefield', 'the Hero survived')
 }
 
