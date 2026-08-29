@@ -161,6 +161,9 @@ export function projectGame(engine, viewerPid = null) {
     pending = privateToViewer
       ? { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])) }
       : { ...pending, cards: pending.cards.map((oid) => ({ oid, hidden: true })) }
+  else if (pending?.kind === 'lookAtHand' || pending?.kind === 'chooseFromHand')
+    // A revealed hand is public information (701.15): every viewer sees the cards.
+    pending = { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])), hand: (pending.hand || pending.cards).map((oid) => cardView(state.objects[oid])) }
   else if (pending?.kind === 'explore')
     pending = privateToViewer
       ? { ...pending, card: cardView(state.objects[pending.card]) }

@@ -215,6 +215,25 @@ export class GameEngine {
     this._fireTriggers('mutates', target)
   }
 
+  _applyLookAtHand() {
+    this._resumeResolution()
+  }
+
+  _applyChooseFromHand(pending, answer) {
+    const s = this.state
+    if (pending.optional && answer?.decline) return this._resumeResolution()
+    if (!pending.cards.includes(answer?.oid)) throw new Error('choose one of the revealed cards')
+    const o = s.objects[answer.oid]
+    if (pending.then === 'exile') {
+      this._log(`${this._nameOf(pending.player)} chooses ${this._objName(o)}: exiled`)
+      this._relocate(o, 'exile')
+    } else {
+      this._log(`${this._nameOf(pending.player)} chooses ${this._objName(o)}`)
+      this._discardCard(pending.target, answer.oid)
+    }
+    this._processMadness(() => this._resumeResolution())
+  }
+
   _applyPlayOrDraw(pending, answer) {
     const s = this.state
     if (answer?.play === false) {
@@ -449,6 +468,12 @@ export class GameEngine {
         case 'legendChoice':
           this._applyLegendChoice(pending, answer)
           break
+        case 'lookAtHand':
+          this._applyLookAtHand(pending, answer)
+          break
+        case 'chooseFromHand':
+          this._applyChooseFromHand(pending, answer)
+          break
         case 'bandDamage':
           this._applyBandDamage(pending, answer)
           break
@@ -606,6 +631,13 @@ export class GameEngine {
         if (!this._targetMatches(ref, match.variadic, ctx)) throw new Error('illegal target')
     } else if (match.targets) {
       this._validateTargets(a.targets, match.targets, ctx)
+    }
+    // Hybrid / two-brid choices must name real options for those pips.
+    if (a.hybrid && (!match.hybrid || a.hybrid.some((c, i) => c != null && !match.hybrid[i]?.includes(c)))) throw new Error('illegal hybrid mana choice')
+    if (a.twobrid && (!match.twobrid || a.twobrid.some((c, i) => c != null && c !== '2' && c !== match.twobrid[i]))) throw new Error('illegal two-brid mana choice')
+    if (a.hybrid || a.twobrid) {
+      const test = this._canPay(pid, match.hybrid || match.twobrid ? this._effectiveCost(pid, o) : {}, [], null, o.printed)
+      void test
     }
     if (match.hasX) {
       const x = a.x ?? 0
@@ -766,11 +798,20 @@ export class GameEngine {
           return
         }
         s.combat = { attackers: [], blocks: {} }
+        // For the attack preview: which untapped enemy creatures could block each attacker.
+        const canBeBlockedBy = {}
+        for (const oid of eligible) {
+          const atk = s.objects[oid]
+          canBeBlockedBy[oid] = []
+          for (const opp of this._opponentsOf(s.activePlayer))
+            for (const b of this._eligibleBlockers(opp)) if (this._canBlock(s.objects[b], atk)) canBeBlockedBy[oid].push(b)
+        }
         s.pending = {
           kind: 'declareAttackers',
           player: s.activePlayer,
           eligible,
-          defenders: this._attackDefenders()
+          defenders: this._attackDefenders(),
+          canBeBlockedBy
         }
         break
       }
@@ -1029,7 +1070,7 @@ export class GameEngine {
     }
     const pid = s.priorityAfter ?? s.activePlayer
     s.prio = { player: pid, passCount: 0 }
-    s.pending = { kind: 'priority', player: pid, actions: this._legalActions(pid) }
+    s.pending = { kind: 'priority', player: pid, actions: this._legalActions(pid), reasons: this._lastReasons }
   }
 
   _triggerName(t) {
@@ -1349,7 +1390,7 @@ export class GameEngine {
       } else {
         const next = this._otherPlayer(s.prio.player)
         s.prio.player = next
-        s.pending = { kind: 'priority', player: next, actions: this._legalActions(next) }
+        s.pending = { kind: 'priority', player: next, actions: this._legalActions(next), reasons: this._lastReasons }
       }
       return
     }
@@ -1368,6 +1409,8 @@ export class GameEngine {
   _legalActions(pid) {
     const s = this.state
     const actions = [{ type: 'pass' }]
+    const reasons = {} // oid -> why a hand card can't be played right now (for the UI)
+    this._lastReasons = reasons
     const stackEmpty = zone(s, 'stack').length === 0
     const sorcerySpeed = pid === s.activePlayer && MAIN_STEPS.has(s.step) && stackEmpty
     const player = s.players[pid]
@@ -1381,7 +1424,7 @@ export class GameEngine {
         o.faces && (o.layout === 'split' || o.layout === 'modal_dfc')
           ? o.faces.map((printed, face) => ({ face, printed, behavior: loadBehavior(printed) }))
           : [{ face: null, printed: o.printed, behavior: o.behavior }]
-      for (const v of variants) this._handCastActions(pid, o, v, actions, sorcerySpeed)
+      for (const v of variants) this._handCastActions(pid, o, v, actions, sorcerySpeed, reasons)
       const p = o.printed
       // Cycling (702.29): from hand, any time you have priority.
       const cyc = o.behavior?.cycling
@@ -1564,14 +1607,19 @@ export class GameEngine {
 
   // The land-play / cast actions one face (`v` = { face, printed, behavior }) of a
   // hand card offers right now. For single-faced cards `v.face` is null.
-  _handCastActions(pid, o, v, actions, sorcerySpeed) {
+  _handCastActions(pid, o, v, actions, sorcerySpeed, reasons = {}) {
     const s = this.state
     const { face, printed: p, behavior: b } = v
     const oid = o.oid
+    const before = actions.length
+    const why = (r) => {
+      if (actions.length === before && !reasons[oid]) reasons[oid] = r
+    }
     const withFace = (a) => (face == null ? a : { ...a, face })
     if (p.types.includes('Land')) {
       if (sorcerySpeed && s.players[pid].landsPlayed < this._landsAllowed(pid))
         actions.push(withFace({ type: 'playLand', oid, label: face == null ? undefined : `Play ${p.name}` }))
+      else why(!sorcerySpeed ? 'lands only in your main phase with an empty stack' : 'no land plays left this turn')
       return
     }
     // Instants and cards with flash can be cast any time you have priority.
@@ -1579,7 +1627,8 @@ export class GameEngine {
     // "As though" permission (rule 118 / 601.3e): Vedalken Orrery lets you cast
     // any spell as though it had flash — i.e. any time you have priority.
     const canCastNow = instantSpeed || sorcerySpeed || this._hasPermission(pid, 'castAnySpeed')
-    if (!canCastNow || !this._castAllowed(pid, p)) return
+    if (!canCastNow) return why('sorcery timing: only in your main phase with an empty stack')
+    if (!this._castAllowed(pid, p)) return why("a static effect says you can't cast this now")
     const targets = this._spellTargets(o, b)
     // Untargetability context: this spell's caster + its colors, so hexproof/
     // shroud/protection exclude illegal would-be targets from the gate.
@@ -1598,7 +1647,8 @@ export class GameEngine {
     // A discard additional cost (Grab the Prize) needs that many *other* cards
     // in hand to pay — you can't discard the spell you're casting.
     const addlDiscOk = !addl?.discard || zone(s, 'hand', pid).filter((h) => h !== oid).length >= addl.discard
-    if (!(targetsOk && addlSacOk && addlDiscOk)) return
+    if (!targetsOk) return why('no legal target')
+    if (!(addlSacOk && addlDiscOk)) return why("can't pay the additional cost")
     const xCost = p.manaCost.X || 0
     // A variadic spell ("N damage divided among one or two targets", "up to
     // N target…") has a single slot carrying min/max (and maybe divide).
@@ -1615,6 +1665,8 @@ export class GameEngine {
       type: 'cast',
       oid,
       pays: paysFor(kicked ? addCosts(base, parseManaCost(b.kicker.cost)) : base), // auto-tap preview
+      hybrid: base.hybrid?.length ? base.hybrid : null, // [[colours]] per hybrid pip — the caster may pick
+      twobrid: base.twobrid?.length ? base.twobrid : null,
       label: (face == null ? p.name : `Cast ${p.name}`) + (kicked ? ' (kicked)' : ''),
       targets,
       needsTargets: variadic ? variadic.min ?? 1 : targets.length,
@@ -1638,6 +1690,7 @@ export class GameEngine {
     // Buyback (702.27): the same spell with its buyback cost paid (returns to hand).
     if (b.buyback && this._canPay(pid, addCosts(base, parseManaCost(b.buyback.cost)), extra))
       actions.push(withFace({ ...castAction(false), buyback: true, label: `${p.name} (buyback)` }))
+    why('not enough mana')
     // Mutate (702.140): cast for its mutate cost targeting a non-Human creature you own.
     if (b.mutate && p.types.includes('Creature')) {
       const mspec = [{ type: 'creature', nonHuman: true, owner: 'you' }]
@@ -1941,7 +1994,10 @@ export class GameEngine {
           // Kicker (702.33) / buyback (702.27): optional additional costs.
           if (action.kicker) cost = addCosts(cost, parseManaCost(o.behavior.kicker.cost))
           if (action.buyback) cost = addCosts(cost, parseManaCost(o.behavior.buyback.cost))
-          this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost }, this._extraSources(pid, o.printed), null, o.printed)
+          this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost }, this._extraSources(pid, o.printed), null, o.printed, {
+            hybrid: action.hybrid,
+            twobrid: action.twobrid
+          })
           // Additional cost: sacrifice a permanent (e.g. Fanatical Offering,
           // Reckoner's Bargain — which then pays off the sacrifice's mana value).
           const addl = o.behavior.spell?.additionalCost
@@ -2766,6 +2822,27 @@ export class GameEngine {
         s.pending = { kind: 'proliferate', player: me, choices }
         return true
       }
+      case 'revealHand': {
+        // "Target player reveals their hand" / "Look at target player's hand": the
+        // cards become known (logged); the looking player gets to see them.
+        const pid = this._resolvePlayerRef(source, e.to || 'target0')
+        const cards = [...zone(s, 'hand', pid)]
+        this._log(`${this._nameOf(pid)} reveals their hand: ${cards.map((c) => this._objName(s.objects[c])).join(', ') || '(empty)'}`)
+        if (this._autoOrder || source.controller === pid || !cards.length) return false
+        s.pending = { kind: 'lookAtHand', player: source.controller, target: pid, cards }
+        return true
+      }
+      case 'chooseFromHand': {
+        // Duress / Thoughtseize: reveal, then the controller chooses a card matching
+        // a filter and it is discarded (or exiled, per `then`).
+        const pid = this._resolvePlayerRef(source, e.to || 'target0')
+        const hand = [...zone(s, 'hand', pid)]
+        this._log(`${this._nameOf(pid)} reveals their hand: ${hand.map((c) => this._objName(s.objects[c])).join(', ') || '(empty)'}`)
+        const cards = hand.filter((oid) => this._matchCardFilter(s.objects[oid], e.filter))
+        if (!cards.length) return false
+        s.pending = { kind: 'chooseFromHand', player: source.controller, target: pid, cards, hand, then: e.then || 'discard', optional: !!e.optional }
+        return true
+      }
       case 'changeTargets': {
         // 115.7 (Redirect): the controller may choose new targets for target spell.
         const t = this._resolveTargetRef(source, e.to || 'target0')
@@ -3468,6 +3545,8 @@ export class GameEngine {
     if (filter.types && !filter.types.some((t) => p.types.includes(t))) return false
     if (filter.subtype && !p.subtypes.includes(filter.subtype)) return false
     if (filter.maxMV != null && p.manaValue > filter.maxMV) return false
+    if (filter.nonland && p.types.includes('Land')) return false
+    if (filter.noncreature && p.types.includes('Creature')) return false
     return true
   }
 
@@ -3612,8 +3691,28 @@ export class GameEngine {
   // pips, then hybrid, then generic), then by tapping `sources` — colored pips
   // from the most-constrained matching source first, generic from whatever's
   // left. Returns { spend: {W..C}, tap: [oid] }, or null if unpayable.
-  _planPayment(cost, sources, pool = null, life = null, restricted = []) {
+  _planPayment(cost, sources, pool = null, life = null, restricted = [], picks = null) {
     const COLORS = ['W', 'U', 'B', 'R', 'G', 'C']
+    // The caster may say how each hybrid / two-brid pip is paid (picks.hybrid[i] is a
+    // colour; picks.twobrid[i] is a colour or '2'); chosen pips become plain pips.
+    if (picks) {
+      cost = { ...cost, hybrid: [...(cost.hybrid || [])], twobrid: [...(cost.twobrid || [])] }
+      ;(picks.hybrid || []).forEach((c, i) => {
+        if (cost.hybrid[i]?.includes(c)) {
+          cost[c] = (cost[c] || 0) + 1
+          cost.hybrid[i] = null
+        }
+      })
+      cost.hybrid = cost.hybrid.filter(Boolean)
+      ;(picks.twobrid || []).forEach((c, i) => {
+        if (!cost.twobrid[i]) return
+        if (c === '2') cost.generic = (cost.generic || 0) + 2
+        else if (c === cost.twobrid[i]) cost[c] = (cost[c] || 0) + 1
+        else return
+        cost.twobrid[i] = null
+      })
+      cost.twobrid = cost.twobrid.filter(Boolean)
+    }
     const spend = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }
     const spendR = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 } // from restricted floating mana
     const have = { ...spend, ...(pool || {}) }
@@ -3887,12 +3986,12 @@ export class GameEngine {
     return this._planPayment(cost, [...extra, ...sources], p.manaPool, p.life, this._usableRestricted(pid, printed)) != null
   }
 
-  _pay(pid, cost, extra = [], exclude = null, printed = null) {
+  _pay(pid, cost, extra = [], exclude = null, printed = null, picks = null) {
     const s = this.state
     const p = s.players[pid]
     const sources = this._manaSources(pid, printed).filter((x) => x.oid !== exclude)
     const usableR = this._usableRestricted(pid, printed)
-    const plan = this._planPayment(cost, [...extra, ...sources], p.manaPool, p.life, usableR)
+    const plan = this._planPayment(cost, [...extra, ...sources], p.manaPool, p.life, usableR, picks)
     if (!plan) throw new Error('cannot pay cost')
     for (const c of Object.keys(plan.spend)) p.manaPool[c] -= plan.spend[c]
     for (const c of Object.keys(plan.spendR)) {

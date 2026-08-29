@@ -614,6 +614,18 @@ export const BEHAVIORS = {
       }
     ]
   },
+  // Hidden-zone choices: reveal a hand and pick from it / look at a hand.
+  Duress: {
+    spell: { targets: [{ type: 'player', controller: 'opponent' }], effect: [{ op: 'chooseFromHand', to: 'target0', filter: { noncreature: true, nonland: true }, then: 'discard' }] }
+  },
+  Thoughtseize: {
+    spell: {
+      targets: [{ type: 'player' }],
+      effect: [{ op: 'chooseFromHand', to: 'target0', filter: { nonland: true }, then: 'discard' }, { op: 'loseLife', amount: 2 }]
+    }
+  },
+  Peek: { spell: { targets: [{ type: 'player' }], effect: [{ op: 'revealHand', to: 'target0' }, { op: 'draw', amount: 1 }] } },
+  'Gitaxian Probe': { spell: { targets: [{ type: 'player' }], effect: [{ op: 'revealHand', to: 'target0' }, { op: 'draw', amount: 1 }] } },
   // Batch 6: multi-mana and restricted mana, proliferate, mutate, Lab Man, dredge.
   'Sol Ring': { manaOptions: [{ colors: ['C'], amount: 2 }] },
   'Eldrazi Temple': {

@@ -79,6 +79,47 @@ export function SearchOverlay({ pending, onPick, onNone }) {
   )
 }
 
+// A revealed hand (Duress, Peek): show every card; if choosing, only the
+// matching ones are clickable.
+export function HandRevealOverlay({ pending, targetName, onPick, onDecline, onOk }) {
+  const choosing = pending.kind === 'chooseFromHand'
+  const pickable = new Set((pending.cards || []).map((c) => c.oid))
+  const cards = pending.hand || pending.cards || []
+  return (
+    <div className="eng-scry">
+      <div className="eng-scry-panel">
+        <div className="eng-scry-title">
+          {targetName}'s hand{choosing ? ` — choose a card to ${pending.then === 'exile' ? 'exile' : 'discard'}` : ''}
+        </div>
+        <div className="eng-scry-cards">
+          {cards.map((c) => (
+            <div
+              className={'eng-scry-card' + (choosing && !pickable.has(c.oid) ? ' dim' : '')}
+              key={c.oid}
+              onClick={() => choosing && pickable.has(c.oid) && onPick(c.oid)}
+              title={c.name}
+            >
+              {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
+              <div className="eng-scry-dest">{c.name}</div>
+            </div>
+          ))}
+          {cards.length === 0 && <p className="muted">Empty hand.</p>}
+        </div>
+        {choosing && pending.optional && (
+          <button className="mini" onClick={onDecline}>
+            Choose nothing
+          </button>
+        )}
+        {!choosing && (
+          <button className="primary" onClick={onOk}>
+            OK
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Scry / Surveil: look at the top cards and send some to the bottom (or the
 // graveyard, for surveil). The rest stay on top in shown order.
 export function ScryOverlay({ pending, bottom, setBottom, onConfirm }) {

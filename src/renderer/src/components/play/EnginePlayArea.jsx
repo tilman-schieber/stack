@@ -3,7 +3,7 @@ import { useEngineGame } from '../../store/engineGame.js'
 import { EngineCard, Pile, ManaPool, isCreature, isLand } from './engine/EngineCard.jsx'
 import Prompt from './engine/Prompt.jsx'
 import { GameLog, StopsPanel, Inspector } from './engine/Panels.jsx'
-import { ZoneViewer, SearchOverlay, ScryOverlay, ZoomOverlay, StackOverlay } from './engine/Overlays.jsx'
+import { ZoneViewer, SearchOverlay, ScryOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
 import '../../play.css'
 import './engine.css'
 
@@ -141,16 +141,18 @@ export default function EnginePlayArea() {
   // A cast can require choosing X, then a permanent to sacrifice (a cost), before
   // its targets. While either is pending we're not yet in targeting mode.
   const needX = !!(cast && cast.action.hasX && cast.x == null)
-  const needSac = !!(cast && cast.action.sacChoose && !cast.sac && !needX)
+  // Hybrid / two-brid pips: the caster may say how each is paid (or leave it to auto-pay).
+  const needPips = !!(cast && (cast.action.hybrid || cast.action.twobrid) && !cast.pips && !needX)
+  const needSac = !!(cast && cast.action.sacChoose && !cast.sac && !needX && !needPips)
   // A discard additional cost (Grab the Prize): pick a card from hand to pitch.
-  const needDiscard = !!(cast && cast.action.discChoose && !cast.disc && !needX && !needSac)
+  const needDiscard = !!(cast && cast.action.discChoose && !cast.disc && !needX && !needPips && !needSac)
   // A modal spell (Abrade, Cryptic Command): first pick `count` modes, then collect
   // targets for each selected mode in turn.
   const modalPicking = !!(cast && cast.action.modal && !cast.modes)
   const modalMode = cast && cast.action.modal && cast.modes ? cast.action.modes[cast.modes[cast.mtIdx]] : null
   // Normalise so `targeting.targets` / `.chosen` work for a player cast (specs live
   // on cast.action.targets, or the current modal mode) or an engine target choice.
-  const targeting = needX || needSac || needDiscard || modalPicking
+  const targeting = needX || needPips || needSac || needDiscard || modalPicking
     ? null
     : cast
       ? cast.action.modal
@@ -222,7 +224,7 @@ export default function EnginePlayArea() {
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: chosen })
     else if (a.type === 'castBestow') choose({ type: 'castBestow', oid: a.oid, targets: chosen, x: c.x })
     else
-      choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, buyback: !!a.buyback, overload: !!a.overload, face: a.face, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
+      choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, buyback: !!a.buyback, overload: !!a.overload, face: a.face, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x, hybrid: c.pips?.hybrid, twobrid: c.pips?.twobrid })
   }
 
   // Finalize a modal cast once every selected mode has its targets.
@@ -329,9 +331,9 @@ export default function EnginePlayArea() {
       else setNinjutsu(a)
       return
     }
-    const needsSetup = a.needsTargets > 0 || a.sacChoose || a.discChoose || a.hasX || a.modal
+    const needsSetup = a.needsTargets > 0 || a.sacChoose || a.discChoose || a.hasX || a.modal || a.hybrid || a.twobrid
     if (needsSetup) {
-      setCast({ action: a, chosen: [], sac: null, disc: null, x: null })
+      setCast({ action: a, chosen: [], sac: null, disc: null, x: null, pips: null })
       return
     }
     if (a.type === 'activate') choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: [] })
@@ -626,6 +628,11 @@ export default function EnginePlayArea() {
             onClick={(ev) => onHandCard(c, p.id, ev)}
             onZoom={setZoom}
             onHover={setHover}
+            title={
+              kind === 'priority' && p.id === pending.player && !playable && pending.reasons?.[c.oid]
+                ? `${c.name} — can't play: ${pending.reasons[c.oid]}`
+                : undefined
+            }
           />
         )
       })}
@@ -759,6 +766,15 @@ export default function EnginePlayArea() {
         onZoom={setZoom}
       />
 
+      {(kind === 'lookAtHand' || kind === 'chooseFromHand') && (
+        <HandRevealOverlay
+          pending={pending}
+          targetName={view.players[pending.target]?.name}
+          onPick={(oid) => choose({ oid })}
+          onDecline={() => choose({ decline: true })}
+          onOk={() => choose({})}
+        />
+      )}
       {kind === 'search' && (
         <SearchOverlay
           pending={pending}
@@ -844,6 +860,30 @@ export default function EnginePlayArea() {
         sacrificing={needSac ? { types: cast.action.sacChoose.types } : null}
         discarding={needDiscard}
         modal={modalPicking ? { count: cast.action.modal.count, modes: cast.action.modes, pick: pickModes } : null}
+        choosingPips={
+          needPips
+            ? {
+                hybrid: cast.action.hybrid || [],
+                twobrid: cast.action.twobrid || [],
+                pick: (pips) => {
+                  const next = { ...cast, pips }
+                  const a = cast.action
+                  const more = a.sacChoose || a.discChoose || a.modal || (a.targets?.length || 0) > 0
+                  if (more) setCast(next)
+                  else finalizeCast(next, [])
+                }
+              }
+            : null
+        }
+        attackPreview={
+          kind === 'declareAttackers'
+            ? Object.keys(attackers).map((oid) => {
+                const c = cardByOid(oid)
+                const blockers = (pending.canBeBlockedBy?.[oid] || []).map((b) => cardByOid(b)?.name || '?')
+                return { name: c?.name || '?', power: c?.power || 0, blockers }
+              })
+            : null
+        }
         choosingX={
           needX
             ? {

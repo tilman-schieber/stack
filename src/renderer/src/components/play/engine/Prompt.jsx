@@ -30,7 +30,7 @@ function ModalPicker({ modal, cancelCast }) {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-export default function Prompt({ view, pending, myTurn, targeting, sacrificing, discarding, choosingX, modal, attackers, band, proliferate, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
+export default function Prompt({ view, pending, myTurn, targeting, sacrificing, discarding, choosingX, choosingPips, attackPreview, modal, attackers, band, proliferate, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
@@ -58,6 +58,8 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       proliferate: 'is proliferating',
       mutateOrder: 'is choosing how to mutate',
       bandDamage: 'is dividing damage among their band',
+      lookAtHand: 'is looking at a revealed hand',
+      chooseFromHand: 'is choosing a card from a revealed hand',
       chooseProtector: 'is choosing a protector for their Siege',
       optionalTrigger: 'is deciding on an optional ability',
       mayPay: 'is deciding whether to pay',
@@ -83,6 +85,8 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
         </button>
       </>
     )
+  } else if (choosingPips) {
+    body = <PipPicker pips={choosingPips} cancelCast={cancelCast} />
   } else if (choosingX) {
     body = (
       <>
@@ -225,7 +229,13 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
     body = (
       <>
         <span>
-          <b>{nameOf(pending.player)}</b> — declare attackers ({Object.keys(attackers).length} selected)
+          <b>{nameOf(pending.player)}</b> — declare attackers ({Object.keys(attackers).length} selected
+          {attackPreview?.length ? `, ${attackPreview.reduce((a, x) => a + x.power, 0)} power` : ''})
+          {attackPreview?.length > 0 && (
+            <span className="muted small" title={attackPreview.map((x) => `${x.name}: ${x.blockers.length ? 'blockable by ' + x.blockers.join(', ') : 'no possible blocker'}`).join('\n')}>
+              {' '}· {attackPreview.filter((x) => !x.blockers.length).length} unblockable now (hover)
+            </span>
+          )}
           {pending.defenders?.length > 1 && (
             <>
               {' '}
@@ -507,6 +517,38 @@ function TriggerOrderer({ pending, nameOf, onDone }) {
         </button>
       ))}
       {order.length > 0 && <span className="muted">{order.length}/{pending.triggers.length} placed</span>}
+    </>
+  )
+}
+
+// Hybrid / two-brid pips: pick how each is paid, or let auto-payment decide.
+function PipPicker({ pips, cancelCast }) {
+  const slots = [...pips.hybrid.map((opts) => ({ kind: 'hybrid', opts })), ...pips.twobrid.map((c) => ({ kind: 'twobrid', opts: [c, '2'] }))]
+  const [picks, setPicks] = useState(() => slots.map(() => null))
+  const done = () =>
+    pips.pick({
+      hybrid: picks.slice(0, pips.hybrid.length),
+      twobrid: picks.slice(pips.hybrid.length)
+    })
+  return (
+    <>
+      <span>Pay each pip with:</span>
+      {slots.map((sl, i) => (
+        <span key={i} className="eng-confirm">
+          {'{' + (sl.kind === 'hybrid' ? sl.opts.join('/') : '2/' + sl.opts[0]) + '}'}
+          {sl.opts.map((c) => (
+            <button key={c} className={picks[i] === c ? 'primary' : 'mini'} onClick={() => setPicks((p) => p.map((x, j) => (j === i ? c : x)))}>
+              {c === '2' ? '{2}' : '{' + c + '}'}
+            </button>
+          ))}
+        </span>
+      ))}
+      <button className="primary" onClick={done}>
+        {picks.every((p) => p) ? 'Pay' : 'Auto-pay the rest'}
+      </button>
+      <button className="mini" onClick={cancelCast}>
+        Cancel
+      </button>
     </>
   )
 }

@@ -58,7 +58,9 @@ activate an ability, right-click to zoom. Hovering a card fills the **inspector*
 sidebar: rules text, current P/T, printed vs. granted keywords, counters, damage, and any
 "can't attack/block" restriction; a yellow **!** marks a card whose text the engine does not
 fully enforce (it plays with its printed characteristics only). Ability menus show what
-auto-payment would tap — tap lands yourself first to choose how a hybrid pip is paid.
+auto-payment would tap; hybrid and two-brid pips get a "pay each pip with" picker (or
+auto-pay). Unplayable hand cards say why on hover; declaring attackers previews total
+power and which attackers have no possible blocker.
 **Space / Enter** passes priority, **Escape** cancels. **Stops** sets the Magic Online-style steps at which you receive priority;
 everything else auto-passes. A public game log runs down the left.
 
@@ -84,7 +86,8 @@ replacement and prevention effects, regeneration, ward, hexproof/shroud/protecti
 flashback, madness, morph, bestow, ninjutsu, plot, omens, storm, split cards, modal and
 transforming double-faced cards, Sagas, emblems, Edict effects (the affected player chooses), extra turns/combats/land drops, hand-size modifiers,
 "instead of the graveyard" replacements, "enters tapped unless", "can't gain life / be countered / cast / be prevented" statics, the legend rule as a choice, the repeated cleanup step (514.3a),
-targeted modal and divided spells, partial target legality on resolution, state-based
+targeted modal and divided spells, revealing hands and choosing from them (Duress,
+Thoughtseize, Peek), partial target legality on resolution, state-based
 actions, draws and concessions, multiplayer elimination, and the Commander format (command
 zone, tax, 21-damage rule, 40 life).
 

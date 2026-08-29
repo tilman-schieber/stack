@@ -710,3 +710,7 @@
   font-size: 10px;
   color: var(--muted);
 }
+.eng-scry-card.dim {
+  opacity: 0.35;
+  cursor: default;
+}
