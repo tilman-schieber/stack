@@ -6,7 +6,7 @@ import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
 // Graveyard / exile viewer. Cards with a castable option (flashback from the
 // graveyard, or a plotted card in exile) are highlighted and clickable.
 export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose }) {
-  const castLabel = (a) => (a.type === 'castPlotted' ? 'Plotted' : 'Flashback')
+  const castLabel = (a) => (a.type === 'castPlotted' ? 'Plotted' : a.type === 'cast' ? 'Cast' : a.type === 'unearth' ? 'Unearth' : 'Flashback')
   return (
     <div className="eng-zoneviewer" onClick={onClose}>
       <div className="eng-zoneviewer-panel" onClick={(e) => e.stopPropagation()}>
@@ -148,7 +148,7 @@ export function ZoomOverlay({ card, onClose }) {
       )}
       <div className="eng-zoom-body" onClick={(e) => card.token && e.stopPropagation()}>
         {imgId ? (
-          <img src={`card://${imgId}`} alt={card.name} />
+          <img src={`card://${imgId}${!card.token && card.face ? '/back' : ''}`} alt={card.name} />
         ) : (
           <div className="eng-zoom-placeholder">
             {card.token ? (entry?.loading ? 'Finding token art…' : 'No art found') : ''}
@@ -196,7 +196,7 @@ export function StackOverlay({ stack, targeting, onItem, onZoom }) {
           title={item.name}
         >
           {item.cardId ? (
-            <img src={`card://${item.cardId}`} alt="" draggable={false} />
+            <img src={`card://${item.cardId}${item.face ? '/back' : ''}`} alt="" draggable={false} />
           ) : (
             <div className="eng-stack-ability">✦</div>
           )}

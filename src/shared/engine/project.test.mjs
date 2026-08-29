@@ -17,7 +17,7 @@ const BEARS = { id: 'sf-bears', name: 'Grizzly Bears', mana_cost: '{1}{G}', type
 function make() {
   const deckA = [...Array(10).fill(MOUNTAIN), SHOCK, SHOCK, SHOCK, SHOCK, SHOCK, SHOCK, SHOCK]
   const deckB = [...Array(10).fill(MOUNTAIN), BEARS, BEARS, BEARS, BEARS, BEARS, BEARS, BEARS]
-  return keepAll(new GameEngine({ seed: 'proj', startingPlayer: 0, players: [{ name: 'A', deck: deckA }, { name: 'B', deck: deckB }] }).start())
+  return keepAll(new GameEngine({ seed: 'proj', startingPlayer: 0, autoOrderTriggers: true, players: [{ name: 'A', deck: deckA }, { name: 'B', deck: deckB }] }).start())
 }
 
 console.log('\nprojection + real-card path')

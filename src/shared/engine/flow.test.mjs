@@ -35,7 +35,7 @@ const deck = () => [
   'Lightning Bolt'
 ]
 
-const e = new GameEngine({ seed: 'flow', startingPlayer: 0, players: [{ name: 'A', deck: deck() }, { name: 'B', deck: deck() }] })
+const e = new GameEngine({ seed: 'flow', startingPlayer: 0, autoOrderTriggers: true, players: [{ name: 'A', deck: deck() }, { name: 'B', deck: deck() }] })
 e.start()
 keepAll(e)
 settle(e)

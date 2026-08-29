@@ -68,7 +68,7 @@ section('Samite Healer: prevents the next 1 damage to the chosen target, then is
   assert(e.state.replacements.length === 0, 'the 1-damage shield was used up')
 }
 
-section('Replacements stack: Furnace doubles, then a shield prevents 1 of the result')
+section('Replacements stack (616.1): the shield applies first, then Furnace doubles the rest')
 {
   const e = makeEngine()
   put(e, 0, 'Furnace of Rath', 'battlefield')
@@ -77,8 +77,8 @@ section('Replacements stack: Furnace doubles, then a shield prevents 1 of the re
   const act = e.pending.actions.find((a) => a.type === 'activate' && a.oid === healer.oid)
   e.choose({ type: 'activate', oid: healer.oid, ability: act.ability, targets: [{ kind: 'player', pid: 0 }] })
   resolveAll(e)
-  e._dealDamage(null, { player: 0 }, 3) // 3 -> doubled to 6 -> shield prevents 1 -> 5
-  assert(e.state.players[0].life === 15, 'doubled to 6, shield prevented 1, took 5')
+  e._dealDamage(null, { player: 0 }, 3) // 3 -> shield prevents 1 -> 2 -> doubled to 4
+  assert(e.state.players[0].life === 16, 'shield prevented 1 of 3, the remaining 2 doubled to 4')
 }
 
 section('Furnace of Rath is symmetric: it doubles damage dealt to its controller too')

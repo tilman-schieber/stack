@@ -23,27 +23,47 @@ export function parseManaCost(str) {
     if (/^\d+$/.test(s)) cost.generic += Number(s)
     else if (s === 'X') cost.X = (cost.X || 0) + 1
     else if (s.includes('/')) {
-      // Hybrid mana {B/R}: payable with either color. (Phyrexian / 2-hybrid not
-      // yet modelled — those symbols are ignored.)
       const parts = s.split('/')
-      if (parts.every((p) => cost[p] != null)) (cost.hybrid ||= []).push(parts)
+      // Phyrexian mana {U/P} (107.4f): the colour, or 2 life.
+      if (parts.length === 2 && parts[1] === 'P' && cost[parts[0]] != null) (cost.phyrexian ||= []).push(parts[0])
+      // Two-brid {2/W} (107.4e): the colour, or two generic.
+      else if (parts.length === 2 && parts[0] === '2' && cost[parts[1]] != null) (cost.twobrid ||= []).push(parts[1])
+      // Hybrid {B/R}: payable with either colour.
+      else if (parts.every((p) => cost[p] != null)) (cost.hybrid ||= []).push(parts)
     } else if (cost[s] != null) cost[s] += 1
   }
   return cost
 }
 
+// Mana value (202.3): X counts as 0; a Phyrexian pip is 1, a two-brid pip is 2.
 export function manaValue(cost) {
-  return (cost.generic || 0) + cost.W + cost.U + cost.B + cost.R + cost.G + cost.C + (cost.hybrid?.length || 0)
+  return (
+    (cost.generic || 0) +
+    cost.W +
+    cost.U +
+    cost.B +
+    cost.R +
+    cost.G +
+    cost.C +
+    (cost.hybrid?.length || 0) +
+    (cost.phyrexian?.length || 0) +
+    2 * (cost.twobrid?.length || 0)
+  )
 }
 
 const COLOR_WORD = { white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G' }
 
-// Parse "protection from <color>" out of oracle text → ['B', …].
+// Parse "protection from <quality>" out of oracle text → ['B', 'Creature',
+// 'everything', …]. Colours become colour letters; card types their type word.
+const PROT_TYPE = { creatures: 'Creature', artifacts: 'Artifact', enchantments: 'Enchantment', instants: 'Instant', sorceries: 'Sorcery', planeswalkers: 'Planeswalker', lands: 'Land' }
 export function parseProtections(text) {
   const out = []
-  const re = /protection from (white|blue|black|red|green)/gi
+  const re = /protection from (white|blue|black|red|green|everything|creatures|artifacts|enchantments|instants|sorceries|planeswalkers|lands)/gi
   let m
-  while ((m = re.exec(text || ''))) out.push(COLOR_WORD[m[1].toLowerCase()])
+  while ((m = re.exec(text || ''))) {
+    const w = m[1].toLowerCase()
+    out.push(COLOR_WORD[w] || PROT_TYPE[w] || w)
+  }
   return out
 }
 
@@ -61,18 +81,31 @@ export function parseTypeLine(line) {
   return out
 }
 
-// Build the immutable base characteristics used by the engine. For adventure /
-// double-faced cards the "printed" permanent is the front face, so behaviors key
-// off the front-face name (e.g. "Sagu Wildling", not "Sagu Wildling // Roost Seek").
-export function printedFromScryfall(sf) {
-  const f = sf.card_faces?.[0] || sf
+// Colours implied by a mana cost (for card faces Scryfall gives no colours for).
+function colorsFromCost(str) {
+  const out = []
+  for (const c of ['W', 'U', 'B', 'R', 'G']) if (new RegExp(`\\{[^}]*${c}[^}]*\\}`).test(str || '')) out.push(c)
+  return out
+}
+
+// Layouts whose faces are separately meaningful to the engine (709 split, 712
+// double-faced). Adventures/omens are handled through behaviors on the front face.
+export const MULTI_FACE_LAYOUTS = new Set(['split', 'transform', 'modal_dfc'])
+
+// Base characteristics of one face. `sf` is the whole card, `f` the face (or the
+// card itself for single-faced cards). Face keywords are narrowed from the card's
+// keyword list by which ones the face's own text mentions.
+function printedFromFace(sf, f, multi) {
   const cost = parseManaCost(f.mana_cost || '')
   const t = parseTypeLine(f.type_line || '')
   // A "*" (or other non-numeric) power/toughness is characteristic-defining (rule
   // 613 layer 7a): the printed value is null and a CDA sets the base P/T later.
   const num = (v) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null)
-  const power = num(f.power)
-  const toughness = num(f.toughness)
+  const oracle = f.oracle_text || (multi ? '' : sf.oracle_text) || ''
+  const allKw = sf.keywords || []
+  const keywords = multi
+    ? allKw.filter((k) => k !== 'Transform' && new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(oracle))
+    : allKw
   return {
     name: f.name || sf.name,
     manaCost: cost,
@@ -80,13 +113,58 @@ export function printedFromScryfall(sf) {
     supertypes: t.supertypes,
     types: t.types,
     subtypes: t.subtypes,
-    colors: sf.colors || f.colors || [],
-    keywords: sf.keywords || [],
-    power,
-    toughness,
+    colors: f.colors || (multi ? colorsFromCost(f.mana_cost) : sf.colors) || sf.colors || [],
+    keywords,
+    power: num(f.power),
+    toughness: num(f.toughness),
     loyalty: f.loyalty != null ? Number(f.loyalty) : null,
-    protections: parseProtections(f.oracle_text || sf.oracle_text),
-    oracleText: f.oracle_text || sf.oracle_text || ''
+    protections: parseProtections(oracle),
+    oracleText: oracle
+  }
+}
+
+// Build the immutable base characteristics used by the engine — the front face
+// for multi-faced cards, so behaviors key off the front-face name (e.g. "Fire",
+// "Delver of Secrets"). See facesFromScryfall for the other faces.
+export function printedFromScryfall(sf) {
+  const multi = MULTI_FACE_LAYOUTS.has(sf.layout) && Array.isArray(sf.card_faces) && sf.card_faces.length > 1
+  return printedFromFace(sf, sf.card_faces?.[0] || sf, multi)
+}
+
+// Every face of a split / double-faced card as printed characteristics, or null
+// for a single-faced card (including adventures, which the engine models as a
+// behavior on the front face).
+export function facesFromScryfall(sf) {
+  if (!MULTI_FACE_LAYOUTS.has(sf.layout) || !Array.isArray(sf.card_faces) || sf.card_faces.length < 2) return null
+  return sf.card_faces.map((f) => printedFromFace(sf, f, true))
+}
+
+// A split card's characteristics anywhere but the stack (709.3): the union of
+// both halves — combined name, both costs (mana value is the sum), all types
+// and colours.
+export function combinedPrinted(faces) {
+  const [a, b] = faces
+  const cost = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, generic: 0 }
+  for (const f of faces) {
+    for (const k of Object.keys(cost)) cost[k] += f.manaCost[k] || 0
+    if (f.manaCost.X) cost.X = (cost.X || 0) + f.manaCost.X
+    for (const k of ['hybrid', 'phyrexian', 'twobrid']) if (f.manaCost[k]) cost[k] = [...(cost[k] || []), ...f.manaCost[k]]
+  }
+  const union = (k) => [...new Set(faces.flatMap((f) => f[k]))]
+  return {
+    name: `${a.name} // ${b.name}`,
+    manaCost: cost,
+    manaValue: manaValue(cost),
+    supertypes: union('supertypes'),
+    types: union('types'),
+    subtypes: union('subtypes'),
+    colors: union('colors'),
+    keywords: union('keywords'),
+    power: null,
+    toughness: null,
+    loyalty: null,
+    protections: union('protections'),
+    oracleText: faces.map((f) => f.oracleText).join('\n//\n')
   }
 }
 
@@ -1155,5 +1233,67 @@ export const SAMPLE_CARDS = {
   'Slagwoods Bridge': { name: 'Slagwoods Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Silverbluff Bridge': { name: 'Silverbluff Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Mistvault Bridge': { name: 'Mistvault Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
-  'Twisted Landscape': { name: 'Twisted Landscape', mana_cost: '', type_line: 'Land', colors: [] }
+  'Twisted Landscape': { name: 'Twisted Landscape', mana_cost: '', type_line: 'Land', colors: [] },
+  // ---- CR gap-analysis test pool (added 2026-08-29; exact Scryfall data) ----
+  "Gitaxian Probe": {"name":"Gitaxian Probe","mana_cost":"{U/P}","type_line":"Sorcery","oracle_text":"({U/P} can be paid with either {U} or 2 life.)\nLook at target player's hand.\nDraw a card.","colors":["U"],"keywords":[],"layout":"normal"},
+  "Spectral Procession": {"name":"Spectral Procession","mana_cost":"{2/W}{2/W}{2/W}","type_line":"Sorcery","oracle_text":"Create three 1/1 white Spirit creature tokens with flying.","colors":["W"],"keywords":[],"layout":"normal"},
+  "Thraben Gargoyle // Stonewing Antagonizer": {"name":"Thraben Gargoyle // Stonewing Antagonizer","type_line":"Artifact Creature — Gargoyle // Artifact Creature — Gargoyle Horror","keywords":["Flying","Transform","Defender"],"layout":"transform","card_faces":[{"name":"Thraben Gargoyle","mana_cost":"{1}","type_line":"Artifact Creature — Gargoyle","oracle_text":"Defender\n{6}: Transform this creature.","power":"2","toughness":"2","colors":[]},{"name":"Stonewing Antagonizer","mana_cost":"","type_line":"Artifact Creature — Gargoyle Horror","oracle_text":"Flying","power":"4","toughness":"2","colors":[]}]},
+  "Bala Ged Recovery // Bala Ged Sanctuary": {"name":"Bala Ged Recovery // Bala Ged Sanctuary","type_line":"Sorcery // Land","keywords":[],"layout":"modal_dfc","card_faces":[{"name":"Bala Ged Recovery","mana_cost":"{2}{G}","type_line":"Sorcery","oracle_text":"Return target card from your graveyard to your hand.","colors":["G"]},{"name":"Bala Ged Sanctuary","mana_cost":"","type_line":"Land","oracle_text":"This land enters tapped.\n{T}: Add {G}.","colors":[]}]},
+  "Plague Stinger": {"name":"Plague Stinger","mana_cost":"{1}{B}","type_line":"Creature — Phyrexian Insect Horror","oracle_text":"Flying\nInfect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)","power":"1","toughness":"1","colors":["B"],"keywords":["Flying","Infect"],"layout":"normal"},
+  "Boggart Ram-Gang": {"name":"Boggart Ram-Gang","mana_cost":"{R/G}{R/G}{R/G}","type_line":"Creature — Goblin Warrior","oracle_text":"Haste\nWither (This deals damage to creatures in the form of -1/-1 counters.)","power":"3","toughness":"3","colors":["G","R"],"keywords":["Haste","Wither"],"layout":"normal"},
+  "Bloated Contaminator": {"name":"Bloated Contaminator","mana_cost":"{2}{G}","type_line":"Creature — Phyrexian Beast","oracle_text":"Trample\nToxic 1 (Players dealt combat damage by this creature also get a poison counter.)\nWhenever this creature deals combat damage to a player, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)","power":"4","toughness":"4","colors":["G"],"keywords":["Toxic","Trample","Proliferate"],"layout":"normal"},
+  "Bog Wraith": {"name":"Bog Wraith","mana_cost":"{3}{B}","type_line":"Creature — Wraith","oracle_text":"Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)","power":"3","toughness":"3","colors":["B"],"keywords":["Landwalk","Swampwalk"],"layout":"normal"},
+  "Vampire Cutthroat": {"name":"Vampire Cutthroat","mana_cost":"{B}","type_line":"Creature — Vampire Rogue","oracle_text":"Skulk (This creature can't be blocked by creatures with greater power.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)","power":"1","toughness":"1","colors":["B"],"keywords":["Lifelink","Skulk"],"layout":"normal"},
+  "Tormented Soul": {"name":"Tormented Soul","mana_cost":"{B}","type_line":"Creature — Spirit","oracle_text":"This creature can't block and can't be blocked.","power":"1","toughness":"1","colors":["B"],"keywords":[],"layout":"normal"},
+  "Blind Zealot": {"name":"Blind Zealot","mana_cost":"{1}{B}{B}","type_line":"Creature — Phyrexian Human Cleric","oracle_text":"Intimidate (This creature can't be blocked except by artifact creatures and/or creatures that share a color with it.)\nWhenever this creature deals combat damage to a player, you may sacrifice it. If you do, destroy target creature that player controls.","power":"2","toughness":"2","colors":["B"],"keywords":["Intimidate"],"layout":"normal"},
+  "Dauthi Slayer": {"name":"Dauthi Slayer","mana_cost":"{B}{B}","type_line":"Creature — Dauthi Soldier","oracle_text":"Shadow (This creature can block or be blocked by only creatures with shadow.)\nThis creature attacks each combat if able.","power":"2","toughness":"2","colors":["B"],"keywords":["Shadow"],"layout":"normal"},
+  "Goblin Bushwhacker": {"name":"Goblin Bushwhacker","mana_cost":"{R}","type_line":"Creature — Goblin Warrior","oracle_text":"Kicker {R} (You may pay an additional {R} as you cast this spell.)\nWhen this creature enters, if it was kicked, creatures you control get +1/+0 and gain haste until end of turn.","power":"1","toughness":"1","colors":["R"],"keywords":["Kicker"],"layout":"normal"},
+  "Gurmag Angler": {"name":"Gurmag Angler","mana_cost":"{6}{B}","type_line":"Creature — Zombie Fish","oracle_text":"Delve (Each card you exile from your graveyard while casting this spell pays for {1}.)","power":"5","toughness":"5","colors":["B"],"keywords":["Delve"],"layout":"normal"},
+  "Siege Wurm": {"name":"Siege Wurm","mana_cost":"{5}{G}{G}","type_line":"Creature — Wurm","oracle_text":"Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)\nTrample","power":"5","toughness":"5","colors":["G"],"keywords":["Trample","Convoke"],"layout":"normal"},
+  "Order of Whiteclay": {"name":"Order of Whiteclay","mana_cost":"{1}{W}{W}","type_line":"Creature — Kithkin Cleric","oracle_text":"{1}{W}{W}, {Q}: Return target creature card with mana value 3 or less from your graveyard to the battlefield. ({Q} is the untap symbol.)","power":"1","toughness":"4","colors":["W"],"keywords":[],"layout":"normal"},
+  "Walking Ballista": {"name":"Walking Ballista","mana_cost":"{X}{X}","type_line":"Artifact Creature — Construct","oracle_text":"This creature enters with X +1/+1 counters on it.\n{4}: Put a +1/+1 counter on this creature.\nRemove a +1/+1 counter from this creature: It deals 1 damage to any target.","power":"0","toughness":"0","colors":[],"keywords":[],"layout":"normal"},
+  "Longtusk Cub": {"name":"Longtusk Cub","mana_cost":"{1}{G}","type_line":"Creature — Cat","oracle_text":"Whenever this creature deals combat damage to a player, you get {E}{E} (two energy counters).\nPay {E}{E}: Put a +1/+1 counter on this creature.","power":"2","toughness":"2","colors":["G"],"keywords":[],"layout":"normal"},
+  "Exploration": {"name":"Exploration","mana_cost":"{G}","type_line":"Enchantment","oracle_text":"You may play an additional land on each of your turns.","colors":["G"],"keywords":[],"layout":"normal"},
+  "Reliquary Tower": {"name":"Reliquary Tower","mana_cost":"","type_line":"Land","oracle_text":"You have no maximum hand size.\n{T}: Add {C}.","colors":[],"keywords":[],"layout":"normal"},
+  "Jace's Erasure": {"name":"Jace's Erasure","mana_cost":"{1}{U}","type_line":"Enchantment","oracle_text":"Whenever you draw a card, you may have target player mill a card.","colors":["U"],"keywords":["Mill"],"layout":"normal"},
+  "Dress Down": {"name":"Dress Down","mana_cost":"{1}{U}","type_line":"Enchantment","oracle_text":"Flash\nWhen this enchantment enters, draw a card.\nCreatures lose all abilities.\nAt the beginning of the end step, sacrifice this enchantment.","colors":["U"],"keywords":["Flash"],"layout":"normal"},
+  "Blood Moon": {"name":"Blood Moon","mana_cost":"{2}{R}","type_line":"Enchantment","oracle_text":"Nonbasic lands are Mountains.","colors":["R"],"keywords":[],"layout":"normal"},
+  "Kessig Wolf Run": {"name":"Kessig Wolf Run","mana_cost":"","type_line":"Land","oracle_text":"{T}: Add {C}.\n{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn.","colors":[],"keywords":[],"layout":"normal"},
+  "Goblin Rabblemaster": {"name":"Goblin Rabblemaster","mana_cost":"{2}{R}","type_line":"Creature — Goblin Warrior","oracle_text":"Other Goblin creatures you control attack each combat if able.\nAt the beginning of combat on your turn, create a 1/1 red Goblin creature token with haste.\nWhenever this creature attacks, it gets +1/+0 until end of turn for each other attacking Goblin.","power":"2","toughness":"2","colors":["R"],"keywords":[],"layout":"normal"},
+  "Delver of Secrets // Insectile Aberration": {"name":"Delver of Secrets // Insectile Aberration","type_line":"Creature — Human Wizard // Creature — Human Insect","keywords":["Flying","Transform"],"layout":"transform","card_faces":[{"name":"Delver of Secrets","mana_cost":"{U}","type_line":"Creature — Human Wizard","oracle_text":"At the beginning of your upkeep, look at the top card of your library. You may reveal that card. If an instant or sorcery card is revealed this way, transform this creature.","power":"1","toughness":"1","colors":["U"]},{"name":"Insectile Aberration","mana_cost":"","type_line":"Creature — Human Insect","oracle_text":"Flying","power":"3","toughness":"2","colors":["U"]}]},
+  "Dismember": {"name":"Dismember","mana_cost":"{1}{B/P}{B/P}","type_line":"Instant","oracle_text":"({B/P} can be paid with either {B} or 2 life.)\nTarget creature gets -5/-5 until end of turn.","colors":["B"],"keywords":[],"layout":"normal"},
+  "Mulldrifter": {"name":"Mulldrifter","mana_cost":"{4}{U}","type_line":"Creature — Elemental","oracle_text":"Flying\nWhen this creature enters, draw two cards.\nEvoke {2}{U} (You may cast this spell for its evoke cost. If you do, it's sacrificed when it enters.)","power":"2","toughness":"2","colors":["U"],"keywords":["Flying","Evoke"],"layout":"normal"},
+  "Ghostly Flicker": {"name":"Ghostly Flicker","mana_cost":"{2}{U}","type_line":"Instant","oracle_text":"Exile two target artifacts, creatures, and/or lands you control, then return those cards to the battlefield under your control.","colors":["U"],"keywords":[],"layout":"normal"},
+  "Vindictive Vampire": {"name":"Vindictive Vampire","mana_cost":"{3}{B}","type_line":"Creature — Vampire","oracle_text":"Whenever another creature you control dies, this creature deals 1 damage to each opponent and you gain 1 life.","power":"2","toughness":"3","colors":["B"],"keywords":[],"layout":"normal"},
+  "Chainer's Edict": {"name":"Chainer's Edict","mana_cost":"{1}{B}","type_line":"Sorcery","oracle_text":"Target player sacrifices a creature of their choice.\nFlashback {5}{B}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)","colors":["B"],"keywords":["Flashback"],"layout":"normal"},
+  "Mesa Enchantress": {"name":"Mesa Enchantress","mana_cost":"{1}{W}{W}","type_line":"Creature — Human Druid","oracle_text":"Whenever you cast an enchantment spell, you may draw a card.","power":"0","toughness":"2","colors":["W"],"keywords":[],"layout":"normal"},
+  "Fire // Ice": {"name":"Fire // Ice","mana_cost":"{1}{R} // {1}{U}","type_line":"Instant // Instant","colors":["R","U"],"keywords":[],"layout":"split","card_faces":[{"name":"Fire","mana_cost":"{1}{R}","type_line":"Instant","oracle_text":"Fire deals 2 damage divided as you choose among one or two targets."},{"name":"Ice","mana_cost":"{1}{U}","type_line":"Instant","oracle_text":"Tap target permanent.\nDraw a card."}]},
+  "Deepwood Wolverine": {"name":"Deepwood Wolverine","mana_cost":"{G}","type_line":"Creature — Wolverine","oracle_text":"Whenever this creature becomes blocked, it gets +2/+0 until end of turn.","power":"1","toughness":"1","colors":["G"],"keywords":[],"layout":"normal"},
+  "Ezuri's Archers": {"name":"Ezuri's Archers","mana_cost":"{G}","type_line":"Creature — Elf Archer","oracle_text":"Reach (This creature can block creatures with flying.)\nWhenever this creature blocks a creature with flying, this creature gets +3/+0 until end of turn.","power":"1","toughness":"2","colors":["G"],"keywords":["Reach"],"layout":"normal"},
+  "Night Market Lookout": {"name":"Night Market Lookout","mana_cost":"{B}","type_line":"Creature — Human Rogue","oracle_text":"Whenever this creature becomes tapped, each opponent loses 1 life and you gain 1 life.","power":"1","toughness":"1","colors":["B"],"keywords":[],"layout":"normal"},
+  "Celestial Unicorn": {"name":"Celestial Unicorn","mana_cost":"{2}{W}","type_line":"Creature — Unicorn","oracle_text":"Whenever you gain life, put a +1/+1 counter on this creature.","power":"3","toughness":"2","colors":["W"],"keywords":[],"layout":"normal"},
+  // ---- CR gap-analysis test pool, batch 2 (2026-08-29) ----
+  "Prey Upon": {"name":"Prey Upon","mana_cost":"{G}","type_line":"Sorcery","oracle_text":"Target creature you control fights target creature you don't control. (Each deals damage equal to its power to the other.)","colors":["G"],"keywords":["Fight"],"layout":"normal"},
+  "Lonely Sandbar": {"name":"Lonely Sandbar","mana_cost":"","type_line":"Land","oracle_text":"This land enters tapped.\n{T}: Add {U}.\nCycling {U} ({U}, Discard this card: Draw a card.)","colors":[],"keywords":["Cycling"],"layout":"normal"},
+  "Young Wolf": {"name":"Young Wolf","mana_cost":"{G}","type_line":"Creature — Wolf","oracle_text":"Undying (When this creature dies, if it had no +1/+1 counters on it, return it to the battlefield under its owner's control with a +1/+1 counter on it.)","power":"1","toughness":"1","colors":["G"],"keywords":["Undying"],"layout":"normal"},
+  "Safehold Elite": {"name":"Safehold Elite","mana_cost":"{1}{G/W}","type_line":"Creature — Elf Scout","oracle_text":"Persist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)","power":"2","toughness":"2","colors":["G","W"],"keywords":["Persist"],"layout":"normal"},
+  "Akrasan Squire": {"name":"Akrasan Squire","mana_cost":"{W}","type_line":"Creature — Human Soldier","oracle_text":"Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)","power":"1","toughness":"1","colors":["W"],"keywords":["Exalted"],"layout":"normal"},
+  "Bloodbraid Elf": {"name":"Bloodbraid Elf","mana_cost":"{2}{R}{G}","type_line":"Creature — Elf Berserker","oracle_text":"Haste (This creature can attack and {T} as soon as it comes under your control.)\nCascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order.)","power":"3","toughness":"2","colors":["G","R"],"keywords":["Haste","Cascade"],"layout":"normal"},
+  "Progenitus": {"name":"Progenitus","mana_cost":"{W}{W}{U}{U}{B}{B}{R}{R}{G}{G}","type_line":"Legendary Creature — Hydra Avatar","oracle_text":"Protection from everything\nIf Progenitus would be put into a graveyard from anywhere, reveal Progenitus and shuffle it into its owner's library instead.","power":"10","toughness":"10","colors":["B","G","R","U","W"],"keywords":["Protection"],"layout":"normal"},
+  "Street Wraith": {"name":"Street Wraith","mana_cost":"{3}{B}{B}","type_line":"Creature — Wraith","oracle_text":"Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)\nCycling—Pay 2 life. (Pay 2 life, Discard this card: Draw a card.)","power":"3","toughness":"4","colors":["B"],"keywords":["Landwalk","Swampwalk","Cycling"],"layout":"normal"},
+  "Seachrome Coast": {"name":"Seachrome Coast","mana_cost":"","type_line":"Land","oracle_text":"This land enters tapped unless you control two or fewer other lands.\n{T}: Add {W} or {U}.","colors":[],"keywords":[],"layout":"normal"},
+  "Jace, Vryn's Prodigy // Jace, Telepath Unbound": {"name":"Jace, Vryn's Prodigy // Jace, Telepath Unbound","type_line":"Legendary Creature — Human Wizard // Legendary Planeswalker — Jace","keywords":["Transform","Mill"],"layout":"transform","card_faces":[{"name":"Jace, Vryn's Prodigy","mana_cost":"{1}{U}","type_line":"Legendary Creature — Human Wizard","oracle_text":"{T}: Draw a card, then discard a card. If there are five or more cards in your graveyard, exile Jace, then return him to the battlefield transformed under his owner's control.","power":"0","toughness":"2","colors":["U"]},{"name":"Jace, Telepath Unbound","mana_cost":"","type_line":"Legendary Planeswalker — Jace","oracle_text":"+1: Up to one target creature gets -2/-0 until your next turn.\n−3: You may cast target instant or sorcery card from your graveyard this turn. If that spell would be put into your graveyard, exile it instead.\n−9: You get an emblem with \"Whenever you cast a spell, target opponent mills five cards.\"","colors":["U"],"loyalty":"5"}]},
+  "Elspeth, Knight-Errant": {"name":"Elspeth, Knight-Errant","mana_cost":"{2}{W}{W}","type_line":"Legendary Planeswalker — Elspeth","oracle_text":"+1: Create a 1/1 white Soldier creature token.\n+1: Target creature gets +3/+3 and gains flying until end of turn.\n−8: You get an emblem with \"Artifacts, creatures, enchantments, and lands you control have indestructible.\"","colors":["W"],"keywords":[],"layout":"normal","loyalty":"4"},
+  "Beloved Chaplain": {"name":"Beloved Chaplain","mana_cost":"{1}{W}","type_line":"Creature — Human Cleric","oracle_text":"Protection from creatures","power":"1","toughness":"1","colors":["W"],"keywords":["Protection"],"layout":"normal"},
+  // ---- CR gap-analysis test pool, batch 3 (2026-08-29) ----
+  "Renegade Freighter": {"name":"Renegade Freighter","mana_cost":"{3}","type_line":"Artifact — Vehicle","oracle_text":"Whenever this Vehicle attacks, it gets +1/+1 and gains trample until end of turn.\nCrew 2 (Tap any number of creatures you control with total power 2 or more: This Vehicle becomes an artifact creature until end of turn.)","power":"4","toughness":"3","colors":[],"keywords":["Crew"],"layout":"normal"},
+  "The Eldest Reborn": {"name":"The Eldest Reborn","mana_cost":"{4}{B}","type_line":"Enchantment — Saga","oracle_text":"(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — Each opponent sacrifices a creature or planeswalker of their choice.\nII — Each opponent discards a card.\nIII — Put target creature or planeswalker card from a graveyard onto the battlefield under your control.","colors":["B"],"keywords":[],"layout":"saga"},
+  "Capsize": {"name":"Capsize","mana_cost":"{1}{U}{U}","type_line":"Instant","oracle_text":"Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)\nReturn target permanent to its owner's hand.","colors":["U"],"keywords":["Buyback"],"layout":"normal"},
+  "Dregscape Zombie": {"name":"Dregscape Zombie","mana_cost":"{1}{B}","type_line":"Creature — Zombie","oracle_text":"Unearth {B} ({B}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.)","power":"2","toughness":"1","colors":["B"],"keywords":["Unearth"],"layout":"normal"},
+  "Mogg War Marshal": {"name":"Mogg War Marshal","mana_cost":"{1}{R}","type_line":"Creature — Goblin Warrior","oracle_text":"Echo {1}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)\nWhen this creature enters or dies, create a 1/1 red Goblin creature token.","power":"1","toughness":"1","colors":["R"],"keywords":["Echo"],"layout":"normal"},
+  "Sudden Shock": {"name":"Sudden Shock","mana_cost":"{1}{R}","type_line":"Instant","oracle_text":"Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)\nSudden Shock deals 2 damage to any target.","colors":["R"],"keywords":["Split second"],"layout":"normal"},
+  "Avian Changeling": {"name":"Avian Changeling","mana_cost":"{2}{W}","type_line":"Creature — Shapeshifter","oracle_text":"Changeling (This card is every creature type.)\nFlying","power":"2","toughness":"2","colors":["W"],"keywords":["Changeling","Flying"],"layout":"normal"},
+  "Distortion Strike": {"name":"Distortion Strike","mana_cost":"{U}","type_line":"Sorcery","oracle_text":"Target creature gets +1/+0 until end of turn and can't be blocked this turn.\nRebound (If you cast this spell from your hand, exile it as it resolves. At the beginning of your next upkeep, you may cast this card from exile without paying its mana cost.)","colors":["U"],"keywords":["Rebound"],"layout":"normal"},
+  "Basilica Screecher": {"name":"Basilica Screecher","mana_cost":"{1}{B}","type_line":"Creature — Bat","oracle_text":"Flying\nExtort (Whenever you cast a spell, you may pay {W/B}. If you do, each opponent loses 1 life and you gain that much life.)","power":"1","toughness":"2","colors":["B"],"keywords":["Flying","Extort"],"layout":"normal"},
+  "Rift Bolt": {"name":"Rift Bolt","mana_cost":"{2}{R}","type_line":"Sorcery","oracle_text":"Rift Bolt deals 3 damage to any target.\nSuspend 1—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with a time counter on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)","colors":["R"],"keywords":["Suspend"],"layout":"normal"}
 }

@@ -49,8 +49,11 @@ export async function resolveExampleDeck(slug) {
 export async function resolveSavedDeck(slug) {
   const record = await window.api.loadDeck(slug)
   const main = (record.entries || []).filter((e) => (e.section || 'main') === 'main')
-  const { cards } = await window.api.ensureCards(main.map((e) => e.scryfallId))
+  const cmdEntries = (record.entries || []).filter((e) => e.section === 'commander')
+  const { cards } = await window.api.ensureCards([...main, ...cmdEntries].map((e) => e.scryfallId))
   const byId = new Map(cards.map((c) => [c.id, c]))
+  // Commander (903): the first card of the commander section, if any.
+  const commander = cmdEntries.length ? byId.get(cmdEntries[0].scryfallId) || null : null
   const out = []
   const missing = []
   const pairs = []
@@ -65,7 +68,25 @@ export async function resolveSavedDeck(slug) {
   }
   if (missing.length) throw new Error(`Could not resolve: ${missing.join(', ')}`)
   if (out.length === 0) throw new Error('That deck has no cards in its main section')
-  return { name: record.name, cards: out, coverage: coverageOf(pairs) }
+  return { name: record.name, cards: out, commander, coverage: coverageOf(pairs), commanderIssues: commander ? commanderIssues(out, commander) : [] }
+}
+
+// Deck-construction problems for Commander (903.5): colour identity, singleton,
+// 100 cards. Informational — the game can still be started.
+export function commanderIssues(cards, commander) {
+  const issues = []
+  const identity = new Set(commander.color_identity || [])
+  const outside = new Set()
+  const counts = new Map()
+  for (const c of cards) {
+    for (const col of c.color_identity || []) if (!identity.has(col)) outside.add(c.name)
+    if (!/\bBasic\b/.test(c.type_line || '')) counts.set(c.name, (counts.get(c.name) || 0) + 1)
+  }
+  if (outside.size) issues.push(`outside the commander's colour identity: ${[...outside].slice(0, 5).join(', ')}${outside.size > 5 ? '…' : ''}`)
+  const dups = [...counts].filter(([, n]) => n > 1).map(([n]) => n)
+  if (dups.length) issues.push(`more than one copy: ${dups.slice(0, 5).join(', ')}${dups.length > 5 ? '…' : ''}`)
+  if (cards.length + 1 !== 100) issues.push(`${cards.length + 1} cards including the commander (100 expected)`)
+  return issues
 }
 
 export function resolvePlayableDeck(key) {

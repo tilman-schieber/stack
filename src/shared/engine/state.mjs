@@ -5,7 +5,7 @@
 // owner as "<pid>:<name>".
 
 import { makeRng } from './rng.mjs'
-import { printedFromScryfall, SAMPLE_CARDS } from './cards.mjs'
+import { printedFromScryfall, facesFromScryfall, combinedPrinted, SAMPLE_CARDS } from './cards.mjs'
 import { loadBehavior } from './behaviors.mjs'
 
 export const SHARED_ZONES = ['battlefield', 'stack', 'command']
@@ -61,8 +61,24 @@ export function createAbility(state, fields) {
   return o
 }
 
+// Point a multi-faced object at one of its faces (or `null` for its default
+// off-stack/off-battlefield form): printed characteristics and behavior follow.
+export function setFace(obj, idx) {
+  if (!obj.faces) return
+  if (idx == null) {
+    obj.face = 0
+    obj.printed = obj.layout === 'split' ? obj.combined : obj.faces[0]
+  } else {
+    obj.face = idx
+    obj.printed = obj.faces[idx]
+  }
+  obj.behavior = loadBehavior(obj.printed)
+}
+
 export function createObject(state, sf, owner) {
-  const printed = printedFromScryfall(sf)
+  const faces = facesFromScryfall(sf)
+  const layout = faces ? sf.layout : 'normal'
+  const printed = faces && layout === 'split' ? combinedPrinted(faces) : printedFromScryfall(sf)
   const obj = {
     oid: nextOid(state),
     owner,
@@ -70,6 +86,10 @@ export function createObject(state, sf, owner) {
     zoneName: null,
     cardId: sf.id || null, // Scryfall print id, for rendering card:// images
     printed,
+    faces, // split / double-faced: printed characteristics per face (709, 712)
+    layout,
+    face: 0, // which face is current (a transformed permanent, a cast split half)
+    combined: faces && layout === 'split' ? printed : null,
     behavior: loadBehavior(printed),
     chars: null,
     status: {
@@ -109,6 +129,18 @@ function pluck(state, oid) {
   }
 }
 
+// Drop everything that was tied to `obj` as the object it was until now: floating
+// effects and shields aimed at it, and per-object "this turn" bookkeeping.
+export function forgetObject(state, obj) {
+  const oid = obj.oid
+  state.continuous = state.continuous.filter((e) => !e.targets?.includes(oid))
+  state.replacements = state.replacements.filter((r) => r.target?.oid !== oid)
+  obj.status.regenShields = 0
+  obj.status.abilityUsed = []
+  obj.status.attackedThisTurn = false
+  obj.status.loyaltyUsed = false
+}
+
 // Move an object to a zone. `toName` is a zone name; personal zones use the
 // object's owner. Tokens leaving the battlefield cease to exist (deleted).
 export function moveObject(state, oid, toName, { toTop = false } = {}) {
@@ -120,6 +152,12 @@ export function moveObject(state, oid, toName, { toTop = false } = {}) {
     delete state.objects[oid]
     return
   }
+
+  // Rule 400.7: an object that changes zones becomes a new object with no
+  // memory of its previous existence — effects that applied to it end, and
+  // choices/status it carried are gone. We keep the same oid (the UI keys on
+  // it) but drop everything the old object accumulated.
+  forgetObject(state, obj)
 
   // Reset transient status when a permanent changes zones.
   if (toName !== 'battlefield') {
@@ -133,6 +171,27 @@ export function moveObject(state, oid, toName, { toTop = false } = {}) {
     obj.status.markedDeath = false
     obj.status.attachedTo = null
     obj.controller = obj.owner
+    obj.faceDown = false // a face-down permanent is revealed as it leaves (708.5)
+    // Off the battlefield and stack a split card is both halves (709.3) and a
+    // double-faced card is its front face (712.8).
+    if (obj.faces && toName !== 'stack') setFace(obj, null)
+    obj.bestowed = false
+    obj.bestowCast = false
+    obj.kicked = false
+    obj.evoked = false
+    obj.buyback = false
+    obj.castFromHand = false
+    obj.unearthed = false
+    obj.echoDue = false
+    if (toName !== 'exile') obj.suspended = false
+    obj.chosen = null // "as this enters, choose…" is chosen anew next time
+    // A copy (Clone) reverts to its own printed card off the battlefield (707.2 / 400.7).
+    if (obj.origPrinted) {
+      obj.printed = obj.origPrinted
+      obj.origPrinted = null
+      obj.copyOf = null
+      obj.behavior = loadBehavior(obj.printed)
+    }
   }
 
   obj.zoneName = toName
@@ -143,11 +202,12 @@ export function moveObject(state, oid, toName, { toTop = false } = {}) {
 }
 
 // Build a fresh game. players: [{ name, deck: [cardName, …] }].
-export function createState({ players, seed = 'stack' }) {
+export function createState({ players, seed = 'stack', format = null, startingLife = null }) {
   const rng = makeRng(seed)
   const state = {
     seed,
     rng,
+    format, // null (constructed) | 'commander' (903)
     turnNumber: 0,
     activePlayer: 0,
     step: null,
@@ -173,7 +233,7 @@ export function createState({ players, seed = 'stack' }) {
     state.players.push({
       id: pid,
       name: pdef.name || `Player ${pid + 1}`,
-      life: 20,
+      life: startingLife ?? (format === 'commander' ? 40 : 20), // 903.7: 40 life in Commander
       landsPlayed: 0,
       mulligans: 0,
       manaPool: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 },
@@ -191,6 +251,17 @@ export function createState({ players, seed = 'stack' }) {
     const libKey = zoneKey('library', pid)
     state.zones[libKey] = rng.shuffle(cards.map((c) => c.oid))
     state.zones[libKey].forEach((oid) => (state.objects[oid].zoneName = 'library'))
+
+    // Commander (903.6): the commander starts in the command zone.
+    if (pdef.commander) {
+      const sf = typeof pdef.commander === 'string' ? SAMPLE_CARDS[pdef.commander] : pdef.commander
+      if (!sf) throw new Error(`Unknown commander: ${pdef.commander}`)
+      const c = createObject(state, sf, pid)
+      c.isCommander = true
+      c.commanderCasts = 0 // for the commander tax (903.8)
+      c.zoneName = 'command'
+      state.zones.command.push(c.oid)
+    }
   })
 
   return state

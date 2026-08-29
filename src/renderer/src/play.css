@@ -274,3 +274,11 @@
 select {
   font: inherit;
 }
+.setup-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0;
+}

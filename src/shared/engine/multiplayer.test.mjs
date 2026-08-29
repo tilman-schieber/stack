@@ -17,7 +17,7 @@ const section = (n) => console.log('\n' + n)
 function make3() {
   const deck = Array(20).fill('Forest')
   const e = new GameEngine({
-    seed: '3p', startingPlayer: 0,
+    seed: '3p', startingPlayer: 0, autoOrderTriggers: true,
     players: [{ name: 'A', deck }, { name: 'B', deck }, { name: 'C', deck }]
   }).start()
   let g = 0

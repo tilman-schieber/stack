@@ -523,6 +523,227 @@ export const BEHAVIORS = {
       }
     ]
   },
+  // ---- CR gap-analysis test pool (2026-08-29) ----
+  // Fire // Ice (split, 709). Each half is authored under its own face name.
+  Fire: {
+    spell: { targets: [{ type: 'any', min: 1, max: 2, divide: 2 }], effect: [{ op: 'dealDamageDivided' }] }
+  },
+  Ice: {
+    spell: { targets: [{ type: 'permanent' }], effect: [{ op: 'tap', to: 'target0' }, { op: 'draw', amount: 1 }] }
+  },
+  // Bala Ged Recovery // Bala Ged Sanctuary (modal DFC, 712): a sorcery front,
+  // a land back that enters tapped and taps for {G}.
+  'Bala Ged Recovery': { spell: { effect: [{ op: 'returnFromGraveyard', own: true, optional: false }] } },
+  'Bala Ged Sanctuary': { entersTapped: true, mana: ['G'] },
+  // Trigger-vocabulary showcases (603): blocks / becomes blocked / becomes tapped /
+  // you gain life / you draw ("may", targeted) / another creature you control dies /
+  // you cast an enchantment ("may", untargeted).
+  'Deepwood Wolverine': {
+    triggered: [{ trigger: { event: 'becomesBlocked', self: true }, effect: [{ op: 'pump', to: 'self', power: 2, toughness: 0 }] }]
+  },
+  "Ezuri's Archers": {
+    triggered: [
+      { trigger: { event: 'blocks', self: true, other: { keyword: 'Flying' } }, effect: [{ op: 'pump', to: 'self', power: 3, toughness: 0 }] }
+    ]
+  },
+  'Night Market Lookout': {
+    triggered: [
+      { trigger: { event: 'tapped', self: true }, effect: [{ op: 'eachOpponentLosesLife', amount: 1 }, { op: 'gainLife', amount: 1 }] }
+    ]
+  },
+  'Celestial Unicorn': {
+    triggered: [{ trigger: { event: 'lifeGained', player: 'you' }, effect: [{ op: 'addCounter', to: 'self', counter: '+1/+1', amount: 1 }] }]
+  },
+  "Jace's Erasure": {
+    triggered: [
+      { trigger: { event: 'draw', player: 'you' }, optional: true, targets: [{ type: 'player' }], effect: [{ op: 'mill', to: 'target0', amount: 1 }] }
+    ]
+  },
+  'Vindictive Vampire': {
+    triggered: [
+      {
+        trigger: { event: 'dies', filter: { type: 'Creature', controller: 'you', another: true } },
+        effect: [{ op: 'dealDamageEachOpponent', amount: 1 }, { op: 'gainLife', amount: 1 }]
+      }
+    ]
+  },
+  'Mesa Enchantress': {
+    triggered: [
+      { trigger: { event: 'castSpell', filter: { controller: 'you', type: 'Enchantment' } }, optional: true, effect: [{ op: 'draw', amount: 1 }] }
+    ]
+  },
+  // Cost-vocabulary showcases (118 / 702): kicker, {Q}, remove-counter costs, X in
+  // an activation cost, delve and convoke (the last two are keyword-only).
+  'Goblin Bushwhacker': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true, if: { kicked: true } },
+        effect: [{ op: 'pumpEach', filter: { type: 'Creature', controller: 'you' }, power: 1, toughness: 0, keywords: ['Haste'] }]
+      }
+    ]
+  },
+  'Order of Whiteclay': {
+    activated: [
+      {
+        cost: { mana: '{1}{W}{W}', untap: true },
+        effect: [{ op: 'returnFromGraveyard', own: true, to: 'battlefield', filter: { types: ['Creature'], maxMV: 3 }, optional: false }]
+      }
+    ]
+  },
+  'Walking Ballista': {
+    entersWith: { counter: '+1/+1', amount: 'X' },
+    activated: [
+      { cost: { mana: '{4}' }, effect: [{ op: 'addCounter', to: 'self', counter: '+1/+1', amount: 1 }] },
+      {
+        cost: { removeCounters: { counter: '+1/+1', amount: 1 } },
+        targets: [{ type: 'any' }],
+        effect: [{ op: 'dealDamage', to: 'target0', amount: 1 }]
+      }
+    ]
+  },
+  'Kessig Wolf Run': {
+    mana: ['C'],
+    activated: [
+      {
+        cost: { mana: '{X}{R}{G}', tap: true },
+        targets: [{ type: 'creature' }],
+        effect: [
+          { op: 'pump', to: 'target0', power: 'X', toughness: 0 },
+          { op: 'grantKeyword', to: 'target0', keyword: 'Trample' }
+        ]
+      }
+    ]
+  },
+  // Batch 3 showcases: a Vehicle, a Saga, buyback, an Edict, echo, split second,
+  // rebound, suspend.
+  'Renegade Freighter': {
+    triggered: [
+      { trigger: { event: 'attacks', self: true }, effect: [{ op: 'pump', to: 'self', power: 1, toughness: 1 }, { op: 'grantKeyword', to: 'self', keyword: 'Trample' }] }
+    ]
+  },
+  'The Eldest Reborn': {
+    saga: {
+      chapters: [
+        [{ op: 'eachOpponentSacrifices', filter: { types: ['Creature', 'Planeswalker'] } }],
+        [{ op: 'eachOpponentDiscards' }],
+        [{ op: 'returnFromGraveyard', to: 'battlefield', filter: { types: ['Creature', 'Planeswalker'] }, optional: false }]
+      ]
+    }
+  },
+  Capsize: { spell: { targets: [{ type: 'permanent' }], effect: [{ op: 'bounce', to: 'target0' }] } },
+  "Chainer's Edict": {
+    spell: { targets: [{ type: 'player' }], effect: [{ op: 'targetPlayerSacrifices', to: 'target0', filter: { types: ['Creature'] } }] },
+    flashback: { cost: '{5}{B}{B}' }
+  },
+  'Mogg War Marshal': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'createToken', token: { name: 'Goblin', types: ['Creature'], subtypes: ['Goblin'], colors: ['R'], power: 1, toughness: 1 } }] },
+      { trigger: { event: 'dies', self: true }, effect: [{ op: 'createToken', token: { name: 'Goblin', types: ['Creature'], subtypes: ['Goblin'], colors: ['R'], power: 1, toughness: 1 } }] }
+    ]
+  },
+  'Sudden Shock': { spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', to: 'target0', amount: 2 }] } },
+  'Distortion Strike': {
+    spell: {
+      targets: [{ type: 'creature' }],
+      effect: [{ op: 'pump', to: 'target0', power: 1, toughness: 0 }, { op: 'grantKeyword', to: 'target0', keyword: 'Unblockable' }]
+    }
+  },
+  'Rift Bolt': { spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', to: 'target0', amount: 3 }] } },
+  // Batch 2 showcases: fight, evoke ETB, "enters tapped unless", a graveyard
+  // replacement (Progenitus), and a planeswalker with an emblem ultimate.
+  'Prey Upon': {
+    spell: {
+      targets: [{ type: 'creature', controller: 'you' }, { type: 'creature', controller: 'opponent' }],
+      effect: [{ op: 'fight', a: 'target0', b: 'target1' }]
+    }
+  },
+  Mulldrifter: { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'draw', amount: 2 }] }] },
+  'Lonely Sandbar': { entersTapped: true, mana: ['U'] },
+  'Seachrome Coast': { mana: ['W', 'U'], entersTapped: { unless: { controls: { type: 'Land', another: true, max: 2 } } } },
+  Progenitus: { replacement: [{ event: 'toGraveyard', self: true, apply: { redirect: 'library', shuffle: true } }] },
+  'Elspeth, Knight-Errant': {
+    activated: [
+      { loyalty: 1, effect: [{ op: 'createToken', token: { name: 'Soldier', types: ['Creature'], subtypes: ['Soldier'], colors: ['W'], power: 1, toughness: 1 } }] },
+      {
+        loyalty: 1,
+        targets: [{ type: 'creature' }],
+        effect: [{ op: 'pump', to: 'target0', power: 3, toughness: 3 }, { op: 'grantKeyword', to: 'target0', keyword: 'Flying' }]
+      },
+      {
+        loyalty: -8,
+        effect: [
+          {
+            op: 'createEmblem',
+            name: 'Elspeth, Knight-Errant emblem',
+            static: [{ affects: { scope: 'permanents', controller: 'you' }, grantKeywords: ['Indestructible'] }]
+          }
+        ]
+      }
+    ]
+  },
+  // Dress Down — "Creatures lose all abilities." (layer 6, 613.1f), flash, ETB draw,
+  // sacrificed at the beginning of the (next) end step.
+  'Dress Down': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'draw', amount: 1 }] },
+      { trigger: { event: 'endStep' }, effect: [{ op: 'sacrificeSelf' }] }
+    ],
+    static: [{ affects: { scope: 'creatures' }, removeAbilities: true }]
+  },
+  // Blood Moon — "Nonbasic lands are Mountains." (they lose their other land types
+  // and, per 305.7, their abilities; they tap for {R} via the Mountain subtype).
+  'Blood Moon': {
+    static: [{ affects: { type: 'Land', nonbasic: true }, setSubtypes: ['Mountain'], removeAbilities: true }]
+  },
+  // Exploration / Reliquary Tower: extra land drops (305.2), no maximum hand size (402.2).
+  Exploration: { staticRules: [{ extraLands: 1 }] },
+  'Reliquary Tower': { mana: ['C'], staticRules: [{ noMaxHandSize: true }] },
+  // Longtusk Cub — energy: "Whenever this creature deals combat damage to a
+  // player, you get {E}{E}." / "Pay {E}{E}: Put a +1/+1 counter on this creature."
+  'Longtusk Cub': {
+    triggered: [
+      { trigger: { event: 'dealsCombatDamageToPlayer', self: true }, effect: [{ op: 'addPlayerCounter', counter: 'energy', amount: 2 }] }
+    ],
+    activated: [{ cost: { energy: 2 }, effect: [{ op: 'addCounter', to: 'self', counter: '+1/+1', amount: 1 }] }]
+  },
+  // Bloated Contaminator — trample, toxic 1 (parsed); "Whenever this creature
+  // deals combat damage to a player, proliferate."
+  'Bloated Contaminator': {
+    triggered: [{ trigger: { event: 'dealsCombatDamageToPlayer', self: true }, effect: [{ op: 'proliferate' }] }]
+  },
+  // Goblin Rabblemaster — "Other Goblin creatures you control attack each combat
+  // if able." (a requirement), a beginning-of-combat token, and an attack pump.
+  'Goblin Rabblemaster': {
+    staticRules: [{ affects: { scope: 'creatures', controller: 'you', subtype: 'Goblin', another: true }, require: ['attack'] }],
+    triggered: [
+      {
+        trigger: { event: 'beginCombat', yourTurn: true },
+        effect: [{ op: 'createToken', token: { name: 'Goblin', types: ['Creature'], subtypes: ['Goblin'], colors: ['R'], power: 1, toughness: 1, keywords: ['Haste'] } }]
+      },
+      {
+        trigger: { event: 'attacks', self: true },
+        effect: [{ op: 'pump', to: 'self', power: { count: { attacking: true, subtype: 'Goblin', another: true } }, toughness: 0 }]
+      }
+    ]
+  },
+  // Thraben Gargoyle // Stonewing Antagonizer (transforming DFC): "{6}: Transform".
+  'Thraben Gargoyle': { activated: [{ cost: { mana: '{6}' }, effect: [{ op: 'transform', to: 'self' }] }] },
+  // Dismember — {1}{B/P}{B/P}: "Target creature gets -5/-5 until end of turn."
+  Dismember: {
+    spell: { targets: [{ type: 'creature' }], effect: [{ op: 'pump', to: 'target0', power: -5, toughness: -5 }] }
+  },
+  // Spectral Procession — {2/W}{2/W}{2/W}: three 1/1 white Spirit fliers.
+  'Spectral Procession': {
+    spell: {
+      effect: [
+        {
+          op: 'createToken',
+          count: 3,
+          token: { name: 'Spirit', types: ['Creature'], subtypes: ['Spirit'], colors: ['W'], power: 1, toughness: 1, keywords: ['Flying'] }
+        }
+      ]
+    }
+  },
   // Eldrazi Spawn token (from Writhing Chrysalis): sacrifice for {C}. Modelled as a
   // manually-activated ability (so it isn't auto-sacrificed to pay for other spells).
   'Eldrazi Spawn': {
@@ -851,9 +1072,60 @@ export function loadBehavior(printed) {
   // control. Parsed here so the engine's cost computation reads a behavior flag
   // rather than oracle text.
   const affinity = authored.affinity || (/affinity for artifacts/i.test(printed.oracleText || '') ? 'artifact' : null)
+  const text = printed.oracleText || ''
+  // Combat restrictions/requirements stated in plain text (509.1b / 508.1d).
+  const cantBeBlocked = authored.cantBeBlocked ?? /can't be blocked\./i.test(text)
+  const cantBlock = authored.cantBlock ?? /can't block(?: and can't be blocked)?\./i.test(text)
+  const mustAttack = authored.mustAttack ?? /^(?:This creature|[A-Z][^.\n]*?) attacks each combat if able\.$/m.test(text)
+  const maxBlockers = authored.maxBlockers ?? (/can't be blocked by more than one creature/i.test(text) ? 1 : null)
+  // Toxic N (702.180).
+  const toxicMatch = /\bToxic (\d+)/.exec(text)
+  const toxic = authored.toxic ?? (toxicMatch ? Number(toxicMatch[1]) : null)
+  // Kicker {cost} (702.33) — the mana form only.
+  const kickerMatch = /^Kicker ((?:\{[^}]+\})+)/m.exec(text)
+  const kicker = authored.kicker || (kickerMatch ? { cost: kickerMatch[1] } : null)
+  // Cycling {cost} / Cycling—Pay N life (702.29); Evoke {cost} (702.74).
+  const cycMana = /^Cycling ((?:\{[^}]+\})+)/m.exec(text)
+  const cycLife = /^Cycling\s*[—-]\s*Pay (\d+) life/m.exec(text)
+  const cycling = authored.cycling || (cycMana ? { cost: cycMana[1] } : cycLife ? { life: Number(cycLife[1]) } : null)
+  const evokeMatch = /^Evoke ((?:\{[^}]+\})+)/m.exec(text)
+  const evoke = authored.evoke || (evokeMatch ? { cost: evokeMatch[1] } : null)
+  // Crew N (702.122), Buyback / Unearth / Echo {cost}, Suspend N—{cost}.
+  const costKw = (kw) => {
+    const m = new RegExp(`^${kw} ((?:\\{[^}]+\\})+)`, 'm').exec(text)
+    return m ? { cost: m[1] } : null
+  }
+  const crewMatch = /^Crew (\d+)/m.exec(text)
+  const crew = authored.crew ?? (crewMatch ? Number(crewMatch[1]) : null)
+  const buyback = authored.buyback || costKw('Buyback')
+  const unearth = authored.unearth || costKw('Unearth')
+  const echo = authored.echo || costKw('Echo')
+  const susMatch = /^Suspend (\d+)\s*[—-]\s*((?:\{[^}]+\})+)/m.exec(text)
+  const suspend = authored.suspend || (susMatch ? { count: Number(susMatch[1]), cost: susMatch[2] } : null)
+  // Extort (702.100): a keyword-derived cast trigger.
+  if ((printed.keywords || []).includes('Extort'))
+    triggered.push({
+      trigger: { event: 'castSpell', filter: { controller: 'you' } },
+      effect: [{ op: 'optionalPay', cost: '{W/B}', effect: [{ op: 'eachOpponentLosesLife', amount: 1 }, { op: 'gainLife', amount: { count: 'opponents' } }] }]
+    })
 
   return {
     affinity,
+    kicker,
+    cycling,
+    evoke,
+    crew,
+    buyback,
+    unearth,
+    echo,
+    suspend,
+    saga: authored.saga || null, // { chapters: [effects | { targets, effect }] } (714)
+    cantBeBlocked,
+    cantBlock,
+    mustAttack,
+    mustBlock: authored.mustBlock || false,
+    maxBlockers,
+    toxic,
     spell: authored.spell || null,
     activated: authored.activated || [],
     triggered,

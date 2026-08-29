@@ -48,7 +48,17 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       discardCards: 'is discarding',
       scry: 'is scrying',
       search: 'is searching their library',
-      chooseTargets: 'is choosing targets'
+      chooseTargets: 'is choosing targets',
+      orderTriggers: 'is ordering their triggers',
+      playOrDraw: 'is choosing to play or draw',
+      sacrificeChoice: 'is choosing what to sacrifice',
+      optionalTrigger: 'is deciding on an optional ability',
+      mayPay: 'is deciding whether to pay',
+      wardPay: 'is deciding whether to pay ward',
+      madness: 'is deciding on a madness cast',
+      chooseValue: 'is choosing',
+      copyEnter: 'is choosing what to copy',
+      explore: 'is exploring'
     }
     body = (
       <span className="eng-waiting">
@@ -154,6 +164,41 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
             Cancel
           </button>
         )}
+        {targeting.decline && (
+          <button className="mini" onClick={targeting.decline}>
+            Decline
+          </button>
+        )}
+      </>
+    )
+  } else if (kind === 'playOrDraw') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> won the die roll — play first, or draw?
+        </span>
+        <button className="primary" onClick={() => choose({ play: true })}>
+          Play
+        </button>
+        <button className="mini" onClick={() => choose({ play: false })}>
+          Draw
+        </button>
+      </>
+    )
+  } else if (kind === 'orderTriggers') {
+    body = <TriggerOrderer pending={pending} nameOf={nameOf} onDone={(order) => choose({ order })} />
+  } else if (kind === 'optionalTrigger') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — use <b>{pending.name}</b>'s optional ability?
+        </span>
+        <button className="primary" onClick={() => choose({ yes: true })}>
+          Yes
+        </button>
+        <button className="mini" onClick={() => choose({ yes: false })}>
+          No
+        </button>
       </>
     )
   } else if (kind === 'priority') {
@@ -242,6 +287,12 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
         </button>
       </>
     )
+  } else if (kind === 'sacrificeChoice') {
+    body = (
+      <span>
+        <b>{nameOf(pending.player)}</b> — click {pending.count === 1 ? 'a highlighted permanent' : `${pending.count} highlighted permanents`} to sacrifice.
+      </span>
+    )
   } else if (kind === 'copyEnter') {
     body = (
       <>
@@ -317,11 +368,19 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
     body = (
       <>
         <span>
-          <b>{nameOf(pending.player)}</b> — cast <b>{pending.name}</b> for its madness cost{' '}
-          {pending.cost}?
+          <b>{nameOf(pending.player)}</b> —{' '}
+          {pending.free ? (
+            <>
+              cast <b>{pending.name}</b> without paying its mana cost?
+            </>
+          ) : (
+            <>
+              cast <b>{pending.name}</b> for its madness cost {pending.cost}?
+            </>
+          )}
         </span>
         <button className="primary" disabled={!pending.canPay} onClick={() => onMadnessCast(pending)}>
-          Cast (madness)
+          {pending.free ? 'Cast for free' : 'Cast (madness)'}
         </button>
         <button className="mini" onClick={() => choose({ cast: false })}>
           Decline
@@ -331,7 +390,7 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
   } else if (kind === 'gameOver') {
     body = (
       <>
-        <span className="eng-win">🏆 {nameOf(pending.winner)} wins!</span>
+        <span className="eng-win">{pending.draw ? '🤝 The game is a draw.' : `🏆 ${nameOf(pending.winner)} wins!`}</span>
         <button className="primary" onClick={endGame}>
           New game
         </button>
@@ -344,6 +403,31 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       {error && <span className="eng-error">{error}</span>}
       {body}
     </div>
+  )
+}
+
+// 603.3b: order your simultaneous triggers. Click them in the order they go on
+// the stack; the last one clicked resolves first.
+function TriggerOrderer({ pending, nameOf, onDone }) {
+  const [order, setOrder] = useState([])
+  const remaining = pending.triggers.filter((t) => !order.includes(t.id))
+  const pick = (id) => {
+    const next = [...order, id]
+    if (next.length === pending.triggers.length) onDone(next)
+    else setOrder(next)
+  }
+  return (
+    <>
+      <span>
+        <b>{nameOf(pending.player)}</b> — order your triggers (click the one to put on the stack first; the last resolves first):
+      </span>
+      {remaining.map((t) => (
+        <button key={t.id} className="mini" onClick={() => pick(t.id)}>
+          {t.name}
+        </button>
+      ))}
+      {order.length > 0 && <span className="muted">{order.length}/{pending.triggers.length} placed</span>}
+    </>
   )
 }
 

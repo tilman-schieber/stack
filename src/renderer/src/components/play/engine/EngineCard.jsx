@@ -3,7 +3,8 @@ import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
 
 // Card-level building blocks of the rules-enforced board.
 
-export const cardImg = (c) => (c.cardId ? `card://${c.cardId}` : null)
+// A card's image: the back face of a double-faced card when that face is up.
+export const cardImg = (c) => (c.cardId ? `card://${c.cardId}${c.face ? '/back' : ''}` : null)
 export const isCreature = (c) => c.types?.includes('Creature')
 export const isLand = (c) => c.types?.includes('Land')
 
@@ -18,7 +19,7 @@ export function EngineCard({ card, className = '', onClick, onZoom, title }) {
     if (key) ensure(card.tokenDef)
   }, [key, ensure]) // eslint-disable-line react-hooks/exhaustive-deps
   const imgId = card.token ? artId : card.cardId
-  const img = imgId ? `card://${imgId}` : null
+  const img = imgId ? `card://${imgId}${!card.token && card.face ? '/back' : ''}` : null
   const pt = card.power != null ? `${card.power}/${card.toughness}` : null
   return (
     <div

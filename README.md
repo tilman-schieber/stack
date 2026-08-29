@@ -67,12 +67,22 @@ validated against what the decision offered. `projectGame(engine, viewerPid)` pr
 serializable, per-viewer redacted view for the UI.
 
 Implemented: the full turn structure and priority system, the stack, London mulligans, mana
-(pool, auto- and manual tapping, hybrid, X), combat with all evasion/damage keywords,
-multiple blockers, first/double strike, planeswalkers, all seven continuous-effect layers
-(copy, control, text, types, color, abilities, P/T), triggered/activated/static abilities,
+(pool, auto- and manual tapping, hybrid, Phyrexian and two-brid symbols, X in spell and
+activation costs, delve, convoke, kicker, evoke, cycling, buyback, suspend, unearth, echo, {Q}, counter-removal and energy costs), the play/draw choice, combat with
+the evasion keywords (flying/reach, fear, intimidate, skulk, shadow, horsemanship, landwalk,
+menace, "can't be blocked", protection from colours/types/everything) and attack/block requirements, multiple blockers, first/double
+strike (with the second combat damage step), exalted, fight, undying/persist, cascade, rebound, extort, split second, changeling, Vehicles/crew, trample, deathtouch, lifelink, infect/wither/toxic and poison, planeswalkers, all
+seven continuous-effect layers (copy, control, text, types, color, abilities incl. "loses all
+abilities", P/T) with timestamp *and* dependency ordering, triggered/activated/static
+abilities (blocks, becomes blocked/tapped, draw, discard, life gain/loss, phase triggers;
+optional and intervening-if triggers; the controller orders simultaneous triggers),
 replacement and prevention effects, regeneration, ward, hexproof/shroud/protection,
-flashback, madness, morph, bestow, ninjutsu, plot, omens, storm, extra turns/combats,
-targeted modal and divided spells, state-based actions, and multiplayer elimination.
+flashback, madness, morph, bestow, ninjutsu, plot, omens, storm, split cards, modal and
+transforming double-faced cards, Sagas, emblems, Edict effects (the affected player chooses), extra turns/combats/land drops, hand-size modifiers,
+"instead of the graveyard" replacements, "enters tapped unless",
+targeted modal and divided spells, partial target legality on resolution, state-based
+actions, draws and concessions, multiplayer elimination, and the Commander format (command
+zone, tax, 21-damage rule, 40 life).
 
 Card characteristics come straight from Scryfall data; only cards whose text implies effects
 get an entry in `behaviors.mjs`, written against a small vocabulary of effect ops. Cards

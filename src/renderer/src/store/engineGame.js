@@ -60,11 +60,12 @@ export const useEngineGame = create((set, get) => ({
   _transport: null,
 
   // ---- local hot-seat ------------------------------------------------------
-  // decks: [{ name, cards: [scryfallCard…] }, { name, cards }]
-  startEngineGame: ({ decks }) => {
+  // decks: [{ name, cards: [scryfallCard…], commander? }, …]; format: null | 'commander'
+  startEngineGame: ({ decks, format = null }) => {
     const engine = new GameEngine({
       seed: 'game-' + Date.now(),
-      players: decks.map((d) => ({ name: d.name, deck: d.cards }))
+      format,
+      players: decks.map((d) => ({ name: d.name, deck: d.cards, commander: format === 'commander' ? d.commander : null }))
     })
     engine.start()
     settle(engine, get().stops)
@@ -84,10 +85,10 @@ export const useEngineGame = create((set, get) => ({
   guestGame: ({ myDeck, transport }) => {
     transport.onMessage = (msg) => get()._onGuestMessage(msg)
     transport.onClose = () => get().endGame(LOST_CONNECTION)
-    transport.onOpen = () => transport.send({ t: 'deck', name: myDeck.name, cards: myDeck.cards })
+    transport.onOpen = () => transport.send({ t: 'deck', name: myDeck.name, cards: myDeck.cards, commander: myDeck.commander || null })
     // If the channel is already open (connected before this ran), send now.
     if (transport.channel?.readyState === 'open')
-      transport.send({ t: 'deck', name: myDeck.name, cards: myDeck.cards })
+      transport.send({ t: 'deck', name: myDeck.name, cards: myDeck.cards, commander: myDeck.commander || null })
     set({ mode: 'guest', netSeat: 1, _transport: transport, started: false, notice: null })
   },
 
@@ -120,11 +121,14 @@ export const useEngineGame = create((set, get) => ({
     const { _engine, stops } = get()
     if (msg.t === 'deck') {
       if (_engine) return // the game is already running; a second deck can't replace it
+      // Online: it's a Commander game when both decks bring a commander.
+      const format = myDeck.commander && msg.commander ? 'commander' : null
       const engine = new GameEngine({
         seed: 'game-' + Date.now(),
+        format,
         players: [
-          { name: myDeck.name, deck: myDeck.cards },
-          { name: msg.name, deck: msg.cards }
+          { name: myDeck.name, deck: myDeck.cards, commander: format ? myDeck.commander : null },
+          { name: msg.name, deck: msg.cards, commander: format ? msg.commander : null }
         ]
       })
       engine.start()
@@ -140,6 +144,11 @@ export const useEngineGame = create((set, get) => ({
       } catch {
         /* illegal remote choice: ignore, state is untouched */
       }
+    } else if (msg.t === 'concede') {
+      if (!_engine) return
+      _engine.concede(1)
+      settle(_engine, get().stops)
+      get()._commit()
     } else if (msg.t === 'stops') {
       const next = { ...get().stops, 1: new Set(msg.steps) }
       if (_engine) settle(_engine, next)
@@ -171,6 +180,21 @@ export const useEngineGame = create((set, get) => ({
     if (_engine) settle(_engine, stops)
     set({ stops })
     if (_engine) get()._commit()
+  },
+
+  // Concede as a game action (104.3a): the local seat leaves the game and the
+  // engine decides the outcome (in a 2-player game the opponent wins). Online
+  // the game-over screen then shows on both sides; locally `endGame` is the exit.
+  concede: () => {
+    const { mode, _engine, _transport, netSeat, stops } = get()
+    if (mode === 'guest') {
+      _transport?.send({ t: 'concede' })
+      return
+    }
+    if (!_engine) return
+    _engine.concede(netSeat)
+    settle(_engine, stops)
+    get()._commit()
   },
 
   // End the game (concede / exit / connection lost). `reason`, if given, is shown

@@ -2,7 +2,7 @@
 // Used to show a coverage report and (later) to gate engine-mode play, with a
 // manual fallback for unsupported cards.
 
-import { printedFromScryfall } from './cards.mjs'
+import { printedFromScryfall, MULTI_FACE_LAYOUTS } from './cards.mjs'
 import { BEHAVIORS } from './behaviors.mjs'
 
 // Keyword abilities the engine models in combat (French-vanilla cards are free).
@@ -55,6 +55,14 @@ function isVanillaOrKeyword(sf) {
 export function classifyCard(sf) {
   const name = sf.name
   if (BEHAVIORS[name]) return { name, supported: true, category: 'authored' }
+  // Split / double-faced cards: every face must be authored or keyword-only.
+  if (MULTI_FACE_LAYOUTS.has(sf.layout) && Array.isArray(sf.card_faces) && sf.card_faces.length > 1) {
+    const faces = sf.card_faces.map((f) => classifyCard({ ...f, layout: 'normal', keywords: sf.keywords, card_faces: undefined }))
+    const bad = faces.find((f) => !f.supported)
+    return bad
+      ? { name, supported: false, category: `${bad.name}: ${bad.category}` }
+      : { name, supported: true, category: faces.every((f) => f.category === 'authored') ? 'authored' : 'keyword' }
+  }
 
   const printed = printedFromScryfall(sf)
   const types = printed.types

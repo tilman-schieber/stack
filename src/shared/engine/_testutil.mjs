@@ -9,10 +9,11 @@ export function keepAll(engine) {
   let g = 0
   while (
     engine.pending &&
-    (engine.pending.kind === 'mulligan' || engine.pending.kind === 'bottom') &&
+    (engine.pending.kind === 'mulligan' || engine.pending.kind === 'bottom' || engine.pending.kind === 'playOrDraw') &&
     g++ < 50
   ) {
-    if (engine.pending.kind === 'mulligan') engine.choose({ keep: true })
+    if (engine.pending.kind === 'playOrDraw') engine.choose({ play: true })
+    else if (engine.pending.kind === 'mulligan') engine.choose({ keep: true })
     else engine.choose({ bottom: engine.pending.hand.slice(0, engine.pending.count) })
   }
   return engine
@@ -23,6 +24,7 @@ export function makeEngine(deckName = 'Forest', size = 20) {
   const engine = new GameEngine({
     seed: 'test',
     startingPlayer: 0,
+    autoOrderTriggers: true,
     players: [{ name: 'A', deck }, { name: 'B', deck }]
   }).start()
   return keepAll(engine)

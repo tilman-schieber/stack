@@ -85,7 +85,7 @@ section('Elimination: owned objects leave the game, controlled-but-not-owned one
   const deck = () => Array(20).fill('Forest')
   const e = new GameEngine({
     seed: 'elim',
-    startingPlayer: 0,
+    startingPlayer: 0, autoOrderTriggers: true,
     players: [{ name: 'A', deck: deck() }, { name: 'B', deck: deck() }, { name: 'C', deck: deck() }]
   }).start()
   for (let i = 0; i < 3; i++) e.choose({ keep: true })

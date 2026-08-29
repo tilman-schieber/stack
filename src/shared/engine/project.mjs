@@ -41,6 +41,7 @@ function cardView(o, viewerPid = null) {
     oid: o.oid,
     name: o.chars?.name || o.printed?.name || '',
     cardId: o.cardId || null,
+    face: o.face || 0, // 1 = the back face of a double-faced card is up
     token: !!o.token,
     tokenDef: o.tokenDef || null,
     types: o.chars?.types || [],
@@ -85,6 +86,7 @@ function stackView(state, oid) {
     kind: 'spell',
     name: o.printed?.name || '',
     cardId: o.cardId || null,
+    face: o.layout === 'transform' || o.layout === 'modal_dfc' ? o.face || 0 : 0,
     controller: o.controller,
     targets: o.targets || []
   }
@@ -115,7 +117,12 @@ export function projectGame(engine, viewerPid = null) {
       ),
       battlefield: controlled.map((o) => cardView(o, viewerPid)),
       graveyard: zone(state, 'graveyard', p.id).map((oid) => cardView(state.objects[oid])),
-      exile: zone(state, 'exile', p.id).map((oid) => cardView(state.objects[oid]))
+      exile: zone(state, 'exile', p.id).map((oid) => cardView(state.objects[oid])),
+      // Commander: this player's cards in the (shared) command zone.
+      command: zone(state, 'command')
+        .filter((oid) => state.objects[oid]?.owner === p.id)
+        .map((oid) => ({ ...cardView(state.objects[oid]), commanderCasts: state.objects[oid].commanderCasts || 0 })),
+      commanderDamage: p.commanderDamage || {}
     }
   })
 
@@ -134,6 +141,7 @@ export function projectGame(engine, viewerPid = null) {
       : { ...pending, card: { oid: pending.card, hidden: true } }
 
   return {
+    format: state.format || null,
     turnNumber: state.turnNumber,
     step: state.step,
     activePlayer: state.activePlayer,

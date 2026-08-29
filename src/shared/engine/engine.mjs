@@ -6,10 +6,10 @@
 //
 // Rule references are to MagicCompRules20260619.txt.
 
-import { createState, createObject, createAbility, computeChars, zone, zoneKey, moveObject, objectsIn } from './state.mjs'
+import { createState, createObject, createAbility, computeChars, zone, zoneKey, moveObject, objectsIn, setFace } from './state.mjs'
 import { manaAbilityColors, loadBehavior } from './behaviors.mjs'
-import { isPermanent, parseManaCost } from './cards.mjs'
-import { recompute, matchStatic } from './layers.mjs'
+import { isPermanent, parseManaCost, manaValue, BASIC_LAND_MANA } from './cards.mjs'
+import { recompute, matchStatic, hasSub } from './layers.mjs'
 
 // Step order (rules 500–514). First strike is folded into a single combat-damage
 // step for M0 (no keywords yet). Priority is granted in PRIORITY_STEPS only.
@@ -41,11 +41,25 @@ const PRIORITY_STEPS = new Set([
 ])
 const MAIN_STEPS = new Set(['main1', 'main2'])
 
+// What a source "is" for protection purposes (702.16): its colours and its types,
+// matched against a permanent's `protections` list ('B', 'Creature', 'everything').
+const tags = (c) => (c ? [...(c.colors || []), ...(c.types || [])] : [])
+
+// Sum two parsed mana costs (a spell's cost plus a kicker cost, …).
+function addCosts(a, b) {
+  const out = { ...a }
+  for (const k of ['W', 'U', 'B', 'R', 'G', 'C', 'generic', 'X']) if (b[k]) out[k] = (out[k] || 0) + b[k]
+  for (const k of ['hybrid', 'phyrexian', 'twobrid']) if (b[k]) out[k] = [...(out[k] || []), ...b[k]]
+  return out
+}
+
 export class GameEngine {
   constructor(opts) {
     this.state = createState(opts)
     // Who plays first: a seat index, or (default) a seeded random pick (103.1).
     this._startingPlayer = opts.startingPlayer
+    // Tests: never pause to ask a player to order simultaneous triggers (603.3b).
+    this._autoOrder = !!opts.autoOrderTriggers
   }
 
   // ---- lifecycle -------------------------------------------------------
@@ -54,11 +68,30 @@ export class GameEngine {
     const s = this.state
     this.handSize = handSize
     const n = s.players.length
-    s.startingPlayer = Number.isInteger(this._startingPlayer) ? this._startingPlayer : s.rng.int(n)
+    const explicit = Number.isInteger(this._startingPlayer)
+    s.startingPlayer = explicit ? this._startingPlayer : s.rng.int(n)
     for (const p of s.players) this.draw(p.id, handSize)
-    // London mulligan phase, resolved player by player in turn order from the
-    // starting player (103.5), before turn 1.
     s.step = 'mulligan'
+    if (explicit) return this._beginMulligans()
+    // 103.2/103.7a: the player who won the die roll chooses to play or draw.
+    s.pending = { kind: 'playOrDraw', player: s.startingPlayer }
+    return this
+  }
+
+  _applyPlayOrDraw(pending, answer) {
+    const s = this.state
+    if (answer?.play === false) {
+      this._log(`${this._nameOf(pending.player)} chooses to draw`)
+      s.startingPlayer = this._nextInSeat(pending.player)
+    }
+    this._beginMulligans()
+  }
+
+  // London mulligan phase, resolved player by player in turn order from the
+  // starting player (103.5), before turn 1.
+  _beginMulligans() {
+    const s = this.state
+    const n = s.players.length
     s.activePlayer = s.startingPlayer
     s.mulliganOrder = Array.from({ length: n }, (_, i) => (s.startingPlayer + i) % n)
     s.mulliganIdx = 0
@@ -246,6 +279,18 @@ export class GameEngine {
         case 'chooseValue':
           this._applyChooseValue(pending, answer)
           break
+        case 'sacrificeChoice':
+          this._applySacrificeChoice(pending, answer)
+          break
+        case 'orderTriggers':
+          this._applyOrderTriggers(pending, answer)
+          break
+        case 'optionalTrigger':
+          this._applyOptionalTrigger(pending, answer)
+          break
+        case 'playOrDraw':
+          this._applyPlayOrDraw(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -282,12 +327,28 @@ export class GameEngine {
           const d = typeof ent === 'string' ? null : ent.defender
           if (d && !this._defenderOffered(pending.defenders, d)) throw new Error('illegal attack: no such defender')
         }
+        // Attack requirements (508.1d): a creature that "attacks each combat if
+        // able" and is able must be declared.
+        for (const oid of pending.eligible) {
+          const o = this.state.objects[oid]
+          if (o && !seen.has(oid) && this._required(o, 'attack'))
+            throw new Error(`${o.chars.name} must attack this combat if able`)
+        }
         return
       }
       case 'declareBlockers': {
-        for (const [b, atk] of Object.entries(a.blocks || {})) {
+        const blocks = a.blocks || {}
+        for (const [b, atk] of Object.entries(blocks)) {
           if (!pending.eligible.includes(b)) throw new Error('illegal block: that creature cannot block')
           if (!pending.attackers.includes(atk)) throw new Error('illegal block: not an attacker aimed at you')
+        }
+        // Block requirements (509.1c): a creature that must block if able, and can
+        // legally block some attacker, must be assigned.
+        for (const oid of pending.eligible) {
+          const o = this.state.objects[oid]
+          if (!o || blocks[oid] || !this._required(o, 'block')) continue
+          if (pending.attackers.some((atk) => this._canBlock(o, this.state.objects[atk])))
+            throw new Error(`${o.chars.name} must block if able`)
         }
         return
       }
@@ -298,14 +359,15 @@ export class GameEngine {
       case 'bottom':
         return this._assertFromHand(pending, a.bottom)
       case 'chooseTargets': {
+        if (pending.optional && a.decline) return
         const src = this.state.objects[pending.sourceOid]
-        const ctx = { byPid: pending.player, sourceColors: src?.chars?.colors || src?.printed?.colors || [] }
+        const ctx = { byPid: pending.player, sourceColors: tags(src?.chars || src?.printed) }
         return this._validateTargets(a.targets, pending.targets, ctx)
       }
       case 'madness': {
         if (!a.cast) return
         const o = this.state.objects[pending.oid]
-        return this._validateTargets(a.targets, pending.targets, { byPid: pending.player, sourceColors: o.printed.colors })
+        return this._validateTargets(a.targets, pending.targets, { byPid: pending.player, sourceColors: tags(o.printed) })
       }
       default:
         return // the remaining decisions validate inline (scry/search/copyEnter/…)
@@ -336,12 +398,16 @@ export class GameEngine {
         (x.oid ?? null) === (a.oid ?? null) &&
         (x.ability ?? null) === (a.ability ?? null) &&
         (x.color ?? null) === (a.color ?? null) &&
+        (x.face ?? null) === (a.face ?? null) &&
+        !!x.kicker === !!a.kicker &&
+        !!x.evoke === !!a.evoke &&
+        !!x.buyback === !!a.buyback &&
         !!x.altCost === !!a.altCost
     )
     if (!match) throw new Error(`illegal action: ${type} is not available`)
     const pid = pending.player
     const o = s.objects[a.oid]
-    const colors = (type === 'activate' ? o?.chars?.colors : null) || o?.printed?.colors || []
+    const colors = tags(type === 'activate' ? o?.chars || o?.printed : o?.printed)
     const ctx = { byPid: pid, sourceColors: colors }
 
     if (match.modal) {
@@ -424,13 +490,15 @@ export class GameEngine {
     switch (step) {
       case 'untap': {
         this._log(`— Turn ${s.turnNumber}: ${this._nameOf(s.activePlayer)} —`, { marker: true })
+        // "Until your next turn" effects created by the active player end now (611.2b).
+        this._expireEffects((e) => e.duration === 'untilYourNextTurn' && e.owner === s.activePlayer)
         // 502: untap active player's permanents; clear summoning sickness for
         // creatures they control; reset the land-per-turn allowance.
         for (const o of objectsIn(s, 'battlefield')) {
           o.status.attackedThisTurn = false // reset for every creature each turn
           if (o.controller === s.activePlayer) {
             // "Doesn't untap during its controller's untap step" (Claustrophobia).
-            if (!this._restricted(o, 'untap')) o.status.tapped = false
+            if (!this._restricted(o, 'untap')) this._setTapped(o, false)
             o.status.summoningSick = false
             o.status.loyaltyUsed = false // a planeswalker may act again this turn
             o.status.abilityUsed = [] // once-per-turn abilities reset
@@ -445,6 +513,42 @@ export class GameEngine {
         // 503: "at the beginning of [your] upkeep" abilities (and any delayed
         // triggers scheduled for it) go on the stack before priority.
         this._firePhaseTriggers('upkeep')
+        // Echo (702.30): pay it or sacrifice, the first upkeep after it came under
+        // your control.
+        for (const o of objectsIn(s, 'battlefield')) {
+          if (o.controller !== s.activePlayer || !o.echoDue) continue
+          o.echoDue = false
+          if (this._ability(o, 'echo'))
+            s.pendingTriggers.push({
+              controller: o.controller,
+              sourceOid: o.oid,
+              subjectOid: o.oid,
+              effect: [{ op: 'optionalPay', cost: o.behavior.echo.cost, effect: [], elseEffect: [{ op: 'sacrificeSelf' }] }],
+              targetSpec: []
+            })
+        }
+        // Suspend (702.62): remove a time counter from each of your suspended
+        // cards; when the last is removed, cast it free (with haste).
+        for (const oid of [...zone(s, 'exile', s.activePlayer)]) {
+          const c = s.objects[oid]
+          if (!c?.suspended) continue
+          c.status.counters.time = (c.status.counters.time || 1) - 1
+          this._log(`${this._objName(c)}: a time counter is removed (${c.status.counters.time} left)`)
+          if (c.status.counters.time <= 0) {
+            c.suspended = false
+            s.pendingTriggers.push({ controller: c.owner, sourceOid: c.oid, subjectOid: c.oid, effect: [{ op: 'castFree', oid: c.oid, haste: true }], targetSpec: [] })
+          }
+        }
+        this._grantPriority()
+        break
+      }
+      case 'main1': {
+        // 714.2b / 505.4: after the draw step, each Saga gets a lore counter and
+        // its next chapter triggers.
+        for (const o of objectsIn(s, 'battlefield')) {
+          if (o.controller !== s.activePlayer || !this._ability(o, 'saga')) continue
+          this._addLore(o)
+        }
         this._grantPriority()
         break
       }
@@ -452,6 +556,13 @@ export class GameEngine {
         // 103.8a: the starting player skips only the very first draw step of the
         // game (turn 1). Every later turn — including all of theirs — draws.
         if (s.turnNumber !== 1) this.draw(s.activePlayer, 1)
+        this._firePhaseTriggers('drawStep')
+        this._grantPriority()
+        break
+      }
+      case 'beginCombat': {
+        // 507.1: "at the beginning of combat" abilities (Goblin Rabblemaster).
+        this._firePhaseTriggers('beginCombat')
         this._grantPriority()
         break
       }
@@ -489,11 +600,17 @@ export class GameEngine {
         break
       }
       case 'combatDamage': {
+        // 510.4: with first/double strike there are two combat damage steps —
+        // players get priority after the first-strike damage, then the regular
+        // damage is dealt (see _advanceStep).
         this._combatDamage()
         this._grantPriority()
         break
       }
       case 'endCombat': {
+        // 511.1: "at end of combat" triggers, then creatures leave combat and
+        // "until end of combat" effects end (511.3).
+        this._firePhaseTriggers('endCombat')
         for (const o of objectsIn(s, 'battlefield')) {
           o.status.attacking = false
           o.status.attackingTarget = null
@@ -501,6 +618,7 @@ export class GameEngine {
           o.status.blocking = null
         }
         s.combat = null
+        this._expireEffects((e) => e.duration === 'endOfCombat')
         this._grantPriority()
         break
       }
@@ -508,9 +626,10 @@ export class GameEngine {
         // 514: discard to hand size, then remove damage. No priority in M0.
         const ap = s.activePlayer
         const hand = zone(s, 'hand', ap)
-        if (hand.length > 7) {
+        const max = this._maxHandSize(ap)
+        if (hand.length > max) {
           this._log(`${this._nameOf(ap)} discards down to hand size`)
-          s.pending = { kind: 'discard', player: ap, count: hand.length - 7, hand: [...hand] }
+          s.pending = { kind: 'discard', player: ap, count: hand.length - max, hand: [...hand] }
           return
         }
         this._endCleanup()
@@ -522,6 +641,21 @@ export class GameEngine {
     }
   }
 
+  // Remove floating effects (continuous, prevention, replacement) that `pred`
+  // says have expired — the single place durations end (611.2a).
+  _expireEffects(pred) {
+    const s = this.state
+    for (const e of s.continuous)
+      if (e.control != null && pred(e)) {
+        // A control-changing effect ending: control reverts (613 / 514.2).
+        const o = s.objects[e.targets[0]]
+        if (o && o.zoneName === 'battlefield' && o.controller === e.control) o.controller = e.prev
+      }
+    s.continuous = s.continuous.filter((e) => !pred(e))
+    s.prevent = s.prevent.filter((e) => !pred(e))
+    s.replacements = s.replacements.filter((e) => !pred(e))
+  }
+
   _endCleanup() {
     const s = this.state
     for (const o of objectsIn(s, 'battlefield')) {
@@ -529,17 +663,9 @@ export class GameEngine {
       o.status.markedDeath = false
       o.status.regenShields = 0 // unused regeneration shields wear off (514.2)
     }
-    // Control-changing effects ending: control reverts to the previous controller
-    // (rule 613/514.2) before the effect is removed — e.g. Act of Treason.
-    for (const e of s.continuous)
-      if (e.control != null && e.duration === 'eot') {
-        const o = s.objects[e.targets[0]]
-        if (o && o.zoneName === 'battlefield' && o.controller === e.control) o.controller = e.prev
-      }
-    // "Until end of turn" effects and prevention shields wear off (rule 514.2).
-    s.continuous = s.continuous.filter((e) => e.duration !== 'eot')
-    s.prevent = s.prevent.filter((e) => e.duration !== 'eot')
-    s.replacements = s.replacements.filter((e) => e.duration !== 'eot')
+    // "Until end of turn" effects and prevention shields wear off (rule 514.2);
+    // control-changing ones revert control first (Act of Treason).
+    this._expireEffects((e) => !e.duration || e.duration === 'eot' || e.duration === 'endOfCombat')
     this._emptyManaPools()
     // Extra turns (rule 500.7 / 720): a queued extra turn is taken by its owner
     // before the turn would pass to the other player.
@@ -557,6 +683,14 @@ export class GameEngine {
     const i = STEP_ORDER.indexOf(s.step)
     if (s.step === 'cleanup') {
       this._endCleanup()
+      return
+    }
+    // The second combat damage step (510.4): regular damage after first strike.
+    if (s.step === 'combatDamage' && s.combat?.secondDamageStep) {
+      s.combat.secondDamageStep = false
+      recompute(s)
+      this._combatDamagePass('regular')
+      this._grantPriority()
       return
     }
     // Additional combat phase (Relentless Assault, rule 505/506): after the
@@ -608,25 +742,75 @@ export class GameEngine {
     const rank = (pid) => (pid - s.activePlayer + n) % n
     s.pendingTriggers.sort((a, b) => rank(a.controller) - rank(b.controller))
     while (s.pendingTriggers.length) {
+      // 603.3b: a player with several triggers going on the stack at once chooses
+      // their order. Asked only when the triggers actually differ (identical
+      // ones — two Soul Wardens — need no choice) and not in auto mode (tests).
+      const first = s.pendingTriggers[0]
+      const mine = s.pendingTriggers.filter((t) => t.controller === first.controller && !t._ordered)
+      if (mine.length > 1 && !this._autoOrder) {
+        const key = (t) => `${s.objects[t.sourceOid]?.printed?.name}|${JSON.stringify(t.effect)}`
+        if (new Set(mine.map(key)).size > 1) {
+          s.pending = {
+            kind: 'orderTriggers',
+            player: first.controller,
+            triggers: mine.map((t, i) => ({ id: i, name: this._triggerName(t) })),
+            _triggers: mine
+          }
+          return
+        }
+      }
       const t = s.pendingTriggers.shift()
       const spec = t.targetSpec || []
+      // "You may …" with no target: ask before it goes on the stack.
+      if (t.optional && !spec.length && !t._accepted) {
+        s.pending = { kind: 'optionalTrigger', player: t.controller, name: this._triggerName(t), _trigger: t }
+        return
+      }
       if (spec.length) {
         if (!spec.every((sp) => this._legalTargetsExist(sp))) continue // fizzles: no legal target
         s.pending = {
           kind: 'chooseTargets',
           player: t.controller,
           sourceOid: t.sourceOid,
-          name: s.objects[t.sourceOid]?.printed?.name || 'Ability',
+          name: this._triggerName(t),
           targets: spec,
+          optional: !!t.optional, // may be declined
           _trigger: t
         }
         return
       }
-      this._placeTrigger(t, [])
+      this._placeTrigger(t, t.targets || []) // preset (non-chosen) targets, e.g. exalted's attacker
     }
     const pid = s.priorityAfter ?? s.activePlayer
     s.prio = { player: pid, passCount: 0 }
     s.pending = { kind: 'priority', player: pid, actions: this._legalActions(pid) }
+  }
+
+  _triggerName(t) {
+    return this.state.objects[t.sourceOid]?.printed?.name || 'Ability'
+  }
+
+  // 603.3b answer: `order` lists trigger ids first-on-the-stack first (so the
+  // last listed resolves first). A missing/partial order keeps the default.
+  _applyOrderTriggers(pending, answer) {
+    const s = this.state
+    const mine = pending._triggers
+    const ids = Array.isArray(answer?.order) ? answer.order.filter((i) => Number.isInteger(i) && i >= 0 && i < mine.length) : []
+    const ordered = [...new Set(ids)].map((i) => mine[i])
+    for (const t of mine) if (!ordered.includes(t)) ordered.push(t)
+    for (const t of ordered) t._ordered = true
+    const rest = s.pendingTriggers.filter((t) => !mine.includes(t))
+    s.pendingTriggers = [...ordered, ...rest]
+    this._advanceTriggerPlacement()
+  }
+
+  _applyOptionalTrigger(pending, answer) {
+    const t = pending._trigger
+    if (answer?.yes !== false) {
+      t._accepted = true
+      this.state.pendingTriggers.unshift(t)
+    }
+    this._advanceTriggerPlacement()
   }
 
   _placeTrigger(t, chosenTargets) {
@@ -634,7 +818,9 @@ export class GameEngine {
       controller: t.controller,
       sourceOid: t.sourceOid,
       effect: t.effect,
-      targets: chosenTargets
+      targets: chosenTargets,
+      condition: t.condition || null,
+      extra: t.extra || null
     })
     zone(this.state, 'stack').push(ao.oid)
     // A triggered ability that targets a warded permanent triggers its ward too —
@@ -643,8 +829,12 @@ export class GameEngine {
   }
 
   _applyChooseTargets(pending, answer) {
+    if (pending.optional && answer?.decline) {
+      this._advanceTriggerPlacement() // "you may": declined, the trigger does nothing
+      return
+    }
     const src = this.state.objects[pending.sourceOid]
-    this._assertTargetsLegal(answer?.targets, pending.player, src?.chars?.colors || src?.printed?.colors)
+    this._assertTargetsLegal(answer?.targets, pending.player, tags(src?.chars || src?.printed))
     this._placeTrigger(pending._trigger, answer?.targets || [])
     this._advanceTriggerPlacement() // continue with the rest of the queue
   }
@@ -763,6 +953,7 @@ export class GameEngine {
     if (kw.includes('Shroud')) return false
     if (kw.includes('Hexproof') && byPid !== o.controller) return false
     const prot = o.chars?.protections || []
+    if (prot.includes('everything')) return false
     if (prot.length && (sourceColors || []).some((c) => prot.includes(c))) return false
     return true
   }
@@ -775,7 +966,7 @@ export class GameEngine {
     const s = this.state
     if (spec.type === 'player' || spec.type === 'any') return true
     if (spec.type === 'spell') return zone(s, 'stack').length > 0
-    if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact') {
+    if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact' || spec.type === 'permanent') {
       // A variadic slot ("N target creatures", "up to N…") needs at least `min`
       // legal targets to be cast (601.2c); a normal slot needs one.
       const min = spec.min ?? 1
@@ -831,7 +1022,7 @@ export class GameEngine {
     const refs = o.targets || []
     if (refs.length === 0) return false
     const src = o.kind === 'ability' ? this.state.objects[o.sourceOid] : o
-    const colors = (o.kind === 'ability' ? src?.chars?.colors : o.printed?.colors) || []
+    const colors = tags(o.kind === 'ability' ? src?.chars : o.printed)
     return refs.every((r) => !this._targetStillLegal(o.controller, colors, r))
   }
 
@@ -924,77 +1115,24 @@ export class GameEngine {
 
     for (const oid of zone(s, 'hand', pid)) {
       const o = s.objects[oid]
+      // A split card offers each half (709.3a); a modal DFC either face (712.11b);
+      // a transforming DFC only its front. Each variant is evaluated with that
+      // face's characteristics and behavior.
+      const variants =
+        o.faces && (o.layout === 'split' || o.layout === 'modal_dfc')
+          ? o.faces.map((printed, face) => ({ face, printed, behavior: loadBehavior(printed) }))
+          : [{ face: null, printed: o.printed, behavior: o.behavior }]
+      for (const v of variants) this._handCastActions(pid, o, v, actions, sorcerySpeed)
       const p = o.printed
-      if (p.types.includes('Land')) {
-        if (sorcerySpeed && player.landsPlayed < 1) actions.push({ type: 'playLand', oid })
-        continue
-      }
-      // Instants and cards with flash can be cast any time you have priority.
-      const instantSpeed = p.types.includes('Instant') || p.keywords.includes('Flash')
-      // "As though" permission (rule 118 / 601.3e): Vedalken Orrery lets you cast
-      // any spell as though it had flash — i.e. any time you have priority.
-      const canCastNow = instantSpeed || sorcerySpeed || this._hasPermission(pid, 'castAnySpeed')
-      if (canCastNow) {
-        const targets = this._spellTargets(o)
-        // Untargetability context: this spell's caster + its colors, so hexproof/
-        // shroud/protection exclude illegal would-be targets from the gate.
-        const ctx = { byPid: pid, sourceColors: p.colors }
-        // A modal spell (rule 700.2) picks `count` of its modes on cast. It's
-        // castable when at least `count` modes have a legal (or no) target.
-        const modal = o.behavior.spell?.modal
-        const modes = o.behavior.spell?.modes
-        const modeCastable = (m) => !m.targets?.length || m.targets.every((t) => this._legalTargetsExist(t, ctx))
-        const modalOk = !modal || modes.filter(modeCastable).length >= (modal.count || 1)
-        // A targeted spell needs a legal target to be cast (rule 601.2c). This
-        // also gates counters (need a spell on the stack) and Auras (a creature).
-        const targetsOk = modalOk && (!targets.length || targets.every((t) => this._legalTargetsExist(t, ctx)))
-        const addl = o.behavior.spell?.additionalCost
-        const addlSacOk = !addl?.sacrifice || this._sacrificeCandidates(pid, addl.sacrifice).length > 0
-        // A discard additional cost (Grab the Prize) needs that many *other* cards
-        // in hand to pay — you can't discard the spell you're casting.
-        const addlDiscOk = !addl?.discard || zone(s, 'hand', pid).filter((h) => h !== oid).length >= addl.discard
-        if (targetsOk && addlSacOk && addlDiscOk) {
-          const xCost = p.manaCost.X || 0
-          // A variadic spell ("N damage divided among one or two targets", "up to
-          // N target…") has a single slot carrying min/max (and maybe divide).
-          const variadic = targets.length === 1 && targets[0].max != null ? targets[0] : null
-          if (this._canPay(pid, this._effectiveCost(pid, o))) {
-            actions.push({
-              type: 'cast',
-              oid,
-              label: p.name,
-              targets,
-              needsTargets: variadic ? variadic.min ?? 1 : targets.length,
-              variadic,
-              sacChoose: addl?.sacrifice || null,
-              discChoose: addl?.discard || null,
-              hasX: xCost > 0,
-              maxX: xCost > 0 ? this._maxX(pid, o, xCost) : 0,
-              // Modal: the renderer picks `count` modes, then targets for each.
-              modal: modal || null,
-              modes: modal ? modes.map((m, i) => ({ index: i, label: m.label, targets: m.targets || [], castable: modeCastable(m) })) : null
-            })
-          }
-          // Alternative cost (e.g. Fireblast: sacrifice two Mountains instead of mana).
-          const alt = o.behavior.spell?.alternativeCost
-          if (
-            alt?.sacrifice &&
-            this._sacrificeCandidates(pid, alt.sacrifice).length >= (alt.sacrifice.count || 1)
-          ) {
-            actions.push({
-              type: 'cast',
-              oid,
-              altCost: true,
-              label: `${p.name} (${alt.label || 'alternative cost'})`,
-              targets,
-              needsTargets: targets.length,
-              sacChoose: null,
-              hasX: false,
-              maxX: 0
-            })
-          }
-        }
-      }
+      // Cycling (702.29): from hand, any time you have priority.
+      const cyc = o.behavior?.cycling
+      if (cyc && (!cyc.cost || this._canPay(pid, parseManaCost(cyc.cost))) && (!cyc.life || player.life >= cyc.life))
+        actions.push({ type: 'cycle', oid, label: `Cycle ${p.name}` })
+      // Suspend (702.62): a special action, at the card's own timing.
+      const sus = o.behavior?.suspend
+      if (sus && (p.types.includes('Instant') || sorcerySpeed) && this._canPay(pid, parseManaCost(sus.cost)))
+        actions.push({ type: 'suspend', oid, label: `Suspend ${p.name} (${sus.count})` })
+      if (p.types.includes('Land')) continue
       // Morph (702.37): cast the card face down as a 2/2 creature for {3}.
       if (o.behavior?.morph && sorcerySpeed && this._canPay(pid, parseManaCost('{3}')))
         actions.push({ type: 'castFaceDown', oid, label: `${p.name} (face down)` })
@@ -1002,7 +1140,7 @@ export class GameEngine {
       const om = o.behavior?.omen
       if (om && sorcerySpeed && this._canPay(pid, parseManaCost(om.cost))) {
         const t = om.targets || []
-        const octx = { byPid: pid, sourceColors: p.colors }
+        const octx = { byPid: pid, sourceColors: tags(p) }
         if (!t.length || t.every((x) => this._legalTargetsExist(x, octx)))
           actions.push({ type: 'castOmen', oid, label: om.name, targets: t, needsTargets: t.length })
       }
@@ -1012,10 +1150,9 @@ export class GameEngine {
         const bcost = parseManaCost(bst.cost)
         const fixed = { ...bcost, X: 0 }
         const bx = bcost.X || 0
-        if (this._legalTargetsExist({ type: 'creature' }, { byPid: pid, sourceColors: p.colors }) && this._canPay(pid, fixed)) {
+        if (this._legalTargetsExist({ type: 'creature' }, { byPid: pid, sourceColors: tags(p) }) && this._canPay(pid, fixed)) {
           const sources = this._manaAvailable(pid)
-          const fixedMV =
-            (fixed.generic || 0) + fixed.W + fixed.U + fixed.B + fixed.R + fixed.G + fixed.C + (fixed.hybrid?.length || 0)
+          const fixedMV = manaValue(fixed)
           actions.push({
             type: 'castBestow',
             oid,
@@ -1043,12 +1180,19 @@ export class GameEngine {
       }
     }
 
+    // Commander (903.6): castable from the command zone, paying the commander tax.
+    for (const oid of zone(s, 'command')) {
+      const o = s.objects[oid]
+      if (!o?.isCommander || o.owner !== pid) continue
+      this._handCastActions(pid, o, { face: null, printed: o.printed, behavior: o.behavior }, actions, sorcerySpeed)
+    }
+
     // Plotted cards: cast from exile for free on a later turn (702.170d).
     for (const oid of zone(s, 'exile', pid)) {
       const o = s.objects[oid]
       if (!o.plotted || o.plottedTurn >= s.turnNumber || !sorcerySpeed) continue
       const targets = this._spellTargets(o)
-      const pctx = { byPid: pid, sourceColors: o.printed.colors }
+      const pctx = { byPid: pid, sourceColors: tags(o.printed) }
       if (targets.length && !targets.every((t) => this._legalTargetsExist(t, pctx))) continue
       actions.push({
         type: 'castPlotted',
@@ -1057,6 +1201,14 @@ export class GameEngine {
         targets,
         needsTargets: targets.length
       })
+    }
+
+    // Unearth (702.84): from your graveyard, sorcery speed, for its unearth cost.
+    for (const oid of zone(s, 'graveyard', pid)) {
+      const o = s.objects[oid]
+      const un = o.behavior?.unearth
+      if (un && sorcerySpeed && this._canPay(pid, parseManaCost(un.cost)))
+        actions.push({ type: 'unearth', oid, label: `Unearth ${o.printed.name}` })
     }
 
     // Flashback: cast a spell from your graveyard for its flashback cost.
@@ -1071,7 +1223,7 @@ export class GameEngine {
       if (fb.sacrifice && this._sacrificeCandidates(pid, fb.sacrifice).length < (fb.sacrifice.count || 1))
         continue
       const targets = this._spellTargets(o)
-      const fctx = { byPid: pid, sourceColors: o.printed.colors }
+      const fctx = { byPid: pid, sourceColors: tags(o.printed) }
       if (targets.length && !targets.every((t) => this._legalTargetsExist(t, fctx))) continue
       actions.push({ type: 'castFlashback', oid, targets, needsTargets: targets.length })
     }
@@ -1091,6 +1243,11 @@ export class GameEngine {
       // you have priority, by paying its morph cost.
       if (o.faceDown && o.behavior?.morph && this._canPay(pid, parseManaCost(o.behavior.morph.cost)))
         actions.push({ type: 'turnFaceUp', oid, label: 'Turn face up' })
+      if (o.chars?.lostAbilities) continue // "loses all abilities" (613.1f)
+      // Crew N (702.122): tap creatures with total power N or more.
+      const crew = o.behavior?.crew
+      if (crew != null && !o.chars.types.includes('Creature') && this._crewCandidates(pid, crew).length)
+        actions.push({ type: 'crew', oid, label: `Crew ${crew}` })
       ;(o.behavior?.activated || []).forEach((ab, i) => {
         if (ab.manaAbility && ab.cost?.tap) return // {T} mana abilities: see tapForMana above
         if (!this._canActivate(pid, o, ab)) return
@@ -1102,24 +1259,186 @@ export class GameEngine {
         }
         const targets = ab.targets || []
         const sac = ab.cost?.sacrifice
+        // X in an activation cost ({X}{R}{G}, {T}: …): the largest X payable now.
+        const acost = ab.cost?.mana ? parseManaCost(ab.cost.mana) : null
+        const xCost = acost?.X || 0
         actions.push({
           type: 'activate',
           oid,
           ability: i,
+          label: ab.label,
           targets,
           needsTargets: targets.length,
           loyalty: ab.loyalty, // present for planeswalker loyalty abilities
-          sacChoose: sac && sac !== 'self' ? sac : null // { types } to pick a sacrifice
+          sacChoose: sac && sac !== 'self' ? sac : null, // { types } to pick a sacrifice
+          hasX: xCost > 0,
+          maxX:
+            xCost > 0
+              ? Math.max(
+                  0,
+                  Math.floor(
+                    (this._manaAvailable(pid) - (ab.cost?.tap && manaAbilityColors(o).length ? 1 : 0) - manaValue({ ...acost, X: 0 })) / xCost
+                  )
+                )
+              : 0
         })
       })
     }
+    // Split second (702.61): while such a spell is on the stack, only passing and
+    // mana abilities are allowed.
+    if (zone(s, 'stack').some((oid) => s.objects[oid]?.printed?.keywords?.includes('Split second')))
+      return actions.filter((a) => a.type === 'pass' || a.mana)
     return actions
   }
 
-  _spellTargets(o) {
-    if (o.behavior.spell?.targets) return o.behavior.spell.targets
+  // The land-play / cast actions one face (`v` = { face, printed, behavior }) of a
+  // hand card offers right now. For single-faced cards `v.face` is null.
+  _handCastActions(pid, o, v, actions, sorcerySpeed) {
+    const s = this.state
+    const { face, printed: p, behavior: b } = v
+    const oid = o.oid
+    const withFace = (a) => (face == null ? a : { ...a, face })
+    if (p.types.includes('Land')) {
+      if (sorcerySpeed && s.players[pid].landsPlayed < this._landsAllowed(pid))
+        actions.push(withFace({ type: 'playLand', oid, label: face == null ? undefined : `Play ${p.name}` }))
+      return
+    }
+    // Instants and cards with flash can be cast any time you have priority.
+    const instantSpeed = p.types.includes('Instant') || p.keywords.includes('Flash')
+    // "As though" permission (rule 118 / 601.3e): Vedalken Orrery lets you cast
+    // any spell as though it had flash — i.e. any time you have priority.
+    const canCastNow = instantSpeed || sorcerySpeed || this._hasPermission(pid, 'castAnySpeed')
+    if (!canCastNow) return
+    const targets = this._spellTargets(o, b)
+    // Untargetability context: this spell's caster + its colors, so hexproof/
+    // shroud/protection exclude illegal would-be targets from the gate.
+    const ctx = { byPid: pid, sourceColors: tags(p) }
+    // A modal spell (rule 700.2) picks `count` of its modes on cast. It's
+    // castable when at least `count` modes have a legal (or no) target.
+    const modal = b.spell?.modal
+    const modes = b.spell?.modes
+    const modeCastable = (m) => !m.targets?.length || m.targets.every((t) => this._legalTargetsExist(t, ctx))
+    const modalOk = !modal || modes.filter(modeCastable).length >= (modal.count || 1)
+    // A targeted spell needs a legal target to be cast (rule 601.2c). This
+    // also gates counters (need a spell on the stack) and Auras (a creature).
+    const targetsOk = modalOk && (!targets.length || targets.every((t) => this._legalTargetsExist(t, ctx)))
+    const addl = b.spell?.additionalCost
+    const addlSacOk = !addl?.sacrifice || this._sacrificeCandidates(pid, addl.sacrifice).length > 0
+    // A discard additional cost (Grab the Prize) needs that many *other* cards
+    // in hand to pay — you can't discard the spell you're casting.
+    const addlDiscOk = !addl?.discard || zone(s, 'hand', pid).filter((h) => h !== oid).length >= addl.discard
+    if (!(targetsOk && addlSacOk && addlDiscOk)) return
+    const xCost = p.manaCost.X || 0
+    // A variadic spell ("N damage divided among one or two targets", "up to
+    // N target…") has a single slot carrying min/max (and maybe divide).
+    const variadic = targets.length === 1 && targets[0].max != null ? targets[0] : null
+    // Delve / convoke (702.66 / 702.51): graveyard cards / untapped creatures
+    // that can help pay.
+    const extra = this._extraSources(pid, p)
+    const base = this._effectiveCost(pid, o, p)
+    const castAction = (kicked) => ({
+      type: 'cast',
+      oid,
+      label: (face == null ? p.name : `Cast ${p.name}`) + (kicked ? ' (kicked)' : ''),
+      targets,
+      needsTargets: variadic ? variadic.min ?? 1 : targets.length,
+      variadic,
+      sacChoose: addl?.sacrifice || null,
+      discChoose: addl?.discard || null,
+      hasX: xCost > 0,
+      maxX: xCost > 0 ? this._maxX(pid, o, xCost, p, extra.length) : 0,
+      kicker: kicked || undefined,
+      // Modal: the renderer picks `count` modes, then targets for each.
+      modal: modal || null,
+      modes: modal ? modes.map((m, i) => ({ index: i, label: m.label, targets: m.targets || [], castable: modeCastable(m) })) : null
+    })
+    if (this._canPay(pid, base, extra)) actions.push(withFace(castAction(false)))
+    // Kicker (702.33): the same spell with its optional additional cost paid.
+    const kicker = b.kicker
+    if (kicker && this._canPay(pid, addCosts(base, parseManaCost(kicker.cost)), extra)) actions.push(withFace(castAction(true)))
+    // Evoke (702.74): an alternative cost; the creature is sacrificed as it enters.
+    if (b.evoke && p.types.includes('Creature') && this._canPay(pid, parseManaCost(b.evoke.cost), extra))
+      actions.push(withFace({ ...castAction(false), evoke: true, label: `${p.name} (evoke)`, hasX: false, maxX: 0 }))
+    // Buyback (702.27): the same spell with its buyback cost paid (returns to hand).
+    if (b.buyback && this._canPay(pid, addCosts(base, parseManaCost(b.buyback.cost)), extra))
+      actions.push(withFace({ ...castAction(false), buyback: true, label: `${p.name} (buyback)` }))
+    // Alternative cost (e.g. Fireblast: sacrifice two Mountains instead of mana).
+    const alt = b.spell?.alternativeCost
+    if (alt?.sacrifice && this._sacrificeCandidates(pid, alt.sacrifice).length >= (alt.sacrifice.count || 1)) {
+      actions.push(
+        withFace({
+          type: 'cast',
+          oid,
+          altCost: true,
+          label: `${p.name} (${alt.label || 'alternative cost'})`,
+          targets,
+          needsTargets: targets.length,
+          sacChoose: null,
+          hasX: false,
+          maxX: 0
+        })
+      )
+    }
+  }
+
+  // Untapped creatures that could crew a vehicle with crew `n` — smallest first —
+  // or [] if their total power falls short. Returns the creatures to tap.
+  _crewCandidates(pid, n) {
+    const cands = objectsIn(this.state, 'battlefield')
+      .filter((o) => o.controller === pid && o.chars.types.includes('Creature') && !o.status.tapped)
+      .sort((a, b) => (a.chars.power || 0) - (b.chars.power || 0))
+    const total = cands.reduce((s, o) => s + (o.chars.power || 0), 0)
+    if (total < n) return []
+    // Tap the smallest creatures that get there (keeping big attackers free).
+    const picked = []
+    let sum = 0
+    for (const o of cands) {
+      if (sum >= n) break
+      picked.push(o)
+      sum += o.chars.power || 0
+    }
+    return picked
+  }
+
+  // Non-mana ways to pay for a spell: delve exiles cards from your graveyard for
+  // generic; convoke taps your untapped creatures for generic or their colour.
+  // Returned in the order auto-payment prefers them (before real mana).
+  _extraSources(pid, printed) {
+    const s = this.state
+    const out = []
+    const kws = printed.keywords || []
+    if (kws.includes('Delve')) for (const oid of zone(s, 'graveyard', pid)) out.push({ oid, colors: [], kind: 'delve' })
+    if (kws.includes('Convoke'))
+      for (const o of objectsIn(s, 'battlefield'))
+        if (o.controller === pid && o.chars.types.includes('Creature') && !o.status.tapped)
+          out.push({ oid: o.oid, colors: [...(o.chars.colors || [])], kind: 'convoke' })
+    return out
+  }
+
+  // Maximum hand size (402.2 / 514.1): seven, modified by statics, or unlimited
+  // ("You have no maximum hand size", Reliquary Tower).
+  _maxHandSize(pid) {
+    let n = 7
+    for (const { source, mod } of this._ruleMods()) {
+      if (source.controller !== pid) continue
+      if (mod.noMaxHandSize) return Infinity
+      if (mod.handSizeMod) n += mod.handSizeMod
+    }
+    return Math.max(0, n)
+  }
+
+  // How many lands `pid` may play this turn: one, plus any "additional land"
+  // permissions (305.2 / Exploration).
+  _landsAllowed(pid) {
+    let n = 1
+    for (const { source, mod } of this._ruleMods()) if (mod.extraLands && source.controller === pid) n += mod.extraLands
+    return n
+  }
+
+  _spellTargets(o, behavior = o.behavior) {
+    if (behavior.spell?.targets) return behavior.spell.targets
     // An Aura targets the permanent it will be attached to as it is cast.
-    if (o.behavior.enchant) return [{ type: o.behavior.enchant.type }]
+    if (behavior.enchant) return [{ type: behavior.enchant.type }]
     return []
   }
 
@@ -1193,8 +1512,11 @@ export class GameEngine {
     // for an ability the source permanent supplies the colors, otherwise the card.
     const actor = s.objects[action.oid]
     if (actor) {
+      // Casting one half of a split card / a face of a modal DFC: the object takes
+      // on that face's characteristics for the cast (709.3a / 712.11b).
+      if (action.face != null && actor.faces) setFace(actor, action.face)
       const chosen = [...(action.targets || []), ...(action.modeTargets || []).flat()]
-      const colors = action.type === 'activate' ? actor.chars?.colors || actor.printed.colors : actor.printed.colors
+      const colors = tags(action.type === 'activate' ? actor.chars || actor.printed : actor.printed)
       this._assertTargetsLegal(chosen, pid, colors)
       // Validate a variadic ("divided" / "up to N") target count + division, and
       // record the division — before any cost is paid.
@@ -1208,14 +1530,57 @@ export class GameEngine {
         s.players[pid].landsPlayed++
         break
       }
+      case 'crew': {
+        const o = s.objects[action.oid]
+        const crew = this._crewCandidates(pid, o.behavior.crew)
+        for (const c of crew) this._setTapped(c, true)
+        this._log(`${this._nameOf(pid)} crews ${this._objName(o)} with ${crew.map((c) => this._objName(c)).join(', ')}`)
+        const aoid = createAbility(s, { controller: pid, sourceOid: o.oid, effect: [{ op: 'becomeCreature', to: 'self' }], targets: [] })
+        zone(s, 'stack').push(aoid.oid)
+        break
+      }
+      case 'unearth': {
+        const o = s.objects[action.oid]
+        this._pay(pid, parseManaCost(o.behavior.unearth.cost))
+        this._log(`${this._nameOf(pid)} unearths ${this._objName(o)}`)
+        const aoid = createAbility(s, { controller: pid, sourceOid: o.oid, effect: [{ op: 'unearthReturn' }], targets: [] })
+        zone(s, 'stack').push(aoid.oid)
+        break
+      }
+      case 'suspend': {
+        const o = s.objects[action.oid]
+        const sus = o.behavior.suspend
+        this._pay(pid, parseManaCost(sus.cost))
+        this._log(`${this._nameOf(pid)} suspends ${this._objName(o)} with ${sus.count} time counter${sus.count > 1 ? 's' : ''}`)
+        moveObject(s, action.oid, 'exile')
+        o.suspended = true
+        o.status.counters.time = sus.count
+        break
+      }
+      case 'cycle': {
+        // Cycling (702.29): an activated ability from hand — pay, discard the card
+        // as the cost, and the "draw a card" ability goes on the stack.
+        const o = s.objects[action.oid]
+        const cyc = o.behavior.cycling
+        if (cyc.life) {
+          s.players[pid].life -= cyc.life
+          this._log(`${this._nameOf(pid)} pays ${cyc.life} life`)
+        }
+        if (cyc.cost) this._pay(pid, parseManaCost(cyc.cost))
+        this._log(`${this._nameOf(pid)} cycles ${this._objName(o)}`)
+        this._discardCard(pid, action.oid)
+        const aoid = createAbility(s, { controller: pid, sourceOid: o.oid, effect: [{ op: 'draw', amount: 1 }], targets: [] })
+        zone(s, 'stack').push(aoid.oid)
+        break
+      }
       case 'tapForMana': {
         // A {T} mana ability (605.3): no stack; the mana goes straight into the
         // pool, where _pay spends it before tapping anything else.
         const o = s.objects[action.oid]
-        const colors = manaAbilityColors(o)
+        const colors = this._manaColorsOf(o)
         const color = colors.length === 1 ? colors[0] : action.color
         if (!colors.includes(color)) throw new Error('choose a color this permanent can produce')
-        o.status.tapped = true
+        this._setTapped(o, true)
         s.players[pid].manaPool[color]++
         break
       }
@@ -1231,8 +1596,12 @@ export class GameEngine {
         } else {
           const xCost = o.printed.manaCost.X || 0
           o.xValue = xCost ? action.x || 0 : 0
-          const cost = this._effectiveCost(pid, o)
-          this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost })
+          // Evoke (702.74) replaces the mana cost entirely.
+          let cost = action.evoke ? parseManaCost(o.behavior.evoke.cost) : this._effectiveCost(pid, o)
+          // Kicker (702.33) / buyback (702.27): optional additional costs.
+          if (action.kicker) cost = addCosts(cost, parseManaCost(o.behavior.kicker.cost))
+          if (action.buyback) cost = addCosts(cost, parseManaCost(o.behavior.buyback.cost))
+          this._pay(pid, { ...cost, generic: (cost.generic || 0) + o.xValue * xCost }, this._extraSources(pid, o.printed))
           // Additional cost: sacrifice a permanent (e.g. Fanatical Offering,
           // Reckoner's Bargain — which then pays off the sacrifice's mana value).
           const addl = o.behavior.spell?.additionalCost
@@ -1250,8 +1619,15 @@ export class GameEngine {
             for (const d of action.discard) if (zone(s, 'hand', pid).includes(d)) this._discardCard(pid, d)
           }
         }
+        const fromCommand = o.zoneName === 'command'
+        const fromHand = o.zoneName === 'hand'
         moveObject(s, action.oid, 'stack') // clears transient status/controller
         o.controller = pid
+        o.kicked = !!action.kicker && !action.altCost // after the move (400.7 reset)
+        o.evoked = !!action.evoke
+        o.buyback = !!action.buyback
+        o.castFromHand = fromHand
+        if (fromCommand) o.commanderCasts = (o.commanderCasts || 0) + 1
         if (o.behavior.spell?.modal) {
           this._applyModalCast(o, action)
         } else {
@@ -1306,8 +1682,8 @@ export class GameEngine {
         const xc = bcost.X || 0
         o.xValue = xc ? action.x || 0 : 0
         this._pay(pid, { ...bcost, X: 0, generic: (bcost.generic || 0) + o.xValue })
-        o.bestowCast = true
         moveObject(s, action.oid, 'stack')
+        o.bestowCast = true // after the move: a zone change clears cast flags (400.7)
         o.controller = pid
         o.targets = action.targets || []
         this._log(`${this._nameOf(pid)} bestows ${this._objName(o)}${this._describeTargets(o.targets)}`)
@@ -1363,7 +1739,8 @@ export class GameEngine {
           controller: pid,
           sourceOid: o.oid,
           effect: ab.effect,
-          targets: action.targets || []
+          targets: action.targets || [],
+          xValue: action._xValue || 0 // X chosen for an {X} activation cost
         })
         zone(s, 'stack').push(aoid.oid)
         this._checkWard(aoid.oid, pid, aoid.targets)
@@ -1447,15 +1824,24 @@ export class GameEngine {
     if (ab.oncePerTurn && (o.status.abilityUsed || []).includes(ab)) return false
     // The ability's source (the permanent `o`) supplies the colors for protection;
     // its controller is `pid`, so hexproof only blocks it against opponents.
-    const actx = { byPid: pid, sourceColors: o.chars?.colors || o.printed.colors }
+    const actx = { byPid: pid, sourceColors: tags(o.chars || o.printed) }
     if (ab.targets?.length && !ab.targets.every((t) => this._legalTargetsExist(t, actx))) return false
     const cost = ab.cost || {}
     if (cost.tap) {
       if (o.status.tapped) return false
       if (o.printed.types.includes('Creature') && !this._canTap(o)) return false
     }
-    if (cost.mana && !this._canPay(pid, parseManaCost(cost.mana))) return false
+    // {Q} (untap symbol, 107.6): the permanent must be tapped, and a creature
+    // must not be summoning sick (302.6).
+    if (cost.untap) {
+      if (!o.status.tapped) return false
+      if (o.printed.types.includes('Creature') && !this._canTap(o)) return false
+    }
+    // A {T} cost means the permanent can't also tap for mana toward this cost.
+    if (cost.mana && !this._canPay(pid, { ...parseManaCost(cost.mana), X: 0 }, [], cost.tap ? o.oid : null)) return false
     if (cost.payLife != null && this.state.players[pid].life <= cost.payLife) return false
+    if (cost.energy && (this.state.players[pid].counters.energy || 0) < cost.energy) return false
+    if (cost.removeCounters && (o.status.counters[cost.removeCounters.counter] || 0) < (cost.removeCounters.amount || 1)) return false
     // A sacrifice cost that isn't 'self' needs a permanent to sacrifice.
     if (cost.sacrifice && cost.sacrifice !== 'self' && this._sacrificeCandidates(pid, cost.sacrifice).length === 0)
       return false
@@ -1473,7 +1859,7 @@ export class GameEngine {
   _sacMatches(o, spec) {
     if (spec.types && !spec.types.some((t) => o.chars.types.includes(t))) return false
     if (spec.type && !o.chars.types.includes(spec.type)) return false
-    if (spec.subtype && !o.chars.subtypes.includes(spec.subtype)) return false
+    if (spec.subtype && !hasSub(o.chars, spec.subtype)) return false
     return true
   }
 
@@ -1485,9 +1871,21 @@ export class GameEngine {
       o.status.loyaltyUsed = true
     }
     const cost = ab.cost || {}
-    if (cost.mana) this._pay(pid, parseManaCost(cost.mana))
-    if (cost.tap) o.status.tapped = true
+    if (cost.mana) {
+      const mc = parseManaCost(cost.mana)
+      const x = mc.X ? action.x || 0 : 0
+      this._pay(pid, { ...mc, X: 0, generic: (mc.generic || 0) + x * (mc.X || 0) }, [], cost.tap ? o.oid : null)
+      action._xValue = x
+    }
+    if (cost.tap) this._setTapped(o, true)
+    if (cost.untap) this._setTapped(o, false)
     if (cost.payLife != null) s.players[pid].life -= cost.payLife
+    if (cost.energy) s.players[pid].counters.energy -= cost.energy
+    if (cost.removeCounters) {
+      const { counter, amount = 1 } = cost.removeCounters
+      o.status.counters[counter] -= amount
+      if (o.status.counters[counter] <= 0) delete o.status.counters[counter]
+    }
     if (cost.sacrifice === 'self') this._sacrifice(o)
     else if (cost.sacrifice && action.sacrifice) {
       const so = s.objects[action.sacrifice]
@@ -1497,6 +1895,7 @@ export class GameEngine {
 
   _resolveTop() {
     const s = this.state
+    recompute(s) // legality checks below read current characteristics
     const stack = zone(s, 'stack')
     const oid = stack[stack.length - 1]
     const o = s.objects[oid]
@@ -1506,6 +1905,11 @@ export class GameEngine {
       // Countered by game rules if every target is now illegal (608.2b).
       if (this._fizzles(o)) {
         this._log(`${this._objName(o)} fizzles (no legal targets)`)
+        return void this._finishResolution()
+      }
+      // Intervening "if" (603.4): if the condition is no longer true, it does nothing.
+      if (o.condition && !this._cond(o.condition, s.objects[o.sourceOid])) {
+        this._log(`${this._objName(o)} does nothing (its condition is no longer true)`)
         return void this._finishResolution()
       }
       this._log(`${this._objName(o)} resolves`)
@@ -1588,6 +1992,7 @@ export class GameEngine {
   // and other continuous effects are NOT copied.
   _applyCopy(o, src) {
     const p = src.printed
+    o.origPrinted ||= o.printed // restored when it leaves the battlefield (400.7)
     o.copyOf = src.printed.name
     o.printed = {
       ...o.printed,
@@ -1684,7 +2089,16 @@ export class GameEngine {
     } else if (o?.zoneName === 'stack') {
       // The spell may already have been removed (e.g. countered). An Omen half is
       // shuffled into its owner's library; flashback/madness spells are exiled.
-      if (o.omenCast) {
+      // Buyback (702.27) returns it to hand; rebound (702.88) exiles it and casts
+      // it again free at the next upkeep.
+      if (o.buyback) {
+        this._log(`${this._objName(o)} returns to hand (buyback)`)
+        moveObject(s, ctx.oid, 'hand')
+      } else if (o.castFromHand && o.printed?.keywords?.includes('Rebound')) {
+        this._log(`${this._objName(o)} is exiled (rebound)`)
+        moveObject(s, ctx.oid, 'exile')
+        s.delayedTriggers.push({ event: 'upkeep', yourTurn: true, controller: o.owner, sourceOid: o.oid, effect: [{ op: 'castFree', oid: o.oid }] })
+      } else if (o.omenCast) {
         moveObject(s, ctx.oid, 'library')
         const lk = zoneKey('library', o.owner)
         s.zones[lk] = s.rng.shuffle(s.zones[lk])
@@ -1705,6 +2119,23 @@ export class GameEngine {
     const done = this._runEffectsFrom(source, effects, index)
     if (done) this._finishResolution()
     if (!this._resume) this._grantPriorityTo(this.state.activePlayer)
+  }
+
+  // Saga (714): add a lore counter and trigger the matching chapter.
+  _addLore(o) {
+    const saga = o.behavior.saga
+    const n = (o.status.counters.lore = (o.status.counters.lore || 0) + 1)
+    const chapter = saga.chapters[n - 1]
+    if (!chapter) return
+    this._log(`${this._objName(o)} — chapter ${['I', 'II', 'III', 'IV', 'V'][n - 1] || n}`)
+    this.state.pendingTriggers.push({
+      controller: o.controller,
+      sourceOid: o.oid,
+      subjectOid: o.oid,
+      effect: chapter.effect || chapter,
+      targetSpec: chapter.targets || [],
+      chapter: n
+    })
   }
 
   // Create one token from a token definition and put it onto the battlefield.
@@ -1736,7 +2167,22 @@ export class GameEngine {
     o.controller = controller
     o.timestamp = ++this.state.tsCounter // for layer ordering (rule 613.7)
     if (o.printed.types.includes('Creature')) o.status.summoningSick = true
-    if (o.behavior?.entersTapped) o.status.tapped = true
+    // "Enters tapped" — possibly "unless …" (Seachrome Coast: unless you control
+    // two or fewer other lands).
+    const et = o.behavior?.entersTapped
+    if (et === true || (et && et.unless && !this._cond(et.unless, o))) o.status.tapped = true
+    // Evoke (702.74b): sacrificed on entering (a triggered ability).
+    if (o.evoked)
+      this.state.pendingTriggers.push({ controller, sourceOid: o.oid, subjectOid: o.oid, effect: [{ op: 'sacrificeSelf' }], targetSpec: [] })
+    // Echo (702.30): due at the controller's next upkeep.
+    if (o.behavior?.echo) o.echoDue = true
+    // Suspend (702.62c): a creature cast this way has haste for as long as it stays.
+    if (o.suspendHaste) {
+      o.suspendHaste = false
+      this.state.continuous.push({ timestamp: ++this.state.tsCounter, targets: [o.oid], grantKeywords: ['Haste'], duration: 'permanent', owner: controller })
+    }
+    // Saga (714.2a): enters with a lore counter; chapter I triggers.
+    if (o.behavior?.saga) this._addLore(o)
     // Replacement effect: "enters with N counters" (applied before SBAs, so a
     // 0/0 that enters with +1/+1 counters survives).
     const ew = o.behavior?.entersWith
@@ -1831,7 +2277,8 @@ export class GameEngine {
         return true
       }
       case 'optionalPay': {
-        // "You may pay {cost}. If you do, <effect>." (e.g. Nihil Spellbomb.)
+        // "You may pay {cost}. If you do, <effect>." (e.g. Nihil Spellbomb.) With
+        // `elseEffect`: "…unless you pay" (echo: sacrifice).
         const pid = source.controller
         s.pending = {
           kind: 'mayPay',
@@ -1839,8 +2286,27 @@ export class GameEngine {
           cost: e.cost,
           canPay: this._canPay(pid, parseManaCost(e.cost)),
           _source: source,
-          _effect: e.effect
+          _effect: e.effect || [],
+          _else: e.elseEffect || null
         }
+        return true
+      }
+      case 'eachOpponentSacrifices':
+      case 'targetPlayerSacrifices': {
+        // Edict effects: the affected player(s) choose what to sacrifice.
+        const queue =
+          e.op === 'eachOpponentSacrifices'
+            ? this._opponentsOf(source.controller)
+            : [this._resolvePlayerRef(source, e.to || 'target0')]
+        return this._nextSacrificeChoice(queue, e.filter || { types: ['Creature'] }, e.count || 1)
+      }
+      case 'castFree': {
+        // Cast a specific exiled card without paying its mana cost (rebound,
+        // suspend). A declined card stays in exile.
+        const c = s.objects[e.oid]
+        if (!c || c.zoneName !== 'exile') return false
+        s.pendingMadness.push({ pid: c.owner, oid: e.oid, cost: null, free: true, keep: true, haste: !!e.haste })
+        this._processMadness(() => this._resumeResolution())
         return true
       }
       case 'wardTax': {
@@ -1860,6 +2326,37 @@ export class GameEngine {
           wardName: e.wardName,
           _targetObj: e.targetObj
         }
+        return true
+      }
+      case 'cascade': {
+        // Cascade (702.85): exile from the top until a nonland card with lesser
+        // mana value; offer to cast it free; the rest go to the bottom at random.
+        const pid = source.controller
+        const spell = s.objects[source.sourceOid]
+        const mv = spell?.printed?.manaValue ?? 0
+        const lib = zone(s, 'library', pid)
+        const exiled = []
+        let found = null
+        while (lib.length) {
+          const oid = lib[0]
+          moveObject(s, oid, 'exile')
+          const c = s.objects[oid]
+          if (!c.printed.types.includes('Land') && c.printed.manaValue < mv) {
+            found = oid
+            break
+          }
+          exiled.push(oid)
+        }
+        this._log(`${this._nameOf(pid)} cascades${found ? ` into ${this._objName(s.objects[found])}` : ' into nothing'}`)
+        const toBottom = () => {
+          for (const oid of s.rng.shuffle(exiled)) if (s.objects[oid].zoneName === 'exile') moveObject(s, oid, 'library')
+        }
+        if (!found) {
+          toBottom()
+          return false
+        }
+        s.pendingMadness.push({ pid, oid: found, cost: null, free: true, after: toBottom })
+        this._processMadness(() => this._resumeResolution())
         return true
       }
       case 'eachOpponentDiscards': {
@@ -1889,11 +2386,13 @@ export class GameEngine {
         // Choose a matching card from any graveyard and return it to its owner's hand.
         const pid = source.controller
         const cards = []
-        for (const p of s.players)
+        for (const p of s.players) {
+          if (e.own && p.id !== pid) continue // "from your graveyard"
           for (const oid of zone(s, 'graveyard', p.id))
             if (this._matchCardFilter(s.objects[oid], e.filter)) cards.push(oid)
+        }
         if (cards.length === 0) return false
-        s.pending = { kind: 'search', player: pid, cards, to: 'hand', tapped: false, optional: e.optional === true, shuffle: false }
+        s.pending = { kind: 'search', player: pid, cards, to: e.to || 'hand', tapped: !!e.tapped, optional: e.optional === true, shuffle: false }
         return true
       }
       case 'explore': {
@@ -1923,7 +2422,32 @@ export class GameEngine {
   _runEffects(source, effects) {
     const s = this.state
     for (const e of effects || []) {
+      // A conditional part of an effect ("if this spell was kicked, …").
+      if (e.if && !this._cond(e.if, source.kind === 'ability' ? s.objects[source.sourceOid] : source)) continue
       switch (e.op) {
+        case 'pumpEach': {
+          // "Creatures you control get +N/+N [and gain …] until end of turn" — the
+          // affected set is locked in as the effect is created (611.2c).
+          const f = e.filter || { type: 'Creature', controller: 'you' }
+          const targets = objectsIn(s, 'battlefield')
+            .filter(
+              (o) =>
+                (f.controller !== 'you' || o.controller === source.controller) &&
+                (f.controller !== 'opponent' || o.controller !== source.controller) &&
+                (!f.type || o.chars.types.includes(f.type)) &&
+                (!f.subtype || hasSub(o.chars, f.subtype))
+            )
+            .map((o) => o.oid)
+          s.continuous.push({
+            timestamp: ++s.tsCounter,
+            targets,
+            modifyPT: e.power || e.toughness ? { power: this._amount(source, e.power) || 0, toughness: this._amount(source, e.toughness) || 0 } : undefined,
+            grantKeywords: e.keywords ? [...e.keywords] : undefined,
+            duration: e.duration || 'eot',
+            owner: source.controller
+          })
+          break
+        }
         case 'dealDamage': {
           const t = this._resolveTargetRef(source, e.to)
           if (!t) break
@@ -1965,7 +2489,7 @@ export class GameEngine {
           let tref = null
           if (t?.kind === 'player') tref = { player: t.pid }
           else if (t?.kind === 'object') tref = { oid: t.obj.oid }
-          if (tref) s.replacements.push({ event: 'damage', target: tref, remaining: n, duration: 'eot' })
+          if (tref) s.replacements.push({ event: 'damage', target: tref, remaining: n, duration: e.duration || 'eot', owner: source.controller })
           break
         }
         case 'dealDamageEach': {
@@ -1994,14 +2518,56 @@ export class GameEngine {
           if (o && o.zoneName === 'graveyard') {
             moveObject(s, o.oid, 'battlefield')
             this._enterBattlefield(o, o.owner)
-            o.status.tapped = true
+            this._setTapped(o, true)
           }
           break
         }
-        case 'loseLife':
-          s.players[source.controller].life -= e.amount
-          this._log(`${this._nameOf(source.controller)} loses ${e.amount} life (${s.players[source.controller].life})`)
+        case 'loseLife': {
+          const pid = e.to ? this._resolvePlayerRef(source, e.to) : source.controller
+          this._loseLife(pid, this._amount(source, e.amount))
+          this._log(`${this._nameOf(pid)} loses ${this._amount(source, e.amount)} life (${s.players[pid].life})`)
           break
+        }
+        case 'eachOpponentLosesLife':
+          for (const opp of this._opponentsOf(source.controller)) {
+            this._loseLife(opp, e.amount)
+            this._log(`${this._nameOf(opp)} loses ${e.amount} life (${s.players[opp].life})`)
+          }
+          break
+        case 'addPlayerCounter': {
+          // Counters on players: poison ('eachOpponent'), energy/experience ('controller').
+          const kind = e.counter || 'energy'
+          const n = this._amount(source, e.amount ?? 1)
+          if (e.to === 'eachOpponent') for (const opp of this._opponentsOf(source.controller)) this._addPlayerCounter(opp, kind, n)
+          else this._addPlayerCounter(this._resolvePlayerRef(source, e.to || 'controller'), kind, n)
+          break
+        }
+        case 'proliferate': {
+          // Proliferate (701.27), resolved the way its controller always wants:
+          // one more of each counter on every permanent they control that has
+          // any, on themselves, and poison on each opponent who has poison.
+          const me = source.controller
+          for (const o of objectsIn(s, 'battlefield'))
+            if (o.controller === me)
+              for (const k of Object.keys(o.status.counters)) if (o.status.counters[k] > 0) o.status.counters[k]++
+          for (const p of s.players) {
+            if (p.hasLost) continue
+            if (p.id === me) for (const k of Object.keys(p.counters)) if (p.counters[k] > 0 && k !== 'poison') p.counters[k]++
+            if (p.id !== me && p.counters.poison > 0) p.counters.poison++
+          }
+          this._log(`${this._nameOf(me)} proliferates`)
+          break
+        }
+        case 'mill': {
+          // Mill (701.13b): the top N cards of a library go to its graveyard.
+          const pid = this._resolvePlayerRef(source, e.to || 'controller')
+          const n = this._amount(source, e.amount ?? 1)
+          const lib = zone(s, 'library', pid)
+          const milled = lib.slice(0, n)
+          for (const oid of milled) this._relocate(s.objects[oid], 'graveyard')
+          this._log(`${this._nameOf(pid)} mills ${milled.length} card${milled.length === 1 ? '' : 's'}`)
+          break
+        }
         case 'destroy': {
           const t = this._resolveTargetRef(source, e.to)
           if (t?.kind === 'object' && t.obj.zoneName === 'battlefield' && !this._hasKW(t.obj, 'Indestructible'))
@@ -2028,7 +2594,7 @@ export class GameEngine {
           for (const o of objectsIn(s, 'battlefield')) {
             if (n <= 0) break
             if (o.controller === source.controller && o.chars.types.includes('Land') && o.status.tapped) {
-              o.status.tapped = false
+              this._setTapped(o, false)
               n--
             }
           }
@@ -2044,7 +2610,8 @@ export class GameEngine {
               targets: [t.obj.oid],
               setColors: [...e.colors],
               grantKeywords: e.keywords ? [...e.keywords] : undefined,
-              duration: e.duration || 'eot'
+              duration: e.duration || 'eot',
+              owner: source.controller
             })
           break
         }
@@ -2054,13 +2621,13 @@ export class GameEngine {
           for (const o of objectsIn(s, 'battlefield')) {
             if (e.who === 'opponents' && o.controller === source.controller) continue
             if (e.filter?.type === 'creature' && !o.chars.types.includes('Creature')) continue
-            o.status.tapped = true
+            this._setTapped(o, true)
           }
           break
         }
         case 'tap': {
           const t = this._resolveTargetRef(source, e.to)
-          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield') t.obj.status.tapped = true
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield') this._setTapped(t.obj, true)
           break
         }
         case 'addCounter': {
@@ -2092,8 +2659,9 @@ export class GameEngine {
             s.continuous.push({
               timestamp: ++s.tsCounter,
               targets: [t.obj.oid],
-              modifyPT: { power: e.power || 0, toughness: e.toughness || 0 },
-              duration: e.duration || 'eot'
+              modifyPT: { power: this._amount(source, e.power) || 0, toughness: this._amount(source, e.toughness) || 0 },
+              duration: e.duration || 'eot',
+              owner: source.controller
             })
           break
         }
@@ -2104,12 +2672,13 @@ export class GameEngine {
               timestamp: ++s.tsCounter,
               targets: [t.obj.oid],
               grantKeywords: [e.keyword],
-              duration: e.duration || 'eot'
+              duration: e.duration || 'eot',
+              owner: source.controller
             })
           break
         }
         case 'preventAllCombat':
-          s.prevent.push({ type: 'allCombat', duration: e.duration || 'eot' })
+          s.prevent.push({ type: 'allCombat', duration: e.duration || 'eot', owner: source.controller })
           break
         case 'sacrificeSelf': {
           // The source permanent sacrifices itself (Ball Lightning's end-step trigger).
@@ -2129,13 +2698,14 @@ export class GameEngine {
               control: source.controller,
               prev: o.controller,
               targets: [o.oid],
-              duration: dur
+              duration: dur,
+              owner: source.controller
             })
             o.controller = source.controller
             o.status.summoningSick = true // not under your control since your turn began
-            if (e.untap) o.status.tapped = false
+            if (e.untap) this._setTapped(o, false)
             if (e.haste)
-              s.continuous.push({ timestamp: ++s.tsCounter, grantKeywords: ['Haste'], targets: [o.oid], duration: dur })
+              s.continuous.push({ timestamp: ++s.tsCounter, grantKeywords: ['Haste'], targets: [o.oid], duration: dur, owner: source.controller })
           }
           break
         }
@@ -2187,7 +2757,7 @@ export class GameEngine {
           // Relentless Assault: untap all creatures that attacked this turn, then
           // schedule an additional combat + main phase after the current main.
           for (const o of objectsIn(s, 'battlefield'))
-            if (o.controller === source.controller && o.status.attackedThisTurn) o.status.tapped = false
+            if (o.controller === source.controller && o.status.attackedThisTurn) this._setTapped(o, false)
           s.extraCombats = (s.extraCombats || 0) + 1
           break
         }
@@ -2274,6 +2844,78 @@ export class GameEngine {
           if (t?.kind === 'player') for (const oid of [...zone(s, 'graveyard', t.pid)]) moveObject(s, oid, 'exile')
           break
         }
+        case 'becomeCreature': {
+          // A crewed Vehicle is an artifact creature until end of turn (702.122).
+          const t = this._resolveTargetRef(source, e.to || 'self')
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield')
+            s.continuous.push({ timestamp: ++s.tsCounter, targets: [t.obj.oid], addTypes: ['Creature'], duration: e.duration || 'eot', owner: source.controller })
+          break
+        }
+        case 'unearthReturn': {
+          // Unearth (702.84): back to the battlefield; exiled at the next end step.
+          const o = s.objects[source.sourceOid]
+          if (o && o.zoneName === 'graveyard') {
+            moveObject(s, o.oid, 'battlefield')
+            o.unearthed = true
+            this._enterBattlefield(o, source.controller)
+            s.continuous.push({ timestamp: ++s.tsCounter, targets: [o.oid], grantKeywords: ['Haste'], duration: 'permanent', owner: source.controller })
+            s.delayedTriggers.push({ event: 'endStep', controller: source.controller, effect: [{ op: 'exileIfUnearthed', oid: o.oid }] })
+          }
+          break
+        }
+        case 'exileIfUnearthed': {
+          const o = s.objects[e.oid]
+          if (o && o.zoneName === 'battlefield' && o.unearthed) this._relocate(o, 'exile')
+          break
+        }
+        case 'fight': {
+          // Fight (701.12): each deals damage equal to its power to the other —
+          // only if both are still creatures on the battlefield.
+          const a = this._resolveTargetRef(source, e.a || 'target0')
+          const b = this._resolveTargetRef(source, e.b || 'target1')
+          const ok = (t) => t?.kind === 'object' && t.obj.zoneName === 'battlefield' && t.obj.chars.types.includes('Creature')
+          if (ok(a) && ok(b)) {
+            this._log(`${this._objName(a.obj)} fights ${this._objName(b.obj)}`)
+            this._dealDamage(a.obj, { obj: b.obj }, a.obj.chars.power || 0)
+            this._dealDamage(b.obj, { obj: a.obj }, b.obj.chars.power || 0)
+          }
+          break
+        }
+        case 'returnSelfWithCounter': {
+          // Undying / persist (702.93 / 702.79): back from the graveyard with a counter.
+          const o = s.objects[source.sourceOid]
+          if (o && o.zoneName === 'graveyard') {
+            moveObject(s, o.oid, 'battlefield')
+            this._enterBattlefield(o, o.owner)
+            o.status.counters[e.counter] = (o.status.counters[e.counter] || 0) + 1
+            this._log(`${this._objName(o)} returns to the battlefield with a ${e.counter} counter`)
+          }
+          break
+        }
+        case 'createEmblem': {
+          // An emblem (114): an object in the command zone carrying static (and
+          // triggered) abilities for its owner. It can't leave the game.
+          const em = createObject(s, { name: e.name || 'Emblem', type_line: 'Emblem', colors: [] }, source.controller)
+          em.kind = 'emblem'
+          em.behavior = { ...em.behavior, static: e.static || [], triggered: e.triggered || [], staticRules: e.staticRules || [] }
+          em.zoneName = 'command'
+          em.timestamp = ++s.tsCounter
+          s.zones.command.push(em.oid)
+          this._log(`${this._nameOf(source.controller)} gets an emblem`)
+          break
+        }
+        case 'transform': {
+          // Transform (701.28): a double-faced permanent turns to its other face.
+          const t = this._resolveTargetRef(source, e.to || 'self')
+          const o = t?.kind === 'object' ? t.obj : null
+          if (o && o.zoneName === 'battlefield' && o.faces && o.layout === 'transform') {
+            setFace(o, o.face ? 0 : 1)
+            recompute(s)
+            this._log(`${this._objName(o)} transforms`)
+            this._fireTriggers('transforms', o)
+          }
+          break
+        }
         default:
           throw new Error(`unknown effect op ${e.op}`)
       }
@@ -2298,6 +2940,7 @@ export class GameEngine {
     if (filter.type && !p.types.includes(filter.type)) return false
     if (filter.types && !filter.types.some((t) => p.types.includes(t))) return false
     if (filter.subtype && !p.subtypes.includes(filter.subtype)) return false
+    if (filter.maxMV != null && p.manaValue > filter.maxMV) return false
     return true
   }
 
@@ -2305,8 +2948,36 @@ export class GameEngine {
     if (answer?.pay && pending.canPay) {
       this._pay(pending.player, parseManaCost(pending.cost))
       this._runEffects(pending._source, pending._effect)
+    } else if (pending._else) {
+      this._runEffects(pending._source, pending._else) // "…unless you pay": the penalty
     }
     this._resumeResolution()
+  }
+
+  // A player chooses permanent(s) of theirs to sacrifice (an Edict effect).
+  _applySacrificeChoice(pending, answer) {
+    const s = this.state
+    const picks = Array.isArray(answer?.sacrifice) ? answer.sacrifice : []
+    if (picks.length !== pending.count || picks.some((oid) => !pending.choices.includes(oid)) || new Set(picks).size !== picks.length)
+      throw new Error(`choose ${pending.count} permanent(s) to sacrifice`)
+    for (const oid of picks) if (s.objects[oid]?.zoneName === 'battlefield') this._sacrifice(s.objects[oid])
+    if (!this._nextSacrificeChoice(pending._queue, pending._filter, pending.count)) this._resumeResolution()
+  }
+
+  // Present the next player in `queue` who has something to sacrifice. Returns
+  // true if a decision was set up.
+  _nextSacrificeChoice(queue, filter, count) {
+    const s = this.state
+    while (queue?.length) {
+      const pid = queue.shift()
+      const choices = objectsIn(s, 'battlefield')
+        .filter((o) => o.controller === pid && this._sacMatches(o, filter || {}))
+        .map((o) => o.oid)
+      if (!choices.length) continue
+      s.pending = { kind: 'sacrificeChoice', player: pid, choices, count: Math.min(count, choices.length), _queue: queue, _filter: filter }
+      return true
+    }
+    return false
   }
 
   // Ward: the targeter either pays the cost (and their spell/ability survives) or
@@ -2328,18 +2999,16 @@ export class GameEngine {
     const pid = pending.player
     const pick = answer?.pick
     if (pick && pending.cards.includes(pick)) {
+      const o = s.objects[pick]
       if (pending.to === 'battlefield') {
-        const lib = s.zones[zoneKey('library', pid)]
-        const i = lib.indexOf(pick)
-        if (i >= 0) lib.splice(i, 1)
-        const o = s.objects[pick]
-        o.zoneName = 'battlefield'
-        s.zones.battlefield.push(o.oid)
+        // From wherever it is (library search, graveyard return) onto the battlefield.
+        moveObject(s, pick, 'battlefield')
         this._enterBattlefield(o, pid)
         if (pending.tapped) o.status.tapped = true
       } else {
         moveObject(s, pick, pending.to)
       }
+      this._log(`${this._nameOf(pid)} puts ${pending.to === 'hand' ? 'a card' : this._objName(o)} ${pending.to === 'hand' ? 'into their hand' : 'onto the battlefield'}`)
     }
     if (pending.shuffle) s.zones[zoneKey('library', pid)] = s.rng.shuffle(s.zones[zoneKey('library', pid)])
     this._resumeResolution()
@@ -2361,6 +3030,11 @@ export class GameEngine {
     const idx = Number(ref.slice('target'.length))
     const t = source.targets?.[idx]
     if (!t) return null
+    // 608.2b: a target that became illegal (left the battlefield, gained hexproof
+    // in response, …) is not affected, even though the rest of the spell resolves.
+    const src = source.kind === 'ability' ? this.state.objects[source.sourceOid] : source
+    const colors = tags(source.kind === 'ability' ? src?.chars : source.printed)
+    if (!this._targetStillLegal(source.controller, colors, t)) return null
     if (t.kind === 'player') return { kind: 'player', pid: t.pid }
     return { kind: 'object', obj: this.state.objects[t.oid] }
   }
@@ -2369,12 +3043,20 @@ export class GameEngine {
 
   // Untapped sources the player can tap for one mana each, with the colors each
   // can produce (dual/any lands produce more than one).
+  // The colours a permanent can tap for. A permanent that has lost all its
+  // abilities keeps only the intrinsic mana ability of its basic land types
+  // (305.6 — a Blood Moon'd land still taps for {R}).
+  _manaColorsOf(o) {
+    if (!o.chars?.lostAbilities) return manaAbilityColors(o)
+    return [...new Set((o.chars.subtypes || []).map((st) => BASIC_LAND_MANA[st]).filter(Boolean))]
+  }
+
   _manaSources(pid) {
     const s = this.state
     const out = []
     for (const o of objectsIn(s, 'battlefield')) {
       if (o.controller !== pid || o.status.tapped) continue
-      const colors = manaAbilityColors(o)
+      const colors = this._manaColorsOf(o)
       if (!colors.length) continue
       // creatures with a {T} mana ability need no summoning sickness (haste ok)
       if (o.printed.types.includes('Creature') && !this._canTap(o)) continue
@@ -2387,7 +3069,7 @@ export class GameEngine {
   // pips, then hybrid, then generic), then by tapping `sources` — colored pips
   // from the most-constrained matching source first, generic from whatever's
   // left. Returns { spend: {W..C}, tap: [oid] }, or null if unpayable.
-  _planPayment(cost, sources, pool = null) {
+  _planPayment(cost, sources, pool = null, life = null) {
     const COLORS = ['W', 'U', 'B', 'R', 'G', 'C']
     const spend = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }
     const have = { ...spend, ...(pool || {}) }
@@ -2430,6 +3112,13 @@ export class GameEngine {
       }
     }
     // Hybrid pips: each payable by a source producing any of its options.
+    const takeColor = (c) => {
+      const cands = avail.filter((s) => s.colors.includes(c)).sort((a, b) => a.colors.length - b.colors.length)
+      if (!cands.length) return false
+      avail.splice(avail.indexOf(cands[0]), 1)
+      chosen.push(cands[0].oid)
+      return true
+    }
     for (const options of hybrid) {
       const cands = avail
         .filter((s) => options.some((c) => s.colors.includes(c)))
@@ -2439,9 +3128,26 @@ export class GameEngine {
       avail.splice(avail.indexOf(src), 1)
       chosen.push(src.oid)
     }
+    // Phyrexian pips (107.4f): the colour's mana if we have it, else 2 life —
+    // which needs a life total of at least that much (119.4).
+    let lifeCost = 0
+    for (const c of cost.phyrexian || []) {
+      if (have[c] > 0) {
+        have[c]--
+        spend[c]++
+      } else if (!takeColor(c)) lifeCost += 2
+    }
+    if (lifeCost > 0 && (life == null || life < lifeCost)) return null
+    // Two-brid pips (107.4e): the colour if available, else two generic.
+    for (const c of cost.twobrid || []) {
+      if (have[c] > 0) {
+        have[c]--
+        spend[c]++
+      } else if (!takeColor(c)) generic += 2
+    }
     if (avail.length < generic) return null
     for (let i = 0; i < generic; i++) chosen.push(avail[i].oid)
-    return { spend, tap: chosen }
+    return { spend, tap: chosen, life: lifeCost }
   }
 
   // Mana available to `pid` right now: floating in the pool + one per untapped source.
@@ -2451,9 +3157,10 @@ export class GameEngine {
   }
 
   // The mana cost to cast `o`, after cost reductions (affinity for artifacts).
-  _effectiveCost(pid, o) {
-    const cost = { ...o.printed.manaCost }
-    if (o.behavior?.affinity === 'artifact') {
+  _effectiveCost(pid, o, printed = o.printed) {
+    const cost = { ...printed.manaCost }
+    const behavior = printed === o.printed ? o.behavior : loadBehavior(printed)
+    if (behavior?.affinity === 'artifact') {
       const artifacts = objectsIn(this.state, 'battlefield').filter(
         (x) => x.controller === pid && x.chars.types.includes('Artifact')
       ).length
@@ -2464,10 +3171,12 @@ export class GameEngine {
     // and generic is clamped at 0 — a reduction never touches colored pips.
     let delta = 0
     for (const { source, mod } of this._ruleMods()) {
-      if (mod.costMod && this._spellMatchesFilter(pid, o, mod.costMod.spell, source))
+      if (mod.costMod && this._spellMatchesFilter(pid, printed, mod.costMod.spell, source))
         delta += mod.costMod.generic
     }
     if (delta) cost.generic = Math.max(0, (cost.generic || 0) + delta)
+    // Commander tax (903.8): {2} more for each previous cast from the command zone.
+    if (o.isCommander && o.zoneName === 'command') cost.generic = (cost.generic || 0) + 2 * (o.commanderCasts || 0)
     return cost
   }
 
@@ -2477,19 +3186,20 @@ export class GameEngine {
   // battlefield removes the effect automatically.
   _ruleMods() {
     const out = []
-    for (const src of objectsIn(this.state, 'battlefield'))
+    for (const src of [...objectsIn(this.state, 'battlefield'), ...this._emblems().map((oid) => this.state.objects[oid])]) {
+      if (src.chars?.lostAbilities) continue
       for (const mod of src.behavior?.staticRules || []) out.push({ source: src, mod })
+    }
     return out
   }
 
   // Does a cost-modifier's spell filter match spell `o` cast by `pid`? `o` may be
   // a hand/graveyard card not yet on the stack, so match on printed characteristics.
-  _spellMatchesFilter(pid, o, f, source) {
+  _spellMatchesFilter(pid, p, f, source) {
     if (!f) return true
-    const p = o.printed
     if (f.controller === 'you' && pid !== source.controller) return false
     if (f.controller === 'opponent' && pid === source.controller) return false
-    if (f.subtype && !p.subtypes.includes(f.subtype)) return false
+    if (f.subtype && !hasSub(p, f.subtype)) return false
     if (f.type && !p.types.includes(f.type)) return false
     if (f.noncreature && p.types.includes('Creature')) return false
     return true
@@ -2505,24 +3215,22 @@ export class GameEngine {
 
   // Does `pid` control a permanent that keeps them from losing (Platinum Angel)?
   _cantLose(pid) {
-    return objectsIn(this.state, 'battlefield').some((o) => o.controller === pid && o.behavior?.cantLose)
+    return objectsIn(this.state, 'battlefield').some((o) => o.controller === pid && this._ability(o, 'cantLose'))
   }
 
   // Does `pid` control a permanent granting a named "as though" permission (rule
   // 118 / 609.4) — e.g. Vedalken Orrery's 'castAnySpeed'?
   _hasPermission(pid, key) {
     return objectsIn(this.state, 'battlefield').some(
-      (o) => o.controller === pid && o.behavior?.permissions?.includes(key)
+      (o) => o.controller === pid && this._ability(o, 'permissions')?.includes(key)
     )
   }
 
   // Largest X affordable for an X spell given current mana (X is generic).
-  _maxX(pid, o, xCost) {
-    const base = this._effectiveCost(pid, o)
-    const sources = this._manaAvailable(pid)
-    const baseMv =
-      (base.generic || 0) + base.W + base.U + base.B + base.R + base.G + base.C + (base.hybrid?.length || 0)
-    return Math.max(0, Math.floor((sources - baseMv) / xCost))
+  _maxX(pid, o, xCost, printed = o.printed, extraSources = 0) {
+    const base = this._effectiveCost(pid, o, printed)
+    const sources = this._manaAvailable(pid) + extraSources
+    return Math.max(0, Math.floor((sources - manaValue(base)) / xCost))
   }
 
   // Resolve a numeric effect value that may be 'X' (the source's chosen X) or
@@ -2530,7 +3238,51 @@ export class GameEngine {
   _amount(source, v) {
     if (v === 'X') return source?.xValue || 0
     if (v === 'sacrificedMV') return source?._sacrificedMV || 0
+    // "for each …": a count of battlefield permanents matching a filter
+    // (controlled by you unless `controller: 'any'`; `another` excludes the
+    // source; `attacking` only creatures currently attacking).
+    if (v && typeof v === 'object' && v.count === 'opponents') return this._opponentsOf(source.controller).length
+    if (v && typeof v === 'object' && v.count) {
+      const f = v.count
+      const selfOid = source?.sourceOid ?? source?.oid
+      return objectsIn(this.state, 'battlefield').filter(
+        (o) =>
+          (f.controller === 'any' || o.controller === source.controller) &&
+          (!f.another || o.oid !== selfOid) &&
+          (!f.attacking || o.status.attacking) &&
+          (!f.type || o.chars.types.includes(f.type)) &&
+          (!f.subtype || hasSub(o.chars, f.subtype))
+      ).length
+    }
     return v
+  }
+
+  // Condition vocabulary for intervening-if triggers (603.4) and conditional
+  // effects. `w` is the source permanent. Ranges are { min, max, eq }.
+  _cond(cond, w) {
+    if (!cond) return true
+    const s = this.state
+    const pid = w?.controller ?? 0
+    const inRange = (v, r) => (r.min == null || v >= r.min) && (r.max == null || v <= r.max) && (r.eq == null || v === r.eq)
+    if (cond.kicked != null) return !!w?.kicked === cond.kicked
+    if (cond.controls) {
+      const f = cond.controls
+      const n = objectsIn(s, 'battlefield').filter(
+        (o) =>
+          o.controller === pid &&
+          (!f.another || o.oid !== w?.oid) &&
+          (!f.type || o.chars.types.includes(f.type)) &&
+          (!f.subtype || hasSub(o.chars, f.subtype))
+      ).length
+      return inRange(n, f)
+    }
+    if (cond.life) return inRange(s.players[pid].life, cond.life)
+    if (cond.opponentLife) return this._opponentsOf(pid).some((o) => inRange(s.players[o].life, cond.opponentLife))
+    if (cond.handSize) return inRange(zone(s, 'hand', pid).length, cond.handSize)
+    if (cond.graveyard) return inRange(zone(s, 'graveyard', pid).length, cond.graveyard)
+    if (cond.spellsCastThisTurn) return inRange(s.spellsCastThisTurn || 0, cond.spellsCastThisTurn)
+    if (cond.counters) return inRange(w?.status?.counters?.[cond.counters.counter] || 0, cond.counters)
+    return true
   }
 
   // Number of artifacts a player controls (affinity / metalcraft).
@@ -2540,16 +3292,33 @@ export class GameEngine {
     ).length
   }
 
-  _canPay(pid, cost) {
-    return this._planPayment(cost, this._manaSources(pid), this.state.players[pid].manaPool) != null
+  // `extra`: delve/convoke sources; `exclude`: a source that can't help pay
+  // (a permanent tapping itself as part of the same cost).
+  _canPay(pid, cost, extra = [], exclude = null) {
+    const p = this.state.players[pid]
+    const sources = this._manaSources(pid).filter((x) => x.oid !== exclude)
+    return this._planPayment(cost, [...extra, ...sources], p.manaPool, p.life) != null
   }
 
-  _pay(pid, cost) {
-    const p = this.state.players[pid]
-    const plan = this._planPayment(cost, this._manaSources(pid), p.manaPool)
+  _pay(pid, cost, extra = [], exclude = null) {
+    const s = this.state
+    const p = s.players[pid]
+    const sources = this._manaSources(pid).filter((x) => x.oid !== exclude)
+    const plan = this._planPayment(cost, [...extra, ...sources], p.manaPool, p.life)
     if (!plan) throw new Error('cannot pay cost')
     for (const c of Object.keys(plan.spend)) p.manaPool[c] -= plan.spend[c]
-    for (const oid of plan.tap) this.state.objects[oid].status.tapped = true
+    const kindOf = new Map(extra.map((x) => [x.oid, x.kind]))
+    for (const oid of plan.tap) {
+      const kind = kindOf.get(oid)
+      if (kind === 'delve') {
+        this._log(`${p.name} exiles ${this._objName(s.objects[oid])} from their graveyard (delve)`)
+        moveObject(s, oid, 'exile')
+      } else this._setTapped(s.objects[oid], true) // mana sources and convoked creatures
+    }
+    if (plan.life) {
+      p.life -= plan.life
+      this._log(`${p.name} pays ${plan.life} life (${p.life})`)
+    }
   }
 
   _emptyManaPools() {
@@ -2593,7 +3362,7 @@ export class GameEngine {
       o.status.attacking = true
       o.status.attackedThisTurn = true // for "untap all creatures that attacked"
       o.status.attackingTarget = defender || { player: def }
-      if (!this._hasKW(o, 'Vigilance')) o.status.tapped = true
+      if (!this._hasKW(o, 'Vigilance')) this._setTapped(o, true)
       this._fireTriggers('attacks', o)
     }
     s.combat.attackers = entries.map((e) => e.oid)
@@ -2602,6 +3371,19 @@ export class GameEngine {
       this._gotoStep('main2')
       return
     }
+    // Exalted (702.83): a creature attacking alone gets +1/+1 for each instance
+    // of exalted among permanents its controller controls.
+    if (entries.length === 1)
+      for (const w of objectsIn(s, 'battlefield'))
+        if (w.controller === s.activePlayer && this._hasKW(w, 'Exalted'))
+          s.pendingTriggers.push({
+            controller: w.controller,
+            sourceOid: w.oid,
+            subjectOid: entries[0].oid,
+            effect: [{ op: 'pump', to: 'target0', power: 1, toughness: 1 }],
+            targetSpec: [],
+            targets: [{ kind: 'object', oid: entries[0].oid }]
+          })
     const who = entries.map(({ oid, defender }) => {
       const name = this._objName(s.objects[oid])
       if (defender?.planeswalker) return `${name} → ${this._objName(s.objects[defender.planeswalker])}`
@@ -2669,18 +3451,58 @@ export class GameEngine {
           o.controller === pid &&
           o.chars.types.includes('Creature') &&
           !o.status.tapped &&
-          !this._restricted(o, 'block') // Pacifism etc.
+          !this._restricted(o, 'block') && // Pacifism etc.
+          !this._ability(o, 'cantBlock')
       )
       .map((o) => o.oid)
   }
 
-  // Can `blocker` legally block `attacker`? Evasion (flyers need flying/reach)
-  // and protection (a creature can't be blocked by the colors it's protected from).
+  // An ability-derived property of a permanent, unless it has lost all its
+  // abilities (613.1f / Dress Down).
+  _ability(o, key) {
+    return o?.chars?.lostAbilities ? undefined : o?.behavior?.[key]
+  }
+
+  // Does an attack/block *requirement* apply to `o` (508.1d / 509.1c) — its own
+  // "attacks each combat if able", or a rule-modifying static ("Other Goblins
+  // you control attack each combat if able")?
+  _required(o, action) {
+    if (action === 'attack' && this._ability(o, 'mustAttack')) return true
+    if (action === 'block' && this._ability(o, 'mustBlock')) return true
+    for (const { source, mod } of this._ruleMods())
+      if (mod.require?.includes(action) && matchStatic(mod.affects, source, o)) return true
+    return false
+  }
+
+  // Can `blocker` legally block `attacker` (509.1b)? The attacker's evasion
+  // (flying, fear, intimidate, skulk, shadow, horsemanship, landwalk, "can't be
+  // blocked", protection) and the blocker's own restrictions ("can't block").
   _canBlock(blocker, attacker) {
-    if (this._hasKW(attacker, 'Flying') && !this._hasKW(blocker, 'Flying') && !this._hasKW(blocker, 'Reach'))
-      return false
+    const kw = (o, k) => this._hasKW(o, k)
+    if (this._ability(blocker, 'cantBlock') || this._ability(attacker, 'cantBeBlocked')) return false
+    if (kw(attacker, 'Unblockable')) return false // granted "can't be blocked this turn"
+    if (kw(attacker, 'Flying') && !kw(blocker, 'Flying') && !kw(blocker, 'Reach')) return false
+    const bColors = blocker.chars.colors || []
+    const bArtifact = blocker.chars.types.includes('Artifact')
+    if (kw(attacker, 'Fear') && !bArtifact && !bColors.includes('B')) return false
+    if (kw(attacker, 'Intimidate') && !bArtifact && !bColors.some((c) => (attacker.chars.colors || []).includes(c))) return false
+    if (kw(attacker, 'Skulk') && (blocker.chars.power ?? 0) > (attacker.chars.power ?? 0)) return false
+    if (kw(attacker, 'Shadow') !== kw(blocker, 'Shadow')) return false
+    if (kw(attacker, 'Horsemanship') && !kw(blocker, 'Horsemanship')) return false
+    // Landwalk (702.14): unblockable while the defending player controls a land
+    // of that type.
+    for (const k of attacker.chars.keywords || []) {
+      const m = /^(Plains|Island|Swamp|Mountain|Forest)walk$/.exec(k)
+      if (
+        m &&
+        objectsIn(this.state, 'battlefield').some(
+          (l) => l.controller === blocker.controller && l.chars.types.includes('Land') && l.chars.subtypes.includes(m[1])
+        )
+      )
+        return false
+    }
     const prot = attacker.chars.protections || []
-    if (prot.length && (blocker.chars.colors || []).some((c) => prot.includes(c))) return false
+    if (prot.includes('everything') || (prot.length && tags(blocker.chars).some((c) => prot.includes(c)))) return false
     return true
   }
 
@@ -2695,13 +3517,16 @@ export class GameEngine {
       const a = s.objects[attackerOid]
       if (!b || !a || !a.status.attacking) throw new Error('illegal block: not an attacker')
       if (this._restricted(b, 'block')) throw new Error(`illegal block: ${b.chars.name} can't block`)
-      if (!this._canBlock(b, a)) throw new Error(`illegal block: ${b.chars.name} cannot block a flyer`)
+      if (!this._canBlock(b, a)) throw new Error(`illegal block: ${b.chars.name} can't block ${a.chars.name}`)
       ;(perAttacker[attackerOid] ||= []).push(blockerOid)
     }
     for (const atkOid of s.combat.attackers) {
       const n = perAttacker[atkOid]?.length || 0
-      if (n === 1 && this._hasKW(s.objects[atkOid], 'Menace'))
+      const atk = s.objects[atkOid]
+      if (n === 1 && this._hasKW(atk, 'Menace'))
         throw new Error('illegal block: menace must be blocked by two or more creatures')
+      const max = this._ability(atk, 'maxBlockers')
+      if (max != null && n > max) throw new Error(`illegal block: ${atk.chars.name} can't be blocked by more than ${max} creature(s)`)
     }
 
     // Merge this defender's blocks into the combat (other defenders add theirs).
@@ -2715,6 +3540,14 @@ export class GameEngine {
       s.objects[blockerOid].status.blocking = attackerOid
       s.objects[attackerOid].status.blocked = true // stays blocked even if blockers leave
     }
+    // "Whenever this blocks" / "becomes blocked" (509.1h) — one per block, and
+    // one per attacker that became blocked.
+    for (const [blockerOid, attackerOid] of Object.entries(blocks))
+      this._fireTriggers('blocks', s.objects[blockerOid], { other: s.objects[attackerOid] })
+    for (const attackerOid of new Set(Object.values(blocks)))
+      this._fireTriggers('becomesBlocked', s.objects[attackerOid], {
+        other: s.objects[Object.keys(blocks).find((b) => blocks[b] === attackerOid)]
+      })
     // Move on to the next attacked opponent, or finish blocking.
     if (s.combat.blockQueue && s.combat.blockQueue.length) this._presentBlockers()
     else this._grantPriority()
@@ -2735,8 +3568,7 @@ export class GameEngine {
     )
     if (anyFS) {
       this._combatDamagePass('first')
-      this._checkSBA()
-      this._combatDamagePass('regular')
+      s.combat.secondDamageStep = true // regular damage after a round of priority
     } else {
       this._combatDamagePass('all')
     }
@@ -2815,7 +3647,7 @@ export class GameEngine {
     // Protection is a prevention effect (615) — applied before general replacements.
     if (target.obj) {
       const prot = target.obj.chars?.protections || []
-      if (prot.length && (source?.chars?.colors || []).some((c) => prot.includes(c))) return
+      if (prot.includes('everything') || (prot.length && tags(source?.chars).some((c) => prot.includes(c)))) return
     }
     // General replacement effects (614/616): damage doubling (Furnace of Rath),
     // prevention shields (Samite Healer), etc. may change the amount or the target.
@@ -2827,8 +3659,17 @@ export class GameEngine {
     if (amount <= 0) return
     const tgtName = target.player != null ? this._nameOf(target.player) : this._objName(target.obj)
     this._log(`${this._objName(source)} deals ${amount}${opts.combat ? ' combat' : ''} damage to ${tgtName}`)
+    // Infect (702.90) deals damage to players as poison counters and to creatures
+    // as -1/-1 counters; wither (702.80) does the latter only.
+    const infect = this._hasKW(source, 'Infect')
+    const wither = this._hasKW(source, 'Wither')
     if (target.player != null) {
-      s.players[target.player].life -= amount
+      if (infect) this._addPlayerCounter(target.player, 'poison', amount)
+      else this._loseLife(target.player, amount)
+      // Toxic N (702.180): combat damage also gives N poison counters.
+      const toxic = this._ability(source, 'toxic')
+      if (opts.combat && toxic) this._addPlayerCounter(target.player, 'poison', toxic)
+      if (opts.combat && source?.isCommander) this._commanderDamage(source, target.player, amount)
       // "Whenever this creature deals combat damage to a player" (Ninja of the Deep Hours).
       if (opts.combat && source?.chars?.types?.includes('Creature'))
         this._fireTriggers('dealsCombatDamageToPlayer', source)
@@ -2837,11 +3678,66 @@ export class GameEngine {
         // Damage to a planeswalker removes that many loyalty counters (306.8).
         target.obj.status.counters.loyalty = (target.obj.status.counters.loyalty || 0) - amount
       } else {
-        target.obj.status.damage += amount
+        if (infect || wither) target.obj.status.counters['-1/-1'] = (target.obj.status.counters['-1/-1'] || 0) + amount
+        else target.obj.status.damage += amount
         if (this._hasKW(source, 'Deathtouch')) target.obj.status.markedDeath = true
       }
     }
+    if (source?.oid) this._fireTriggers('dealsDamage', source)
     if (this._hasKW(source, 'Lifelink')) this._gainLife(source.controller, amount)
+  }
+
+  // Life loss (119.3), from damage or an effect.
+  _loseLife(pid, amount) {
+    if (amount <= 0) return
+    const p = this.state.players[pid]
+    p.life -= amount
+    this._firePlayerEvent('lifeLost', pid, { amount })
+  }
+
+  // Counters on a player (122.1: poison, energy, experience, …).
+  _addPlayerCounter(pid, kind, n) {
+    if (n <= 0) return
+    const p = this.state.players[pid]
+    p.counters[kind] = (p.counters[kind] || 0) + n
+    this._log(`${p.name} gets ${n} ${kind} counter${n > 1 ? 's' : ''} (${p.counters[kind]})`)
+  }
+
+  // Combat damage from a commander (903.10a): 21 from one commander loses the game.
+  _commanderDamage(source, pid, amount) {
+    const p = this.state.players[pid]
+    p.commanderDamage ||= {}
+    p.commanderDamage[source.oid] = (p.commanderDamage[source.oid] || 0) + amount
+  }
+
+  // Player-level triggered events ("whenever you draw a card", "whenever an
+  // opponent loses life", …): a permanent's trigger with `player: 'you'` (the
+  // default) fires when its controller is the player concerned, 'opponent' when
+  // an opponent is, 'any' for anyone.
+  _firePlayerEvent(event, pid, extra = {}) {
+    const s = this.state
+    for (const oid of [...zone(s, 'battlefield')]) {
+      const w = s.objects[oid]
+      if (!w || w.chars?.lostAbilities) continue
+      for (const ab of w.behavior?.triggered || []) {
+        if (ab.trigger.event !== event) continue
+        const who = ab.trigger.player || 'you'
+        if (who === 'you' && pid !== w.controller) continue
+        if (who === 'opponent' && pid === w.controller) continue
+        if (ab.trigger.if && !this._cond(ab.trigger.if, w)) continue
+        s.pendingTriggers.push({
+          controller: w.controller,
+          sourceOid: w.oid,
+          subjectOid: null,
+          subjectPid: pid,
+          effect: ab.effect,
+          targetSpec: ab.targets || [],
+          optional: !!ab.optional,
+          condition: ab.trigger.if || null,
+          extra
+        })
+      }
+    }
   }
 
   // Life gain routed through replacement effects (614) — e.g. Rhox Faithmender
@@ -2852,6 +3748,7 @@ export class GameEngine {
     this._applyReplacements(ev)
     this.state.players[pid].life += ev.amount
     this._log(`${this._nameOf(pid)} gains ${ev.amount} life (${this.state.players[pid].life})`)
+    this._firePlayerEvent('lifeGained', pid, { amount: ev.amount })
   }
 
   // ---- replacement effects (rule 614 / 616) ---------------------------
@@ -2863,9 +3760,11 @@ export class GameEngine {
   _collectReplacements(event) {
     const s = this.state
     const out = []
-    for (const o of objectsIn(s, 'battlefield'))
+    for (const o of objectsIn(s, 'battlefield')) {
+      if (o.chars?.lostAbilities) continue
       for (const rep of o.behavior?.replacement || [])
         if (this._replacementMatches(rep, event, o)) out.push({ apply: rep.apply, source: o })
+    }
     for (const rep of s.replacements)
       if (this._replacementMatches(rep, event, null)) out.push({ floating: rep })
     return out
@@ -2891,10 +3790,10 @@ export class GameEngine {
 
   _applyReplacements(event) {
     const list = this._collectReplacements(event)
-    // Rule 616 lets the affected player order the effects; we apply amount
-    // modifiers (doubling) before prevention, which is a sensible deterministic
-    // default for the current pool.
-    list.sort((a, b) => (a.apply?.multiply ? 0 : 1) - (b.apply?.multiply ? 0 : 1))
+    // Rule 616.1 lets the affected player (or the affected object's controller)
+    // order the effects. For damage they always prefer prevention first (a shield
+    // applied before doubling prevents more), so that is the deterministic order.
+    list.sort((a, b) => (a.apply?.multiply ? 1 : 0) - (b.apply?.multiply ? 1 : 0))
     for (const r of list) {
       if (event.amount <= 0) break
       if (r.apply?.multiply) {
@@ -2931,15 +3830,41 @@ export class GameEngine {
         // "You can't lose the game and your opponents can't win" (Platinum Angel):
         // such a player doesn't lose to SBAs.
         if (p.hasLost || this._cantLose(p.id)) continue
-        if (p.life <= 0 || p.loses) {
+        // 704.5a life, 704.5b drew from an empty library, 704.5c ten poison counters,
+        // 704.6c 21 combat damage from a single commander.
+        const cmdDmg = Object.values(p.commanderDamage || {}).some((n) => n >= 21)
+        if (p.life <= 0 || p.loses || (p.counters.poison || 0) >= 10 || cmdDmg) {
           this._eliminate(p) // leaves the game (rule 800.4); repeats SBAs
           repeat = true
         }
       }
       // The game ends when one player remains (or everyone left is protected).
+      // If everyone lost at once, the game is a draw (104.4a) — winner -1.
       if (s.winner == null) {
         const alive = s.players.filter((p) => !p.hasLost)
         if (alive.length === 1 && s.players.length > 1) s.winner = alive[0].id
+        else if (alive.length === 0) s.winner = -1
+      }
+      // Saga (714.4): sacrificed once its last chapter has triggered and none of
+      // its chapter abilities are on the stack.
+      for (const o of objectsIn(s, 'battlefield')) {
+        const saga = this._ability(o, 'saga')
+        if (!saga || (o.status.counters.lore || 0) < saga.chapters.length) continue
+        const onStack = zone(s, 'stack').some((x) => s.objects[x]?.kind === 'ability' && s.objects[x].sourceOid === o.oid)
+        const queued = s.pendingTriggers.some((t) => t.sourceOid === o.oid)
+        if (!onStack && !queued) {
+          this._sacrifice(o)
+          repeat = true
+        }
+      }
+      // Commander (903.9): a commander in a graveyard or in exile goes back to the
+      // command zone (its owner's "may" is always taken).
+      for (const o of Object.values(s.objects)) {
+        if (o.isCommander && (o.zoneName === 'graveyard' || o.zoneName === 'exile')) {
+          this._log(`${this._objName(o)} returns to the command zone`)
+          moveObject(s, o.oid, 'command')
+          repeat = true
+        }
       }
       // A planeswalker with no loyalty is put into its owner's graveyard (704.5i).
       for (const o of objectsIn(s, 'battlefield')) {
@@ -3019,9 +3944,40 @@ export class GameEngine {
     }
     if (s.winner != null && (!s.pending || s.pending.kind !== 'gameOver')) {
       s.prio = null
-      this._log(`${this._nameOf(s.winner)} wins the game`, { marker: true })
-      s.pending = { kind: 'gameOver', winner: s.winner }
+      const draw = s.winner === -1
+      this._log(draw ? 'The game is a draw' : `${this._nameOf(s.winner)} wins the game`, { marker: true })
+      s.pending = { kind: 'gameOver', winner: draw ? null : s.winner, draw }
     }
+  }
+
+  // A player concedes (104.3a) — legal at any time, regardless of whose decision
+  // is pending. They leave the game; whatever they were deciding is abandoned.
+  concede(pid) {
+    const s = this.state
+    const p = s.players[pid]
+    if (!p || p.hasLost || s.winner != null) return this
+    this._log(`${p.name} concedes`, { marker: true })
+    p.loses = true
+    this._checkSBA() // eliminates them; may end the game
+    if (s.winner != null) return this
+    if (s.pending?.player === pid) {
+      // Abandon their pending decision. A paused resolution finishes with no
+      // further effect; a blocker declaration moves to the next defender.
+      const kind = s.pending.kind
+      s.pending = null
+      this._resume = null
+      this._afterMadness = null
+      this._castPaused = false
+      if (this._resolveObject) this._finishResolution()
+      if (kind === 'declareBlockers' && s.combat?.blockQueue?.length) {
+        this._presentBlockers()
+        return this
+      }
+      s.prio = null
+      this._grantPriorityTo(s.activePlayer)
+      this._pump()
+    }
+    return this
   }
 
   _applyDiscard(pending, answer) {
@@ -3044,6 +4000,7 @@ export class GameEngine {
     } else {
       moveObject(s, oid, 'graveyard')
     }
+    this._firePlayerEvent('discard', pid, { card: oid })
   }
 
   // Present queued madness cards one at a time; run `after` when the queue drains.
@@ -3061,9 +4018,13 @@ export class GameEngine {
       player: m.pid,
       oid: m.oid,
       name: o.printed.name,
-      cost: m.cost,
-      canPay: this._canPay(m.pid, parseManaCost(m.cost)),
-      targets: this._spellTargets(o)
+      cost: m.cost, // null: cast without paying (cascade)
+      free: !!m.free,
+      canPay: m.free ? true : this._canPay(m.pid, parseManaCost(m.cost)),
+      targets: this._spellTargets(o),
+      _after: m.after || null,
+      _keep: !!m.keep, // declined: stays where it is (rebound/suspend) vs. bottom of library (cascade)
+      _haste: !!m.haste // suspend: a creature cast this way has haste
     }
   }
 
@@ -3071,18 +4032,26 @@ export class GameEngine {
     const s = this.state
     const o = s.objects[pending.oid]
     if (answer?.cast) {
-      this._pay(pending.player, parseManaCost(pending.cost))
+      if (!pending.free) this._pay(pending.player, parseManaCost(pending.cost))
       moveObject(s, pending.oid, 'stack')
       o.controller = pending.player
       o.targets = answer.targets || []
       o.spell = o.behavior.spell
-      o.madnessCast = true // exiled when it leaves the stack
-      this._assertTargetsLegal(o.targets, o.controller, o.printed.colors)
+      o.madnessCast = !pending.free // madness spells are exiled when they leave the stack
+      this._assertTargetsLegal(o.targets, o.controller, tags(o.printed))
+      this._log(`${this._nameOf(pending.player)} casts ${this._objName(o)}${pending.free ? ' without paying its mana cost' : ' (madness)'}`)
+      if (pending._haste) o.suspendHaste = true
+      this._countSpellCast(o)
       this._fireTriggers('castSpell', o)
       this._checkWard(o.oid, o.controller, o.targets)
+    } else if (pending.free && !pending._keep) {
+      moveObject(s, pending.oid, 'library') // declined cascade: to the bottom with the rest
+    } else if (pending.free) {
+      /* declined rebound/suspend: the card stays in exile */
     } else {
       moveObject(s, pending.oid, 'graveyard')
     }
+    if (pending._after) pending._after()
     this._processMadness(this._afterMadness)
   }
 
@@ -3091,14 +4060,18 @@ export class GameEngine {
   // Scan permanents on the battlefield for triggered abilities matching `event`
   // about `subject`, and queue matches. They are put on the stack the next time
   // a player would receive priority (see _putTriggersOnStack).
-  _fireTriggers(event, subject) {
+  _fireTriggers(event, subject, extra = {}) {
     const s = this.state
-    const watchers = [...zone(s, 'battlefield')]
+    const watchers = [...zone(s, 'battlefield'), ...this._emblems()]
     // A spell being cast can carry its own "when you cast this spell" triggers
     // while it is on the stack (not the battlefield).
     if (event === 'castSpell' && !watchers.includes(subject.oid)) watchers.push(subject.oid)
+    // Cascade (702.85): a keyword cast trigger of the spell itself.
+    if (event === 'castSpell' && subject.printed?.keywords?.includes('Cascade'))
+      s.pendingTriggers.push({ controller: subject.controller, sourceOid: subject.oid, subjectOid: subject.oid, effect: [{ op: 'cascade' }], targetSpec: [] })
     for (const oid of watchers) {
       const w = s.objects[oid]
+      if (!w || w.chars?.lostAbilities) continue // "loses all abilities" (613.1f)
       for (const ab of w.behavior?.triggered || []) {
         if (ab.trigger.event !== event) continue
         if (ab.trigger.self) {
@@ -3106,15 +4079,44 @@ export class GameEngine {
         } else if (!this._matchFilter(ab.trigger.filter, subject, w)) {
           continue
         }
+        // "Whenever this blocks a creature with flying": a filter on the other
+        // party to the event (the attacker blocked / the blocker).
+        if (ab.trigger.other && !this._matchOther(ab.trigger.other, extra.other)) continue
+        // Intervening "if" (603.4): checked now, and again on resolution.
+        if (ab.trigger.if && !this._cond(ab.trigger.if, w)) continue
         s.pendingTriggers.push({
           controller: w.controller,
           sourceOid: w.oid,
           subjectOid: subject.oid,
           effect: ab.effect,
-          targetSpec: ab.targets || [] // targets chosen when placed on the stack
+          targetSpec: ab.targets || [], // targets chosen when placed on the stack
+          optional: !!ab.optional, // "you may …"
+          condition: ab.trigger.if || null,
+          extra
         })
       }
     }
+  }
+
+  // Emblems in the command zone (114): they carry abilities like permanents do.
+  _emblems() {
+    return zone(this.state, 'command').filter((oid) => this.state.objects[oid]?.kind === 'emblem')
+  }
+
+  _matchOther(f, other) {
+    if (!other) return false
+    if (f.keyword && !this._hasKW(other, f.keyword)) return false
+    if (f.type && !other.chars.types.includes(f.type)) return false
+    if (f.subtype && !other.chars.subtypes.includes(f.subtype)) return false
+    return true
+  }
+
+  // Tap or untap a permanent as a game event, firing "becomes tapped/untapped"
+  // triggers (502.3 untap, 701.21). Entering tapped is not "becoming tapped".
+  _setTapped(o, tapped) {
+    if (!o || o.status.tapped === tapped) return
+    o.status.tapped = tapped
+    if (o.zoneName === 'battlefield') this._fireTriggers(tapped ? 'tapped' : 'untapped', o)
   }
 
   // Phase-boundary triggers (rule 503/513): "at the beginning of [your] upkeep /
@@ -3124,15 +4126,19 @@ export class GameEngine {
     const s = this.state
     for (const oid of [...zone(s, 'battlefield')]) {
       const w = s.objects[oid]
+      if (w.chars?.lostAbilities) continue
       for (const ab of w.behavior?.triggered || []) {
         if (ab.trigger.event !== event) continue
         if (ab.trigger.yourTurn && w.controller !== s.activePlayer) continue
+        if (ab.trigger.if && !this._cond(ab.trigger.if, w)) continue
         s.pendingTriggers.push({
           controller: w.controller,
           sourceOid: w.oid,
           subjectOid: w.oid,
           effect: ab.effect,
-          targetSpec: ab.targets || []
+          targetSpec: ab.targets || [],
+          optional: !!ab.optional,
+          condition: ab.trigger.if || null
         })
       }
     }
@@ -3159,21 +4165,64 @@ export class GameEngine {
   // Author new cards against enters:/leaves:<zone>; the aliases just map common
   // cases so existing behaviors keep working.
   _relocate(o, toZone, opts = {}) {
+    const s = this.state
     const from = o.zoneName
+    // Replacement effects on going to the graveyard (614.1): "if it would be put
+    // into a graveyard, exile it / shuffle it into its library instead".
+    let shuffle = false
+    // Unearth (702.84c): if it would leave the battlefield, exile it instead.
+    if (o.unearthed && from === 'battlefield' && toZone !== 'exile') toZone = 'exile'
+    if (toZone === 'graveyard') {
+      const rep = this._graveyardReplacement(o)
+      if (rep) {
+        this._log(`${this._objName(o)} goes to ${rep.redirect} instead of the graveyard`)
+        toZone = rep.redirect
+        shuffle = !!rep.shuffle
+      }
+    }
     // Leave triggers fire before the move — the source and observers look back
     // at the pre-move state (rule 603.6d/e).
+    const isCreature = o.chars?.types?.includes('Creature')
+    const plus = o.status?.counters?.['+1/+1'] || 0
+    const minus = o.status?.counters?.['-1/-1'] || 0
     if (from) {
       if (from === 'battlefield') {
-        const verb =
-          toZone === 'graveyard' ? (o.chars?.types?.includes('Creature') ? 'dies' : 'is put into the graveyard') : `goes to ${toZone}`
+        const verb = toZone === 'graveyard' ? (isCreature ? 'dies' : 'is put into the graveyard') : `goes to ${toZone}`
         this._log(`${this._objName(o)} ${verb}`)
-        if (o.chars?.types?.includes('Creature') && toZone === 'graveyard') this._fireTriggers('dies', o)
+        if (isCreature && toZone === 'graveyard') this._fireTriggers('dies', o)
         if (toZone === 'graveyard') this._fireTriggers('toGraveyard', o)
       }
       this._fireTriggers('leaves:' + from, o)
     }
-    moveObject(this.state, o.oid, toZone, opts)
+    moveObject(s, o.oid, toZone, opts)
+    if (shuffle) {
+      const lk = zoneKey(toZone, o.owner)
+      s.zones[lk] = s.rng.shuffle(s.zones[lk])
+    }
+    // Undying / persist (702.93 / 702.79): a creature dying without the relevant
+    // counter comes back with one.
+    if (from === 'battlefield' && toZone === 'graveyard' && isCreature) {
+      if (o.printed.keywords.includes('Undying') && plus === 0)
+        s.pendingTriggers.push({ controller: o.owner, sourceOid: o.oid, subjectOid: o.oid, effect: [{ op: 'returnSelfWithCounter', counter: '+1/+1' }], targetSpec: [] })
+      if (o.printed.keywords.includes('Persist') && minus === 0)
+        s.pendingTriggers.push({ controller: o.owner, sourceOid: o.oid, subjectOid: o.oid, effect: [{ op: 'returnSelfWithCounter', counter: '-1/-1' }], targetSpec: [] })
+    }
     this._fireTriggers('enters:' + toZone, o) // enter triggers see the new zone
+  }
+
+  // The first applicable "instead of the graveyard" replacement for `o`: its own
+  // (Progenitus), or one from a battlefield permanent with a filter ("if a
+  // creature would die, exile it instead"). Returns { redirect, shuffle } or null.
+  _graveyardReplacement(o) {
+    const s = this.state
+    for (const rep of o.behavior?.replacement || [])
+      if (rep.event === 'toGraveyard' && rep.self && !o.chars?.lostAbilities) return rep.apply
+    for (const w of objectsIn(s, 'battlefield')) {
+      if (w.chars?.lostAbilities) continue
+      for (const rep of w.behavior?.replacement || [])
+        if (rep.event === 'toGraveyard' && !rep.self && this._matchFilter(rep.filter, o, w)) return rep.apply
+    }
+    return null
   }
 
   // A permanent leaving the battlefield for the graveyard (death/destroy).
@@ -3189,7 +4238,7 @@ export class GameEngine {
     o.status.regenShields--
     o.status.damage = 0
     o.status.markedDeath = false
-    o.status.tapped = true
+    this._setTapped(o, true)
     o.status.attacking = false
     o.status.attackingTarget = null
     o.status.blocked = false
@@ -3216,7 +4265,7 @@ export class GameEngine {
     if (filter.type && !subject.chars.types.includes(filter.type)) return false
     if (filter.types && !filter.types.some((t) => subject.chars.types.includes(t))) return false
     if (filter.noncreature && subject.chars.types.includes('Creature')) return false
-    if (filter.subtype && !subject.chars.subtypes.includes(filter.subtype)) return false
+    if (filter.subtype && !hasSub(subject.chars, filter.subtype)) return false
     if (filter.controller === 'you' && subject.controller !== watcher.controller) return false
     if (filter.controller === 'opponent' && subject.controller === watcher.controller) return false
     return true
@@ -3239,6 +4288,7 @@ export class GameEngine {
       // Draw-count triggers (Sneaky Snacker: "when you draw your third card…").
       p.drewThisTurn = (p.drewThisTurn || 0) + 1
       if (p.drewThisTurn === 3) this._onThirdDraw(pid)
+      if (s.step && s.step !== 'mulligan') this._firePlayerEvent('draw', pid)
     }
   }
 
@@ -3308,7 +4358,7 @@ export class GameEngine {
   // Number of Faerie creatures a player controls (Spellstutter Sprite's X).
   _faerieCount(pid) {
     return objectsIn(this.state, 'battlefield').filter(
-      (o) => o.controller === pid && o.chars.types.includes('Creature') && o.chars.subtypes.includes('Faerie')
+      (o) => o.controller === pid && o.chars.types.includes('Creature') && hasSub(o.chars, 'Faerie')
     ).length
   }
 }

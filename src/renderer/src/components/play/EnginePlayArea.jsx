@@ -27,6 +27,7 @@ export default function EnginePlayArea() {
   const error = useEngineGame((s) => s.error)
   const chooseRaw = useEngineGame((s) => s.choose)
   const endGame = useEngineGame((s) => s.endGame)
+  const concede = useEngineGame((s) => s.concede)
   const stops = useEngineGame((s) => s.stops)
   const toggleStop = useEngineGame((s) => s.toggleStop)
   const mode = useEngineGame((s) => s.mode)
@@ -117,7 +118,7 @@ export default function EnginePlayArea() {
   // colors for protection-from-color targeting checks).
   const cardByOid = (oid) =>
     view.players
-      .flatMap((p) => [...p.hand, ...p.battlefield, ...p.graveyard, ...p.exile])
+      .flatMap((p) => [...p.hand, ...p.battlefield, ...p.graveyard, ...p.exile, ...(p.command || [])])
       .find((c) => c.oid === oid)
 
   // Human-readable name of what new attackers will be sent at.
@@ -171,6 +172,7 @@ export default function EnginePlayArea() {
   const wantsSpell = targetSlot && targetSlot.type === 'spell'
   const wantsLand = targetSlot && targetSlot.type === 'land'
   const wantsArtifact = targetSlot && targetSlot.type === 'artifact'
+  const wantsPermanent = targetSlot && targetSlot.type === 'permanent'
   // A creature target may carry a color restriction (Doom Blade: "nonblack").
   const colorOk = (c) => !targetSlot?.excludeColor || !c.colors?.includes(targetSlot.excludeColor)
   const wantsCreature = !!(targetSlot && (targetSlot.type === 'creature' || targetSlot.type === 'any'))
@@ -198,19 +200,24 @@ export default function EnginePlayArea() {
     !(targetSlot.noncreature && c.types?.includes('Creature')) &&
     !untargetable(c, controllerPid)
   const matchesLand = (c, controllerPid) => wantsLand && isLand(c) && !untargetable(c, controllerPid)
+  const matchesPermanent = (c, controllerPid) =>
+    wantsPermanent && controllerOk(controllerPid) && !untargetable(c, controllerPid)
+  // Any battlefield card that fits the current target slot.
+  const matchesTarget = (c, controllerPid) =>
+    matchesCreature(c, controllerPid) || matchesLand(c, controllerPid) || matchesArtifact(c, controllerPid) || matchesPermanent(c, controllerPid)
 
   // Fire the assembled cast/activate (with its chosen targets and sacrifice).
   function finalizeCast(c, chosen) {
     const a = c.action
     if (a.type === 'activate')
-      choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: chosen, sacrifice: c.sac })
+      choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: chosen, sacrifice: c.sac, x: c.x })
     else if (a.type === 'madness') choose({ cast: true, targets: chosen })
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: chosen })
     else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: chosen })
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: chosen })
     else if (a.type === 'castBestow') choose({ type: 'castBestow', oid: a.oid, targets: chosen, x: c.x })
     else
-      choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
+      choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, face: a.face, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
   }
 
   // Finalize a modal cast once every selected mode has its targets.
@@ -281,7 +288,7 @@ export default function EnginePlayArea() {
       let rem = v.divide - base * n
       division = chosen.map(() => base + (rem-- > 0 ? 1 : 0))
     }
-    choose({ type: 'cast', oid: cast.action.oid, targets: chosen, division })
+    choose({ type: 'cast', oid: cast.action.oid, face: cast.action.face, kicker: !!cast.action.kicker, targets: chosen, division })
     setCast(null)
   }
 
@@ -306,8 +313,8 @@ export default function EnginePlayArea() {
       choose({ type: 'tapForMana', oid: a.oid, color: a.color })
       return
     }
-    if (a.type === 'playLand' || a.type === 'plot') {
-      choose(a.type === 'plot' ? { type: 'plot', oid: a.oid } : a)
+    if (a.type === 'playLand' || a.type === 'plot' || a.type === 'cycle' || a.type === 'suspend' || a.type === 'crew' || a.type === 'unearth') {
+      choose(a.type === 'playLand' ? a : { type: a.type, oid: a.oid })
       return
     }
     if (a.type === 'ninjutsu') {
@@ -328,7 +335,7 @@ export default function EnginePlayArea() {
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: [] })
     else if (a.type === 'castFaceDown') choose({ type: 'castFaceDown', oid: a.oid })
     else if (a.type === 'turnFaceUp') choose({ type: 'turnFaceUp', oid: a.oid })
-    else choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost })
+    else choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, face: a.face })
   }
   const startActivate = startAction
 
@@ -374,7 +381,7 @@ export default function EnginePlayArea() {
       const acts = pending.actions.filter(
         (a) =>
           a.oid === card.oid &&
-          ['cast', 'castBestow', 'castOmen', 'castFlashback', 'castFaceDown', 'playLand', 'plot', 'ninjutsu'].includes(a.type)
+          ['cast', 'castBestow', 'castOmen', 'castFlashback', 'castFaceDown', 'playLand', 'plot', 'ninjutsu', 'cycle', 'suspend'].includes(a.type)
       )
       if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
@@ -386,6 +393,11 @@ export default function EnginePlayArea() {
     // Clone: "enter as a copy of…" — click a creature on the battlefield to copy it.
     if (kind === 'copyEnter' && pending.choices.includes(card.oid)) {
       choose({ copy: card.oid })
+      return
+    }
+    // An Edict: click one of your highlighted permanents to sacrifice it.
+    if (kind === 'sacrificeChoice' && controllerPid === pending.player && pending.choices.includes(card.oid)) {
+      choose({ sacrifice: [card.oid] })
       return
     }
     // Highway Robbery: sacrifice a land instead of discarding (click your land).
@@ -406,9 +418,7 @@ export default function EnginePlayArea() {
       return
     }
     if (targeting) {
-      if (matchesCreature(card, controllerPid)) addTarget({ kind: 'object', oid: card.oid })
-      else if (matchesLand(card, controllerPid)) addTarget({ kind: 'object', oid: card.oid })
-      else if (matchesArtifact(card, controllerPid)) addTarget({ kind: 'object', oid: card.oid })
+      if (matchesTarget(card, controllerPid)) addTarget({ kind: 'object', oid: card.oid })
       return
     }
     // Activate an ability of a permanent you control — including tapping it for
@@ -416,7 +426,7 @@ export default function EnginePlayArea() {
     // picker.
     if (kind === 'priority' && controllerPid === pending.player) {
       const acts = pending.actions.filter(
-        (a) => (a.type === 'activate' || a.type === 'turnFaceUp' || a.type === 'tapForMana') && a.oid === card.oid
+        (a) => (a.type === 'activate' || a.type === 'turnFaceUp' || a.type === 'tapForMana' || a.type === 'crew') && a.oid === card.oid
       )
       if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
@@ -467,13 +477,12 @@ export default function EnginePlayArea() {
     if (isCreature(card) && card.summoningSick && controllerPid === view.activePlayer) cls.push('sick')
     if (!myTurn) return cls.join(' ') // spectating the other player's decision: no affordances
     if (ninjutsu && ninjutsu.returns.includes(card.oid)) cls.push('targetable')
-    if (targeting && matchesCreature(card, controllerPid)) cls.push('targetable')
-    if (targeting && matchesLand(card, controllerPid)) cls.push('targetable')
-    if (targeting && matchesArtifact(card, controllerPid)) cls.push('targetable')
+    if (targeting && matchesTarget(card, controllerPid)) cls.push('targetable')
     if (needSac && controllerPid === pending.player && (cast.action.sacChoose.types || []).some((t) => card.types.includes(t)))
       cls.push('targetable')
     if (kind === 'discardCards' && pending.orSacrificeLand && controllerPid === pending.player && isLand(card))
       cls.push('targetable')
+    if (kind === 'sacrificeChoice' && controllerPid === pending.player && pending.choices.includes(card.oid)) cls.push('targetable')
     if (kind === 'copyEnter' && pending.choices.includes(card.oid)) cls.push('targetable')
     if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player) {
       if (pending.actions.some((a) => a.type === 'activate' && a.oid === card.oid)) cls.push('activatable')
@@ -520,6 +529,13 @@ export default function EnginePlayArea() {
         <span className="eng-count" title="Cards in hand">
           ✋ {p.handCount}
         </span>
+        {Object.entries(p.counters || {})
+          .filter(([, n]) => n > 0)
+          .map(([k, n]) => (
+            <span key={k} className="eng-count" title={`${k} counters`}>
+              {k === 'poison' ? '☠' : k === 'energy' ? '⚡' : k} {n}
+            </span>
+          ))}
       </div>
       <ManaPool pool={p.manaPool} />
       <div className="eng-zones">
@@ -536,7 +552,20 @@ export default function EnginePlayArea() {
           topCard={p.exile[p.exile.length - 1]}
           onOpen={() => setZoneView({ pid: p.id, zone: 'exile' })}
         />
+        {view.format === 'commander' && (
+          <Pile
+            label={`Command${p.command?.[0]?.commanderCasts ? ` (tax ${2 * p.command[0].commanderCasts})` : ''}`}
+            count={p.command?.length || 0}
+            topCard={p.command?.[0]}
+            onOpen={() => setZoneView({ pid: p.id, zone: 'command' })}
+          />
+        )}
       </div>
+      {Object.keys(p.commanderDamage || {}).length > 0 && (
+        <div className="eng-count" title="Combat damage taken from each commander (21 loses)">
+          ⚔ commander damage: {Object.values(p.commanderDamage).join(' / ')}
+        </div>
+      )}
     </div>
   )
 
@@ -642,8 +671,15 @@ export default function EnginePlayArea() {
           </button>
           {confirmExit ? (
             <span className="eng-confirm">
-              Concede{mode !== 'local' ? ' and end the game for both players' : ''}?
-              <button className="mini danger" onClick={() => endGame()}>
+              {mode === 'local' ? 'Exit this game?' : 'Concede the game?'}
+              <button
+                className="mini danger"
+                onClick={() => {
+                  setConfirmExit(false)
+                  if (mode === 'local' || kind === 'gameOver') endGame()
+                  else concede()
+                }}
+              >
                 Yes, concede
               </button>
               <button className="mini" onClick={() => setConfirmExit(false)}>
@@ -714,7 +750,9 @@ export default function EnginePlayArea() {
           castableFor={(oid) =>
             kind === 'priority' && zoneView.pid === pending.player
               ? pending.actions?.find(
-                  (a) => (a.type === 'castFlashback' || a.type === 'castPlotted') && a.oid === oid
+                  (a) =>
+                    (a.type === 'castFlashback' || a.type === 'castPlotted' || a.type === 'unearth' || (a.type === 'cast' && zoneView.zone === 'command')) &&
+                    a.oid === oid
                 )
               : null
           }
@@ -759,6 +797,8 @@ export default function EnginePlayArea() {
                 chosen: targeting.chosen,
                 name: cast ? null : pending.name,
                 cancelable: !!cast,
+                // A "you may" trigger's target choice can be declined.
+                decline: !cast && engineTargeting && pending.optional ? () => choose({ decline: true }) : null,
                 variadic: variadic ? { min: variadic.min ?? 1, max: variadic.max } : null,
                 confirm: variadicReady ? () => finalizeVariadic(targeting.chosen) : null
               }

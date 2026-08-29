@@ -16,13 +16,16 @@ export default function GameSetup() {
   const [e1, setE1] = useState(`example:${EXAMPLE_DECKS[1].slug}`)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [commander, setCommander] = useState(false) // play the Commander format (903)
 
   async function startLocal() {
     setBusy(true)
     setError('')
     try {
       const [d0, d1] = await Promise.all([resolvePlayableDeck(e0), resolvePlayableDeck(e1)])
-      startEngineGame({ decks: [d0, d1] })
+      if (commander && (!d0.commander || !d1.commander))
+        throw new Error("Commander needs a commander in each deck (a card in the deck's Commander section).")
+      startEngineGame({ decks: [d0, d1], format: commander ? 'commander' : null })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -61,6 +64,10 @@ export default function GameSetup() {
             </p>
             <DeckPicker label="Player 1 deck" value={e0} onChange={setE0} />
             <DeckPicker label="Player 2 deck" value={e1} onChange={setE1} />
+            <label className="setup-check">
+              <input type="checkbox" checked={commander} onChange={(ev) => setCommander(ev.target.checked)} />
+              Commander — 40 life, commanders start in the command zone (both decks need one)
+            </label>
             {error && <div className="search-error">{error}</div>}
             <button className="primary" onClick={startLocal} disabled={busy}>
               {busy ? 'Resolving cards…' : 'Start game'}
