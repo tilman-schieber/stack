@@ -46,7 +46,25 @@ export const manaMethods = {
       const best = usable.reduce((a, b) => (b.amount > a.amount ? b : a))
       out.push({ oid: o.oid, colors: best.colors, amount: best.amount, only: best.only })
     }
-    return out
+    // Auto-payment spends generic mana from the sources whose colours the rest
+    // of the hand needs least (keep the lone Mountain for the Bolt), and keeps
+    // multi-colour sources for last.
+    const demand = this._colorDemand(pid)
+    const producers = {}
+    for (const src of out) for (const c of src.colors) producers[c] = (producers[c] || 0) + (src.amount || 1)
+    // Scarcity: a colour many cards want but few sources make is precious.
+    const score = (src) => src.colors.reduce((n, c) => n + (demand[c] || 0) / (producers[c] || 1), 0) + src.colors.length * 0.01
+    return out.sort((a, b) => score(a) - score(b))
+  },
+
+  // Coloured pips the cards in `pid`'s hand ask for, per colour.
+  _colorDemand(pid) {
+    const demand = {}
+    for (const oid of zone(this.state, 'hand', pid)) {
+      const o = this.state.objects[oid]
+      for (const pr of o?.faces || [o?.printed]) for (const c of ['W', 'U', 'B', 'R', 'G']) if (pr?.manaCost?.[c]) demand[c] = (demand[c] || 0) + pr.manaCost[c]
+    }
+    return demand
   },
 
   // Plan how to pay `cost`: first from mana already floating in `pool` (colored

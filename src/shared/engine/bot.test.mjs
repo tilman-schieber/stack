@@ -54,6 +54,18 @@ function playGame(seed, d0, d1) {
   return { e, decisions, fallbacks, errors, over: e.pending?.kind === 'gameOver', turns: e.state.turnNumber, winner: e.state.winner }
 }
 
+// Pass until `pid` holds priority at `step` of `active`'s turn (an instant-speed window).
+const toWindow = (e, pid, active, step) => {
+  let g = 0
+  while (!(e.state.activePlayer === active && e.state.step === step && e.pending.kind === 'priority' && e.pending.player === pid) && g++ < 200) {
+    if (e.pending.kind === 'priority') e.choose({ type: 'pass' })
+    else if (e.pending.kind === 'discard') e.choose({ discard: e.pending.hand.slice(0, e.pending.count ?? 1) })
+    else if (e.pending.kind === 'declareAttackers') e.choose({ attackers: [] })
+    else if (e.pending.kind === 'declareBlockers') e.choose({ blocks: {} })
+    else throw new Error(`unexpected decision ${e.pending.kind}`)
+  }
+}
+
 section('Bot vs bot: whole games end, with no illegal answers')
 {
   const pairs = [
@@ -84,7 +96,10 @@ section('The obvious plays')
   e.choose(a)
   put(e, 0, 'Mountain', 'battlefield')
   a = botChoose(e, 0)
-  assert(a.type === 'cast' && a.oid === bolt.oid && a.targets[0].kind === 'player' && a.targets[0].pid === 1, 'with nothing to kill, Bolts the opponent')
+  assert(a.type === 'pass', 'with nothing to kill and no race on, holds the Bolt')
+  e.state.players[1].life = 3
+  a = botChoose(e, 0)
+  assert(a.type === 'cast' && a.oid === bolt.oid && a.targets[0].kind === 'player' && a.targets[0].pid === 1, 'at 3 life: Bolts the opponent for lethal')
   void land
   const f = makeEngine()
   f.state.players[0].landsPlayed = 1 // no land drop left: the bot must cast
@@ -94,13 +109,18 @@ section('The obvious plays')
   put(f, 1, 'Grizzly Bears', 'battlefield')
   advanceToPriorityAt(f, 'main1')
   a = botChoose(f, 0)
-  assert(a.type === 'cast' && a.oid === bolt2.oid && a.targets[0].oid !== angel.oid, 'does not Bolt a 4-toughness Angel (it picks the best creature it can kill, or face)')
+  assert(a.type === 'pass', 'instant-speed removal waits for the opponent\'s turn')
   put(f, 0, 'Forest', 'battlefield')
   put(f, 0, 'Forest', 'battlefield')
   const bear = put(f, 0, 'Grizzly Bears', 'hand')
   a = botChoose(f, 0)
-  assert(a.type === 'cast' && (a.oid === bear.oid || a.oid === bolt2.oid), 'casts something useful')
-  void bear
+  assert(a.type === 'cast' && a.oid === bear.oid, 'casts the creature instead')
+  f.choose(a)
+  f.choose({ type: 'pass' })
+  f.choose({ type: 'pass' })
+  toWindow(f, 0, 1, 'end')
+  a = botChoose(f, 0)
+  assert(a.type === 'cast' && a.oid === bolt2.oid && a.targets[0].oid !== angel.oid && a.targets[0].kind === 'object', 'at their end step: Bolts the Bears, not the 4-toughness Angel')
 }
 
 section('Attacks and blocks')
@@ -168,6 +188,103 @@ section('Mulligans and the other decisions')
   const pick = botChoose(b, 0)
   assert(b.state.objects[pick.oid].printed.name === 'Counterspell', 'takes the most expensive matching card')
   void zone
+}
+
+section('Holds removal for a real target; uses it at the opponent\'s end step')
+{
+  const e = makeEngine()
+  e.state.players[0].landsPlayed = 1
+  put(e, 0, 'Mountain', 'battlefield')
+  const bolt = put(e, 0, 'Lightning Bolt', 'hand')
+  const elf = put(e, 1, 'Llanowar Elves', 'battlefield')
+  advanceToPriorityAt(e, 'main1')
+  let a = botChoose(e, 0)
+  assert(a.type === 'pass', 'a 1/1 mana elf is not worth a Bolt: holds it (no face burn either, not racing)')
+  void elf
+  toWindow(e, 0, 1, 'end')
+  a = botChoose(e, 0)
+  assert(a.type === 'pass', 'still nothing worth it at their end step')
+  const bear = put(e, 1, 'Grizzly Bears', 'battlefield')
+  a = botChoose(e, 0)
+  assert(a.type === 'cast' && a.oid === bolt.oid && a.targets[0].oid === bear.oid, 'a 2/2 is worth it: Bolts the Bears at the end of their turn')
+}
+
+section('Counters a threatening spell at instant speed')
+{
+  const e = makeEngine()
+  put(e, 0, 'Island', 'battlefield')
+  put(e, 0, 'Island', 'battlefield')
+  const cs = put(e, 0, 'Counterspell', 'hand')
+  for (let i = 0; i < 5; i++) put(e, 1, 'Plains', 'battlefield')
+  const angel = put(e, 1, 'Serra Angel', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  toWindow(e, 1, 1, 'main1')
+  e.choose({ type: 'cast', oid: angel.oid })
+  assert(e.pending.kind === 'priority' && e.pending.player === 1, 'B holds priority after casting')
+  e.choose({ type: 'pass' })
+  assert(e.pending.player === 0, 'A may respond')
+  const a = botChoose(e, 0)
+  assert(a.type === 'cast' && a.oid === cs.oid && a.targets[0].kind === 'spell' && a.targets[0].oid === angel.oid, 'Counterspell on the Angel')
+}
+
+section('Combat tricks: a pump that wins the fight; a Fog when lethal is coming')
+{
+  const e = makeEngine()
+  put(e, 0, 'Forest', 'battlefield')
+  const gg = put(e, 0, 'Giant Growth', 'hand')
+  const bear = put(e, 0, 'Grizzly Bears', 'battlefield', { summoningSick: false })
+  const giant = put(e, 1, 'Hill Giant', 'battlefield')
+  advanceToPriorityAt(e, 'main1')
+  let g = 0
+  while (e.pending.kind !== 'declareAttackers' && g++ < 20) e.choose({ type: 'pass' })
+  e.choose({ attackers: [bear.oid] })
+  g = 0
+  while (e.pending.kind !== 'declareBlockers' && g++ < 20) e.choose({ type: 'pass' })
+  e.choose({ blocks: { [giant.oid]: bear.oid } })
+  assert(e.pending.kind === 'priority' && e.pending.player === 0, 'A has priority after blocks')
+  const a = botChoose(e, 0)
+  assert(a.type === 'cast' && a.oid === gg.oid && a.targets[0].oid === bear.oid, 'Giant Growth on the blocked Bears: it survives and kills the Giant')
+
+  const f = makeEngine()
+  f.state.players[1].life = 3
+  put(f, 1, 'Forest', 'battlefield')
+  const fog = put(f, 1, 'Fog', 'hand')
+  const angel = put(f, 0, 'Serra Angel', 'battlefield', { summoningSick: false })
+  advanceToPriorityAt(f, 'main1')
+  g = 0
+  while (f.pending.kind !== 'declareAttackers' && g++ < 20) f.choose({ type: 'pass' })
+  f.choose({ attackers: [angel.oid] })
+  f.choose({ type: 'pass' }) // A passes in the declare-attackers window
+  assert(f.pending.kind === 'priority' && f.pending.player === 1 && f.state.step === 'declareAttackers', 'B may respond to the attack')
+  const b = botChoose(f, 1)
+  assert(b.type === 'cast' && b.oid === fog.oid, 'at 3 life facing 4 in the air: Fog')
+}
+
+section('Who is the beatdown: the alpha strike at lethal, patience otherwise')
+{
+  const e = makeEngine()
+  e.state.players[1].life = 2
+  const b1 = put(e, 0, 'Grizzly Bears', 'battlefield', { summoningSick: false })
+  const b2 = put(e, 0, 'Grizzly Bears', 'battlefield', { summoningSick: false })
+  put(e, 1, 'Hill Giant', 'battlefield') // one blocker that eats a Bears
+  advanceToPriorityAt(e, 'main1')
+  let g = 0
+  while (e.pending.kind !== 'declareAttackers' && g++ < 20) e.choose({ type: 'pass' })
+  const a = botChoose(e, 0)
+  assert(a.attackers.length === 2, 'at 2 life one Bears gets through past the single blocker: both attack')
+  const f = makeEngine()
+  f.state.players[1].life = 10
+  put(f, 0, 'Grizzly Bears', 'battlefield', { summoningSick: false })
+  put(f, 0, 'Grizzly Bears', 'battlefield', { summoningSick: false })
+  put(f, 1, 'Hill Giant', 'battlefield')
+  put(f, 1, 'Serra Angel', 'battlefield')
+  advanceToPriorityAt(f, 'main1')
+  g = 0
+  while (f.pending.kind !== 'declareAttackers' && g++ < 20) f.choose({ type: 'pass' })
+  const b = botChoose(f, 0)
+  assert(b.attackers.length === 0, 'outclassed on board and not the beatdown: no bad attacks into the Giant and the Angel')
+  void b1
+  void b2
 }
 
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)

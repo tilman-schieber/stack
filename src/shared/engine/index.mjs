@@ -12,4 +12,4 @@ export {
 } from './cards.mjs'
 export { loadBehavior, BEHAVIORS } from './behaviors.mjs'
 export { classifyCard, deckCoverage } from './classify.mjs'
-export { botChoose, botFallback } from './bot.mjs'
+export { botChoose, botFallback, BOT_STOPS } from './bot.mjs'

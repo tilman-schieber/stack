@@ -46,10 +46,18 @@ so the exact printings round-trip), **Delete**.
 Pick a mode, pick decks (the built-in example decks or any deck you saved), start.
 
 - **Local / vs. computer** — two players on one screen (both hands visible), or you against
-  a simple computer opponent (its hand hidden). The bot plays lands, casts the most useful
-  spell it can afford with sensible targets, attacks when it is safe or lethal, blocks when
-  it trades well or must chump, and takes the obvious default for every other decision. It
-  acts only in its main phases and on its own blocks — it never responds at instant speed.
+  a computer opponent (its hand hidden). The bot works from a situation read — who is the
+  beatdown (whose clock is shorter), what is lethal, what each creature is worth — and plays
+  accordingly: the land that unlocks its hand; creatures on curve (haste ones before combat);
+  removal only on creatures worth a card, held for the opponent's turn when it's an instant;
+  burn to the face only when it's lethal or it is racing; counterspells on real threats;
+  removal in response to a pump or an Aura; flash creatures and instants at your end step;
+  combat tricks after blocks (a pump that wins the fight, removal on the blocker that would
+  kill its creature); Fog effects against lethal; attacks that are safe, that trade
+  acceptably for the beatdown, or that are an alpha strike for lethal, keeping a blocker home
+  when your counterattack would be lethal; blocks that kill and survive, double blocks, trades
+  as the control deck, and chump blocks to stay alive. It sees every priority window and
+  passes instantly when it has nothing to do, so only its real moves take a beat.
 - **Host online / Join online** — serverless peer-to-peer over WebRTC. The host creates a
   connection code, the guest pastes it and sends back an answer code, and the game
   starts. The host's app runs the rules engine and pushes each player a view with the

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { GameEngine, projectGame, botChoose, botFallback } from '@engine/index.mjs'
+import { GameEngine, projectGame, botChoose, botFallback, BOT_STOPS } from '@engine/index.mjs'
 
 const BOT_DELAY_MS = 450 // a beat between computer moves so they can be followed
 
@@ -33,14 +33,27 @@ const defaultStops = (n = 2) => {
 // the player both *can* act and has a stop set for the current step. Windows
 // where the only legal move is pass always auto-pass. Stops at real decisions
 // (attackers/blockers/discard/game over) and at any step a player has stopped on.
-function settle(engine, stops) {
+// A computer seat sees every priority window; when its answer is simply to
+// pass, that happens here at once (no delay), so only its real moves take time.
+function settle(engine, stops, botSeats = []) {
   let guard = 0
   while (engine.state.pending?.kind === 'priority' && guard++ < 4000) {
     const p = engine.state.pending
     // Tapping for mana is always available and never a reason to stop.
     const canAct = (p.actions || []).some((a) => a.type !== 'pass' && !a.mana)
     const stopHere = stops[p.player]?.has(stopKey(engine.state.step, engine.state.activePlayer !== p.player))
-    if (canAct && stopHere) break // hand this player priority
+    if (canAct && stopHere) {
+      if (!botSeats.includes(p.player)) break // hand this player priority
+      let ans = null
+      try {
+        ans = botChoose(engine, p.player)
+      } catch {
+        ans = { type: 'pass' }
+      }
+      if (ans && ans.type !== 'pass') break // a real move: the timer plays it visibly
+      engine.choose({ type: 'pass' })
+      continue
+    }
     engine.choose({ type: 'pass' })
   }
 }
@@ -77,8 +90,8 @@ export const useEngineGame = create((set, get) => ({
     })
     engine.start()
     const stops = defaultStops(decks.length)
-    for (const b of bots) stops[b] = new Set(['main1', 'main2']) // the bot acts in its main phases
-    settle(engine, stops)
+    for (const b of bots) stops[b] = new Set(BOT_STOPS) // the bot sees every window; passes are instant
+    settle(engine, stops, bots)
     set({ started: true, mode: 'local', netSeat: 0, botSeats: bots, stops, _engine: engine, error: null, notice: null })
     get()._commit()
   },
@@ -106,7 +119,7 @@ export const useEngineGame = create((set, get) => ({
           e.concede(pid)
         }
       }
-      settle(e, get().stops)
+      settle(e, get().stops, get().botSeats)
       get()._commit()
     }, BOT_DELAY_MS)
     set({ _botTimer: timer })
@@ -144,7 +157,7 @@ export const useEngineGame = create((set, get) => ({
     if (view?.pending && get().botSeats.includes(view.pending.player)) return // the computer's decision
     try {
       _engine.choose(answer)
-      settle(_engine, stops)
+      settle(_engine, stops, get().botSeats)
       get()._commit()
     } catch (err) {
       set({ error: String(err?.message || err) })
@@ -224,7 +237,7 @@ export const useEngineGame = create((set, get) => ({
       set({ stops })
       return
     }
-    if (_engine) settle(_engine, stops)
+    if (_engine) settle(_engine, stops, get().botSeats)
     set({ stops })
     if (_engine) get()._commit()
   },
@@ -240,7 +253,7 @@ export const useEngineGame = create((set, get) => ({
     }
     if (!_engine) return
     _engine.concede(netSeat)
-    settle(_engine, stops)
+    settle(_engine, stops, get().botSeats)
     get()._commit()
   },
 
