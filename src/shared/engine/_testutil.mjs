@@ -33,7 +33,10 @@ export function makeEngine(deckName = 'Forest', size = 20) {
 // Place a fresh card object directly into a zone (bypasses draw/shuffle so
 // scenarios are deterministic).
 export function put(engine, pid, name, zoneName, status = {}) {
-  const o = createObject(engine.state, SAMPLE_CARDS[name], pid)
+  // A multi-faced card may be named by its front face ("Lunarch Veteran").
+  const sf = SAMPLE_CARDS[name] || Object.values(SAMPLE_CARDS).find((c) => c.name.split(' // ')[0] === name)
+  if (!sf) throw new Error(`no sample card named ${name}`)
+  const o = createObject(engine.state, sf, pid)
   o.zoneName = zoneName
   if (zoneName === 'battlefield') o.controller = pid
   Object.assign(o.status, status)

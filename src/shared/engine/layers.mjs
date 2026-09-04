@@ -260,8 +260,10 @@ export function recompute(state) {
     // the amount is the source's current counter count.
     const perCounter = e.ability?.modifyPTPerCounter
     const n = perCounter ? e.source.status.counters[perCounter] || 0 : 0
-    const dp = m ? m.power : n
-    const dt = m ? m.toughness : n
+    // "+1/+0 for each other creature you control": a count-based amount.
+    const amt = (v) => (v && typeof v === 'object' && v.count ? (state._countFn ? state._countFn(e.source, v) : 0) : v)
+    const dp = m ? amt(m.power) : n
+    const dt = m ? amt(m.toughness) : n
     for (const o of bf) {
       if (!effTargets(e, o) || o.chars.power == null) continue
       o.chars.power += dp

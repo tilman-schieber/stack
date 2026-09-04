@@ -82,7 +82,7 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
   } else if (ninjutsu) {
     body = (
       <>
-        <span>Ninjutsu — click an unblocked attacker to return to hand.</span>
+        <span>{ninjutsu.webSlinging ? 'Web-slinging — click a tapped creature to return to hand.' : `${ninjutsu.sneak ? 'Sneak' : 'Ninjutsu'} — click an unblocked attacker to return to hand.`}</span>
         <button className="mini" onClick={cancelNinjutsu}>
           Cancel
         </button>
@@ -377,10 +377,19 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       </span>
     )
   } else if (kind === 'sacrificeChoice') {
+    const verb = pending.action === 'bounce' ? 'return to hand' : 'sacrifice'
     body = (
-      <span>
-        <b>{nameOf(pending.player)}</b> — click {pending.count === 1 ? 'a highlighted permanent' : `${pending.count} highlighted permanents`} to sacrifice.
-      </span>
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — click {pending.count === 1 ? 'a highlighted permanent' : `${pending.count} highlighted permanents`} to {verb}
+          {pending.optional && pending.elseLoseLife ? `, or lose ${pending.elseLoseLife} life` : ''}.
+        </span>
+        {pending.optional && (
+          <button className="mini" onClick={() => choose({ sacrifice: [] })}>
+            {pending.elseLoseLife ? `Lose ${pending.elseLoseLife} life instead` : 'Decline'}
+          </button>
+        )}
+      </>
     )
   } else if (kind === 'copyEnter') {
     body = (
@@ -420,7 +429,7 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
     body = (
       <>
         <span>
-          <b>{nameOf(pending.player)}</b> — pay {pending.cost}?
+          <b>{nameOf(pending.player)}</b> — {pending.name ? `${pending.name} ` : ''}pay {pending.cost}?
         </span>
         <button className="primary" disabled={!pending.canPay} onClick={() => choose({ pay: true })}>
           Pay {pending.cost}
@@ -453,10 +462,11 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
           <b>{nameOf(pending.player)}</b> — you may discard up to {pending.count} card(s) (
           {discardSel.length}/{pending.count})
           {pending.orSacrificeLand ? ' or click a land to sacrifice' : ''}
-          {pending.draw ? `; if you do, draw ${pending.draw}` : ''}.
+          {pending.draw ? `; if you do, draw ${pending.draw}` : ''}
+          {pending.elseLoseLife ? `; otherwise lose ${pending.elseLoseLife} life` : ''}.
         </span>
         <button className="primary" onClick={() => choose({ discard: discardSel })}>
-          {discardSel.length ? 'Discard' : 'Decline'}
+          {discardSel.length ? 'Discard' : pending.elseLoseLife ? `Lose ${pending.elseLoseLife} life` : 'Decline'}
         </button>
       </>
     ) : (

@@ -719,6 +719,88 @@ export const BEHAVIORS = {
     staticRules: [{ lookAtTop: true }, { playFromTop: { spells: { anyOf: [{ type: 'Artifact' }, { colorless: true }] } } }],
     activated: [{ cost: { tap: true, payLife: 1 }, label: '{T}, Pay 1 life: Exile the top card of your library', effect: [{ op: 'exileTop', amount: 1 }] }]
   },
+  // ---- Pauper: White Weenie (Paupergeddon Summer 2026, 2nd — Giovanni Favetta) ----
+  'Kor Skyfisher': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'bounceChoose', filter: {} }] }] },
+  'Novice Inspector': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'createToken', token: { name: 'Clue', types: ['Artifact'], colors: [] } }] }] },
+  'Thraben Inspector': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'createToken', token: { name: 'Clue', types: ['Artifact'], colors: [] } }] }] },
+  // Connive (702.156): draw, then discard; a nonland discard grows it.
+  "Raffine's Informant": {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        effect: [{ op: 'draw', amount: 1 }, { op: 'discard', amount: 1, remember: true }, { op: 'addCounter', to: 'self', counter: '+1/+1', amount: 1, condition: 'discardedNonland' }]
+      }
+    ]
+  },
+  'Leonardo, Big Brother': {
+    sneak: { cost: '{W}' },
+    static: [{ affects: { self: true }, modifyPT: { power: { count: { type: 'Creature', another: true } }, toughness: 0 } }]
+  },
+  'Spider-Man, Web-Slinger': { webSlinging: { cost: '{W}' } },
+  'Lunarch Veteran': {
+    disturb: { cost: '{1}{W}' },
+    triggered: [{ trigger: { event: 'enters:battlefield', filter: { type: 'Creature', controller: 'you', another: true } }, effect: [{ op: 'gainLife', amount: 1 }] }]
+  },
+  'Luminous Phantom': {
+    triggered: [{ trigger: { event: 'leaves:battlefield', filter: { type: 'Creature', controller: 'you', another: true } }, effect: [{ op: 'gainLife', amount: 1 }] }],
+    replacement: [{ event: 'toGraveyard', self: true, apply: { redirect: 'exile' } }]
+  },
+  'Prismatic Strands': {
+    spell: { effect: [{ op: 'chooseColor', label: 'Prismatic Strands — prevent all damage from sources of which color?' }, { op: 'preventColor', color: 'chosen' }] },
+    flashback: { tapCreatures: { count: 1, color: 'W' } }
+  },
+  'Thraben Charm': {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        { label: 'Damage equal to twice your creatures to target creature', targets: [{ type: 'creature' }], effect: [{ op: 'dealDamage', to: 'target0', amount: { count: { type: 'Creature' }, times: 2 } }] },
+        { label: 'Destroy target enchantment', targets: [{ type: 'permanent', types: ['Enchantment'] }], effect: [{ op: 'destroy', to: 'target0' }] },
+        // "Any number of target players": one player per cast here (the usual case).
+        { label: "Exile target player's graveyard", targets: [{ type: 'player' }], effect: [{ op: 'exileGraveyard', to: 'target0' }] }
+      ]
+    }
+  },
+  "Guardians' Pledge": { spell: { effect: [{ op: 'pumpEach', filter: { type: 'Creature', controller: 'you', color: 'W' }, power: 2, toughness: 2 }] } },
+  'Ramosian Rally': {
+    spell: {
+      alternativeCost: { tapCreatures: { count: 1 }, if: { controls: { subtype: 'Plains', min: 1 } }, label: 'tap an untapped creature' },
+      effect: [{ op: 'pumpEach', power: 1, toughness: 1 }]
+    }
+  },
+  'Battle Screech': {
+    spell: { effect: [{ op: 'createToken', count: 2, token: { name: 'Bird', types: ['Creature'], subtypes: ['Bird'], colors: ['W'], power: 1, toughness: 1, keywords: ['Flying'] } }] },
+    flashback: { tapCreatures: { count: 3, color: 'W' } }
+  },
+  'Idyllic Grange': {
+    entersTapped: { unless: { controls: { subtype: 'Plains', min: 3, another: true } } },
+    triggered: [{ trigger: { event: 'etb', self: true, ifOnce: { untapped: true } }, targets: [{ type: 'creature', controller: 'you' }], effect: [{ op: 'addCounter', to: 'target0', counter: '+1/+1', amount: 1 }] }]
+  },
+  'Elite Interceptor': {
+    prepared: { name: 'Rejoinder', cost: '{1}{W}', types: ['Sorcery'], spell: { targets: [{ type: 'creature' }], effect: [{ op: 'tapOrUntap', to: 'target0' }, { op: 'draw', amount: 1 }] } }
+  },
+  // ---- Pauper: Mono Red Rally (Paupergeddon Summer 2026, 3rd — Dario Boniburini) ----
+  'Burning-Tree Emissary': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'addMana', mana: 'R' }, { op: 'addMana', mana: 'G' }] }] },
+  'Clockwork Percussionist': { triggered: [{ trigger: { event: 'dies', self: true }, effect: [{ op: 'exileTopPlayable', amount: 1, until: 'endOfNextTurn' }] }] },
+  'Goblin Tomb Raider': { static: [{ affects: { self: true }, modifyPT: { power: 1, toughness: 0 }, grantKeywords: ['Haste'], if: { controls: { type: 'Artifact', min: 1 } } }] },
+  "Inventor's Axe": {
+    static: [{ affects: { scope: 'attached' }, modifyPT: { power: 2, toughness: 0 } }],
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'addPlayerCounter', counter: 'energy', amount: 2 }] },
+      { trigger: { event: 'etb', self: true }, targets: [{ type: 'creature', controller: 'you' }], effect: [{ op: 'attach', to: 'target0' }] }
+    ],
+    activated: [{ equip: true, sorcerySpeed: true, cost: { energy: 2 }, label: 'Equip—Pay {E}{E}', targets: [{ type: 'creature', controller: 'you' }], effect: [{ op: 'attach', to: 'target0' }] }]
+  },
+  'Chain Lightning': { spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', to: 'target0', amount: 3 }, { op: 'chainCopyOffer', cost: '{R}{R}' }] } },
+  'Rally at the Hornburg': {
+    spell: {
+      effect: [
+        { op: 'createToken', count: 2, token: { name: 'Human Soldier', types: ['Creature'], subtypes: ['Human', 'Soldier'], colors: ['W'], power: 1, toughness: 1 } },
+        { op: 'pumpEach', filter: { type: 'Creature', subtype: 'Human', controller: 'you' }, keywords: ['Haste'] }
+      ]
+    }
+  },
+  'Reckless Impulse': { spell: { effect: [{ op: 'exileTopPlayable', amount: 2, until: 'endOfNextTurn' }] } },
+  "Wrenn's Resolve": { spell: { effect: [{ op: 'exileTopPlayable', amount: 2, until: 'endOfNextTurn' }] } },
   // Batch 6: multi-mana and restricted mana, proliferate, mutate, Lab Man, dredge.
   'Sol Ring': { manaOptions: [{ colors: ['C'], amount: 2 }] },
   'Eldrazi Temple': {
@@ -1303,7 +1385,11 @@ export function loadBehavior(printed) {
     permissions: authored.permissions || [], // "as though" grants, e.g. ['castAnySpeed']
     morph: morph, // { cost } — cast face down as a 2/2 for {3}, turn up for the cost (702.37)
     staticRules: authored.staticRules || [], // rule-modifying statics (613.11): restrict / costMod
-    ward: ward // { mana } or { life } — counter an opponent's spell/ability unless paid (702.21)
+    ward: ward, // { mana } or { life } — counter an opponent's spell/ability unless paid (702.21)
+    disturb: authored.disturb || null, // { cost } — cast from the graveyard transformed (702.148)
+    sneak: authored.sneak || null, // { cost } — alternative cost returning an unblocked attacker; enters tapped and attacking
+    webSlinging: authored.webSlinging || null, // { cost } — alternative cost returning a tapped creature you control
+    prepared: authored.prepared || null // { name, cost, types, spell } — a spell half castable while the permanent is prepared
   }
 }
 

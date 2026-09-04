@@ -198,6 +198,9 @@ export function moveObject(state, oid, toName, { toTop = false } = {}) {
     if (toName !== 'exile') obj.suspended = false
     obj.chosen = null // "as this enters, choose…" is chosen anew next time
     obj.playableFromExile = null // "you may play them" ends when the card leaves exile
+    obj.playableUntilTurn = null
+    obj.prepared = false
+    obj.sneaked = null
     obj.mutateCast = false
     // A mutated pile (702.140) comes apart: each merged card goes to the same zone
     // as its own object again.

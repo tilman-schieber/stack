@@ -55,6 +55,9 @@ function isVanillaOrKeyword(sf) {
 export function classifyCard(sf) {
   const name = sf.name
   if (BEHAVIORS[name]) return { name, supported: true, category: 'authored' }
+  // Adventure / prepared cards are keyed by their front (creature) face.
+  if (!MULTI_FACE_LAYOUTS.has(sf.layout) && sf.card_faces?.[0]?.name && BEHAVIORS[sf.card_faces[0].name])
+    return { name, supported: true, category: 'authored' }
   // Split / double-faced cards: every face must be authored or keyword-only.
   if (MULTI_FACE_LAYOUTS.has(sf.layout) && Array.isArray(sf.card_faces) && sf.card_faces.length > 1) {
     const faces = sf.card_faces.map((f) => classifyCard({ ...f, layout: 'normal', keywords: sf.keywords, card_faces: undefined }))

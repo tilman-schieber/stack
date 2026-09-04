@@ -97,6 +97,51 @@ export const EXAMPLE_DECKS = [
     ]
   },
 
+  {
+    slug: 'pauper-white-weenie',
+    name: 'White Weenie (Pauper)',
+    description:
+      'Paupergeddon Summer 2026 runner-up (Giovanni Favetta). Cheap white creatures with card advantage attached — Inspectors investigate, Raffine\'s Informant connives, Kor Skyfisher rebuys them — Battle Screech and Prismatic Strands flash back by tapping white creatures, Lunarch Veteran returns from the graveyard with disturb, Leonardo sneaks in for {W}, Elite Interceptor enters prepared with Rejoinder to cast.',
+    cards: [
+      [4, 'Kor Skyfisher'],
+      [4, 'Novice Inspector'],
+      [4, "Raffine's Informant"],
+      [4, 'Thraben Inspector'],
+      [3, 'Leonardo, Big Brother'],
+      [1, 'Spider-Man, Web-Slinger'],
+      [2, 'Elite Interceptor'],
+      [4, 'Lunarch Veteran'],
+      [4, 'Prismatic Strands'],
+      [4, 'Thraben Charm'],
+      [2, "Guardians' Pledge"],
+      [1, 'Ramosian Rally'],
+      [4, 'Battle Screech'],
+      [17, 'Plains'],
+      [2, 'Idyllic Grange']
+    ]
+  },
+  {
+    slug: 'pauper-mono-red-rally',
+    name: 'Mono Red Rally (Pauper)',
+    description:
+      'Paupergeddon Summer 2026 third place (Dario Boniburini). Hasty one-drops and Burning-Tree Emissary into a kicked Goblin Bushwhacker or Rally at the Hornburg, Inventor\'s Axe for energy and +2/+0, Reckless Impulse / Wrenn\'s Resolve for gas, and burn that Chain Lightning lets the victim copy back.',
+    cards: [
+      [4, 'Burning-Tree Emissary'],
+      [4, 'Clockwork Percussionist'],
+      [4, 'Goblin Bushwhacker'],
+      [4, 'Goblin Tomb Raider'],
+      [4, 'Voldaren Epicure'],
+      [4, "Inventor's Axe"],
+      [4, 'Galvanic Blast'],
+      [4, 'Lightning Bolt'],
+      [2, 'Chain Lightning'],
+      [4, 'Rally at the Hornburg'],
+      [3, 'Reckless Impulse'],
+      [1, "Wrenn's Resolve"],
+      [4, 'Great Furnace'],
+      [14, 'Mountain']
+    ]
+  },
   // ---- Sample decks (showcase engine mechanics; not tuned to the metagame) ----
   {
     slug: 'sample-faeries',

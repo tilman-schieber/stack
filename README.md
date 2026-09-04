@@ -103,6 +103,11 @@ Undercity // The Initiative card (its back for the initiative, its front with th
 for the dungeon), the Adventures in the Forgotten Realms dungeon cards, and planeswalker
 emblems — with art from Scryfall that you can cycle like token art.
 
+The built-in Pauper decks are the top three of Paupergeddon Summer 2026 plus the most-played
+archetype — Jund Wildfire, White Weenie, Mono Red Rally, Grixis Affinity — and Mono-Red Madness,
+every card enforced (sneak, web-slinging, disturb, prepared, connive, flashback by tapping
+creatures, Chain Lightning's copy-back, energy equip, "play it until the end of your next turn").
+
 Card characteristics come straight from Scryfall data; only cards whose text implies effects
 get an entry in `behaviors.mjs`, written against a small vocabulary of effect ops. Cards
 without an entry play with their printed characteristics. Dredge replaces draws; proliferate, the band controller's damage split, a Siege's protector and London mulligan rounds are all real player decisions. Two-Headed Giant is the one variant not implemented (Baldur's Gate Wilderness, the Commander Legends dungeon, is also left out); no

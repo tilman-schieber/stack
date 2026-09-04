@@ -222,6 +222,7 @@ export default function EnginePlayArea() {
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: chosen })
     else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: chosen })
     else if (a.type === 'castPlotted') choose({ type: 'castPlotted', oid: a.oid, targets: chosen })
+    else if (a.type === 'castPrepared') choose({ type: 'castPrepared', oid: a.oid, targets: chosen })
     else if (a.type === 'castBestow') choose({ type: 'castBestow', oid: a.oid, targets: chosen, x: c.x })
     else
       choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, buyback: !!a.buyback, overload: !!a.overload, face: a.face, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x, hybrid: c.pips?.hybrid, twobrid: c.pips?.twobrid })
@@ -324,11 +325,15 @@ export default function EnginePlayArea() {
       choose(a.type === 'playLand' ? a : { type: a.type, oid: a.oid })
       return
     }
-    if (a.type === 'ninjutsu') {
-      // Return an unblocked attacker; if there's only one choice, act immediately,
-      // otherwise let the player click which attacker to return.
-      if (a.returns.length === 1) choose({ type: 'ninjutsu', oid: a.oid, returned: a.returns[0] })
+    if (a.type === 'ninjutsu' || a.sneak || a.webSlinging) {
+      // Return a creature (ninjutsu / sneak: an unblocked attacker; web-slinging: a
+      // tapped creature). One choice acts immediately, else click which one.
+      if (a.returns.length === 1) choose(returnAnswer(a, a.returns[0]))
       else setNinjutsu(a)
+      return
+    }
+    if (a.type === 'castDisturb') {
+      choose({ type: 'castDisturb', oid: a.oid })
       return
     }
     const needsSetup = a.needsTargets > 0 || a.sacChoose || a.discChoose || a.hasX || a.modal || a.hybrid || a.twobrid
@@ -345,6 +350,9 @@ export default function EnginePlayArea() {
     else choose({ type: 'cast', oid: a.oid, altCost: !!a.altCost, kicker: !!a.kicker, evoke: !!a.evoke, buyback: !!a.buyback, overload: !!a.overload, face: a.face })
   }
   const startActivate = startAction
+  // The answer for an action that returns one of your creatures to hand.
+  const returnAnswer = (a, returned) =>
+    a.type === 'ninjutsu' ? { type: 'ninjutsu', oid: a.oid, returned } : { type: 'cast', oid: a.oid, sneak: !!a.sneak, webSlinging: !!a.webSlinging, returned }
 
   // Cast a madness card: target if needed, else fire immediately.
   function onMadnessCast(m) {
@@ -423,10 +431,9 @@ export default function EnginePlayArea() {
       choose({ sacLand: card.oid })
       return
     }
-    // Ninjutsu: click which of your unblocked attackers to return to hand.
+    // Ninjutsu / sneak / web-slinging: click which of your creatures to return to hand.
     if (ninjutsu) {
-      if (ninjutsu.returns.includes(card.oid))
-        choose({ type: 'ninjutsu', oid: ninjutsu.oid, returned: card.oid })
+      if (ninjutsu.returns.includes(card.oid)) choose(returnAnswer(ninjutsu, card.oid))
       return
     }
     // Choosing a permanent to sacrifice (a cost) — click one you control that matches.
@@ -444,7 +451,7 @@ export default function EnginePlayArea() {
     // picker.
     if (kind === 'priority' && controllerPid === pending.player) {
       const acts = pending.actions.filter(
-        (a) => (a.type === 'activate' || a.type === 'turnFaceUp' || a.type === 'tapForMana' || a.type === 'crew') && a.oid === card.oid
+        (a) => (a.type === 'activate' || a.type === 'turnFaceUp' || a.type === 'tapForMana' || a.type === 'crew' || a.type === 'castPrepared') && a.oid === card.oid
       )
       if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
@@ -513,7 +520,7 @@ export default function EnginePlayArea() {
       cls.push('selectable', prolifSel.includes(card.oid) ? 'chosen' : '')
     if (kind === 'copyEnter' && pending.choices.includes(card.oid)) cls.push('targetable')
     if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player) {
-      if (pending.actions.some((a) => a.type === 'activate' && a.oid === card.oid)) cls.push('activatable')
+      if (pending.actions.some((a) => (a.type === 'activate' || a.type === 'castPrepared') && a.oid === card.oid)) cls.push('activatable')
       else if (pending.actions.some((a) => a.type === 'tapForMana' && a.oid === card.oid)) cls.push('tappable')
     }
     if (kind === 'declareAttackers') {
@@ -868,6 +875,7 @@ export default function EnginePlayArea() {
                   (a) =>
                     (a.type === 'castFlashback' ||
                       a.type === 'castPlotted' ||
+                      a.type === 'castDisturb' ||
                       a.type === 'unearth' ||
                       (a.type === 'cast' && zoneView.zone === 'command') ||
                       ((a.type === 'cast' || a.type === 'playLand') && a.fromExile)) &&

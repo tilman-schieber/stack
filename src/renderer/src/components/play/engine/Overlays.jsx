@@ -7,7 +7,17 @@ import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
 // graveyard, or a plotted card in exile) are highlighted and clickable.
 export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose }) {
   const castLabel = (a) =>
-    a.type === 'castPlotted' ? 'Plotted' : a.type === 'playLand' ? 'Play' : a.type === 'cast' ? 'Cast' : a.type === 'unearth' ? 'Unearth' : 'Flashback'
+    a.type === 'castPlotted'
+      ? 'Plotted'
+      : a.type === 'playLand'
+        ? 'Play'
+        : a.type === 'cast'
+          ? 'Cast'
+          : a.type === 'unearth'
+            ? 'Unearth'
+            : a.type === 'castDisturb'
+              ? 'Disturb'
+              : 'Flashback'
   return (
     <div className="eng-zoneviewer" onClick={onClose}>
       <div className="eng-zoneviewer-panel" onClick={(e) => e.stopPropagation()}>
