@@ -68,6 +68,10 @@ function cardView(o, viewerPid = null, engine = null) {
     oracleText: o.printed?.oracleText || '',
     printedKeywords: o.printed?.keywords || [],
     supported: o.supported !== false,
+    ringBearer: !!o.ringBearer, // the Ring's designation (701.54b)
+    classLevel: o.status?.classLevel || (o.behavior?.class ? 1 : null), // a Class's current level (716)
+    // A Room's doors and which are unlocked (Duskmourn).
+    doors: o.unlocked ? o.faces.map((f, i) => ({ name: f.name, unlocked: o.unlocked.includes(i) })) : null,
     restrictions:
       engine && o.zoneName === 'battlefield' && o.chars?.types?.includes('Creature')
         ? ['attack', 'block'].filter((a) => engine._restricted(o, a) || (a === 'block' && engine._ability(o, 'cantBlock')))
@@ -171,6 +175,7 @@ export function projectGame(engine, viewerPid = null) {
       initiative: state.initiative === p.id,
       dungeon,
       completedDungeons: p.completedDungeons || 0,
+      ringTempts: p.ringTempts || 0,
       libraryTop: topVisible ? { ...cardView(state.objects[topOid]), visibility: topVis } : null,
       // Phased-out permanents (702.26): out of the game until they phase back in.
       phasedOut: (state.phasedOut || [])
@@ -203,6 +208,7 @@ export function projectGame(engine, viewerPid = null) {
     format: state.format || null,
     monarch: state.monarch ?? null,
     initiative: state.initiative ?? null,
+    daytime: state.daytime || null, // 'day' | 'night' | null (731)
     helperCards: HELPER_CARDS, // which printings picture the monarch / the initiative
     turnNumber: state.turnNumber,
     step: state.step,

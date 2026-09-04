@@ -99,14 +99,19 @@ every chapter reached), playing from the top of the library (Future Sight, Exper
 Frenzy, Courser of Kruphix, Mystic Forge — the top card is shown revealed or to its owner),
 the monarch and the initiative with their inherent triggers, dungeons (Undercity and the three
 Forgotten Realms dungeons: room choices at forks, completion as a state-based action, goad),
+day and night with daybound/nightbound transforming, the Ring tempts you (the Ring emblem, the
+Ring-bearer designation and all four levels), Classes (level up as a sorcery), Rooms (cast either
+door, unlock the other), blocking additional creatures (Entourage of Trest),
 partial target legality on resolution, state-based
 actions, draws and concessions, multiplayer elimination, and the Commander format (command
 zone, tax, 21-damage rule, 40 life).
 
 Designations show up on the board as the real helper cards — the Monarch token, the
 Undercity // The Initiative card (its back for the initiative, its front with the current room
-for the dungeon), the Adventures in the Forgotten Realms dungeon cards, and planeswalker
-emblems — with art from Scryfall that you can cycle like token art.
+for the dungeon), the Adventures in the Forgotten Realms dungeon cards, the Ring emblem (with
+its temptation count), the Day // Night card, and planeswalker emblems — with art from
+Scryfall that you can cycle like token art. A Ring-bearer wears a 💍 badge, a Class shows its
+level, a Room its locked and unlocked doors.
 
 The built-in Pauper decks are the top three of Paupergeddon Summer 2026 plus the most-played
 archetype — Jund Wildfire, White Weenie, Mono Red Rally, Grixis Affinity — and Mono-Red Madness,
@@ -131,6 +136,9 @@ Tests are plain Node scripts (`node src/shared/engine/<name>.test.mjs`, or `npm 
   `components/play/*` (setup, board, networking UI), `store/engineGame.js` (game modes:
   local / host / guest), `net/webrtcTransport.js`.
 - **`src/shared/engine/`** — the rules engine, shared by the renderer and the tests.
+  `engine.mjs` holds the driver (turn structure, priority, validation); the subsystems live in
+  `engine-{legal,actions,effects,mana,combat,triggers,designations}.mjs` and are mixed into the
+  same class. `bot.mjs` is the computer opponent; `dungeons.mjs` the dungeon and helper-card data.
 
 The renderer never touches the network or filesystem directly — everything goes through
 `window.api` IPC. `MagicCompRules20260619.txt` is the comprehensive-rules reference the

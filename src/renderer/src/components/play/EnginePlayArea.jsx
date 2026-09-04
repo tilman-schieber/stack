@@ -337,6 +337,10 @@ export default function EnginePlayArea() {
       choose({ type: 'castDisturb', oid: a.oid })
       return
     }
+    if (a.type === 'unlockDoor') {
+      choose({ type: 'unlockDoor', oid: a.oid, face: a.face })
+      return
+    }
     const needsSetup = a.needsTargets > 0 || a.sacChoose || a.discChoose || a.hasX || a.modal || a.hybrid || a.twobrid
     if (needsSetup) {
       setCast({ action: a, chosen: [], sac: null, disc: null, x: null, pips: null })
@@ -417,6 +421,11 @@ export default function EnginePlayArea() {
         setProlifSel((sel) => (sel.includes(card.oid) ? sel.filter((x) => x !== card.oid) : [...sel, card.oid]))
       return
     }
+    // The Ring tempts you: click the creature to become your Ring-bearer.
+    if (kind === 'chooseRingBearer' && pending.choices.includes(card.oid)) {
+      choose({ oid: card.oid })
+      return
+    }
     // Legend rule: click the one to keep.
     if (kind === 'legendChoice' && pending.choices.includes(card.oid)) {
       choose({ keep: card.oid })
@@ -452,7 +461,7 @@ export default function EnginePlayArea() {
     // picker.
     if (kind === 'priority' && controllerPid === pending.player) {
       const acts = pending.actions.filter(
-        (a) => (a.type === 'activate' || a.type === 'turnFaceUp' || a.type === 'tapForMana' || a.type === 'crew' || a.type === 'castPrepared') && a.oid === card.oid
+        (a) => (a.type === 'activate' || a.type === 'turnFaceUp' || a.type === 'tapForMana' || a.type === 'crew' || a.type === 'castPrepared' || a.type === 'unlockDoor') && a.oid === card.oid
       )
       if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
@@ -477,7 +486,15 @@ export default function EnginePlayArea() {
       if (controllerPid === pending.player && pending.eligible.includes(card.oid)) {
         setPickBlocker(card.oid) // choose a blocker, then click the attacker
       } else if (card.attacking && pickBlocker != null) {
-        setBlocks((b) => ({ ...b, [pickBlocker]: card.oid }))
+        // A blocker that may block additional creatures keeps a list of attackers.
+        const extra = pending.extraBlocks?.[pickBlocker] || 0
+        setBlocks((b) => {
+          const cur = b[pickBlocker]
+          const list = cur == null ? [] : Array.isArray(cur) ? cur : [cur]
+          if (list.includes(card.oid)) return b
+          const next = extra > 0 && list.length ? [...list, card.oid].slice(0, 1 + extra) : card.oid
+          return { ...b, [pickBlocker]: next }
+        })
         setPickBlocker(null)
       }
     }
@@ -517,11 +534,12 @@ export default function EnginePlayArea() {
       cls.push('targetable')
     if (kind === 'sacrificeChoice' && controllerPid === pending.player && pending.choices.includes(card.oid)) cls.push('targetable')
     if (kind === 'legendChoice' && pending.choices.includes(card.oid)) cls.push('targetable')
+    if (kind === 'chooseRingBearer' && pending.choices.includes(card.oid)) cls.push('targetable')
     if (kind === 'proliferate' && pending.choices.some((c) => c.kind === 'object' && c.oid === card.oid))
       cls.push('selectable', prolifSel.includes(card.oid) ? 'chosen' : '')
     if (kind === 'copyEnter' && pending.choices.includes(card.oid)) cls.push('targetable')
     if (!targeting && !needSac && kind === 'priority' && controllerPid === pending.player) {
-      if (pending.actions.some((a) => (a.type === 'activate' || a.type === 'castPrepared') && a.oid === card.oid)) cls.push('activatable')
+      if (pending.actions.some((a) => (a.type === 'activate' || a.type === 'castPrepared' || a.type === 'unlockDoor') && a.oid === card.oid)) cls.push('activatable')
       else if (pending.actions.some((a) => a.type === 'tapForMana' && a.oid === card.oid)) cls.push('tappable')
     }
     if (kind === 'declareAttackers') {
@@ -645,16 +663,28 @@ export default function EnginePlayArea() {
               onHover={setHover}
             />
           )}
-          {(p.emblems || []).map((em) => (
-            <HelperCard
-              key={em.oid}
-              def={{ name: em.name.replace(/\s*emblem$/i, '') + ' Emblem', helper: true }}
-              label={em.name}
-              info="An emblem: it stays in the command zone and can't be removed."
-              onZoom={setZoom}
-              onHover={setHover}
-            />
-          ))}
+          {(p.emblems || []).map((em) =>
+            em.name === 'The Ring' ? (
+              <HelperCard
+                key={em.oid}
+                def={view.helperCards.ring}
+                label="The Ring"
+                sub={`tempted ×${p.ringTempts}`}
+                info={`The Ring has tempted you ${p.ringTempts} time${p.ringTempts === 1 ? '' : 's'}.\nYour Ring-bearer is legendary and can't be blocked by creatures with greater power.\n(2+) Whenever your Ring-bearer attacks, draw a card, then discard a card.\n(3+) Whenever your Ring-bearer becomes blocked by a creature, that creature's controller sacrifices it at end of combat.\n(4+) Whenever your Ring-bearer deals combat damage to a player, each opponent loses 3 life.`}
+                onZoom={setZoom}
+                onHover={setHover}
+              />
+            ) : (
+              <HelperCard
+                key={em.oid}
+                def={{ name: em.name.replace(/\s*emblem$/i, '') + ' Emblem', helper: true }}
+                label={em.name}
+                info="An emblem: it stays in the command zone and can't be removed."
+                onZoom={setZoom}
+                onHover={setHover}
+              />
+            )
+          )}
         </div>
       )}
       {p.completedDungeons > 0 && (
@@ -773,6 +803,11 @@ export default function EnginePlayArea() {
             <span className="eng-turn">Turn {view.turnNumber}</span>
             <span className="phase-pill on">{STEP_LABEL[view.step] || view.step}</span>
             <span className="eng-active">Active: {view.players[view.activePlayer].name}</span>
+            {view.daytime && (
+              <span className="eng-daynight" title={view.daytime === 'day' ? 'It is day: if the active player casts no spells this turn, it becomes night next turn.' : 'It is night: if the active player casts two or more spells this turn, it becomes day next turn.'}>
+                <HelperCard def={view.helperCards[view.daytime]} label={view.daytime === 'day' ? 'Day' : 'Night'} onZoom={setZoom} onHover={setHover} />
+              </span>
+            )}
           </>
         )}
         {!myTurn && kind !== 'gameOver' && (

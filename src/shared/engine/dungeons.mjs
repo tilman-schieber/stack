@@ -202,5 +202,29 @@ export const roomOf = (dungeonName, roomId) => DUNGEONS[dungeonName]?.rooms.find
 // Helper cards for designations (725/726) — the physical cards players use.
 export const HELPER_CARDS = {
   monarch: { name: 'The Monarch', scryfallId: '40b79918-22a7-4fff-82a6-8ebfe6e87185' }, // Conspiracy: Take the Crown
-  initiative: { name: 'Undercity // The Initiative', scryfallId: '2c65185b-6cf0-41d9-b4eb-09c605112a13', face: 'back' }
+  initiative: { name: 'Undercity // The Initiative', scryfallId: '2c65185b-6cf0-41d9-b4eb-09c605112a13', face: 'back' },
+  ring: { name: 'The Ring // The Ring Tempts You', scryfallId: '7215460e-8c06-47d0-94e5-d1832d0218af' }, // Tales of Middle-earth (front: the emblem)
+  day: { name: 'Day // Night', scryfallId: '9c0f7843-4cbb-4d0f-8887-ec823a9238da' }, // Innistrad: Midnight Hunt
+  night: { name: 'Day // Night', scryfallId: '9c0f7843-4cbb-4d0f-8887-ec823a9238da', face: 'back' }
+}
+
+// The Ring emblem (701.54c): one static and three triggered abilities that
+// switch on as the Ring tempts its owner more times.
+export const RING_EMBLEM = {
+  name: 'The Ring',
+  static: [{ affects: { ringBearer: true, controller: 'you' }, addSupertypes: ['Legendary'] }],
+  triggered: [
+    {
+      trigger: { event: 'attacks', filter: { ringBearer: true, controller: 'you' }, if: { ringTempts: { min: 2 } } },
+      effect: [{ op: 'draw', amount: 1 }, { op: 'discard', amount: 1 }]
+    },
+    {
+      trigger: { event: 'becomesBlocked', filter: { ringBearer: true, controller: 'you' }, if: { ringTempts: { min: 3 } } },
+      effect: [{ op: 'sacrificeAtEndOfCombat', of: 'other' }]
+    },
+    {
+      trigger: { event: 'dealsCombatDamageToPlayer', filter: { ringBearer: true, controller: 'you' }, if: { ringTempts: { min: 4 } } },
+      effect: [{ op: 'eachOpponentLosesLife', amount: 3 }]
+    }
+  ]
 }

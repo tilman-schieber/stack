@@ -629,6 +629,10 @@ export const BEHAVIORS = {
   // ---- The monarch (725) — Pauper's Palace Sentinels / Thorn of the Black Rose ----
   'Palace Sentinels': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] }] },
   'Thorn of the Black Rose': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] }] },
+  'Entourage of Trest': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] }],
+    staticRules: [{ extraBlocks: 1, affects: { self: true }, if: { monarch: true } }] // blocks an additional creature while you're the monarch
+  },
   'Crown-Hunter Hireling': {
     triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] }],
     // "can't attack unless defending player is the monarch": a conditional restriction.
@@ -800,6 +804,44 @@ export const BEHAVIORS = {
     }
   },
   'Reckless Impulse': { spell: { effect: [{ op: 'exileTopPlayable', amount: 2, until: 'endOfNextTurn' }] } },
+  // ---- The Ring tempts you (701.54) ----
+  'Birthday Escape': { spell: { effect: [{ op: 'draw', amount: 1 }, { op: 'ringTempt' }] } },
+  'Claim the Precious': { spell: { targets: [{ type: 'creature' }], effect: [{ op: 'destroy', to: 'target0' }, { op: 'ringTempt' }] } },
+  "Bombadil's Song": {
+    spell: {
+      targets: [{ type: 'creature', controller: 'you' }],
+      effect: [{ op: 'pump', to: 'target0', power: 1, toughness: 1 }, { op: 'grantKeyword', to: 'target0', keyword: 'Hexproof' }, { op: 'ringTempt' }]
+    }
+  },
+  'Enraged Huorn': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'ringTempt' }] }] },
+  'Rohirrim Lancer': { triggered: [{ trigger: { event: 'dies', self: true }, effect: [{ op: 'ringTempt' }] }] },
+  'Call of the Ring': {
+    triggered: [
+      { trigger: { event: 'upkeep', yourTurn: true }, effect: [{ op: 'ringTempt' }] },
+      { trigger: { event: 'choosesRingBearer' }, effect: [{ op: 'optionalPay', life: 2, effect: [{ op: 'draw', amount: 1 }] }] }
+    ]
+  },
+  // ---- Classes (716) ----
+  'Ranger Class': {
+    class: { levels: [{ level: 2, cost: '{1}{G}' }, { level: 3, cost: '{3}{G}' }] },
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'createToken', token: { name: 'Wolf', types: ['Creature'], subtypes: ['Wolf'], colors: ['G'], power: 2, toughness: 2 } }] },
+      { trigger: { event: 'youAttack', if: { classLevel: { min: 2 } } }, targets: [{ type: 'creature', attacking: true }], effect: [{ op: 'addCounter', to: 'target0', counter: '+1/+1', amount: 1 }] }
+    ],
+    staticRules: [{ lookAtTop: true, if: { classLevel: { min: 3 } } }, { playFromTop: { spells: { type: 'Creature' } }, if: { classLevel: { min: 3 } } }]
+  },
+  // ---- Rooms (Duskmourn): each door is authored by its own name ----
+  'Derelict Attic': { unlock: { effect: [{ op: 'draw', amount: 2 }, { op: 'loseLife', amount: 2 }] } },
+  "Widow's Walk": {
+    triggered: [
+      {
+        trigger: { event: 'attacks', filter: { controller: 'you', alone: true } },
+        effect: [{ op: 'pump', to: 'subject', power: 1, toughness: 0 }, { op: 'grantKeyword', to: 'subject', keyword: 'Deathtouch' }]
+      }
+    ]
+  },
+  Glassworks: { unlock: { targets: [{ type: 'creature', controller: 'opponent' }], effect: [{ op: 'dealDamage', to: 'target0', amount: 4 }] } },
+  'Shattered Yard': { triggered: [{ trigger: { event: 'endStep', yourTurn: true }, effect: [{ op: 'dealDamageEachOpponent', amount: 1 }] }] },
   "Wrenn's Resolve": { spell: { effect: [{ op: 'exileTopPlayable', amount: 2, until: 'endOfNextTurn' }] } },
   // Batch 6: multi-mana and restricted mana, proliferate, mutate, Lab Man, dredge.
   'Sol Ring': { manaOptions: [{ colors: ['C'], amount: 2 }] },
@@ -1339,6 +1381,11 @@ export function loadBehavior(printed) {
       effect: [{ op: 'optionalPay', cost: '{W/B}', effect: [{ op: 'eachOpponentLosesLife', amount: 1 }, { op: 'gainLife', amount: { count: 'opponents' } }] }]
     })
 
+  // A Class (716): "{cost}: Level N" sorcery-speed abilities, one per level.
+  const activated = [...(authored.activated || [])]
+  for (const lv of authored.class?.levels || [])
+    activated.push({ label: `${lv.cost}: Level ${lv.level}`, cost: { mana: lv.cost }, sorcerySpeed: true, if: { classLevel: { eq: lv.level - 1 } }, effect: [{ op: 'levelUp', level: lv.level }] })
+
   return {
     affinity,
     kicker,
@@ -1362,7 +1409,7 @@ export function loadBehavior(printed) {
     maxBlockers,
     toxic,
     spell: authored.spell || null,
-    activated: authored.activated || [],
+    activated,
     triggered,
     static: authored.static || [],
     replacement: authored.replacement || [], // replacement effects (rule 614): { event, filter?, apply }
@@ -1389,7 +1436,9 @@ export function loadBehavior(printed) {
     disturb: authored.disturb || null, // { cost } — cast from the graveyard transformed (702.148)
     sneak: authored.sneak || null, // { cost } — alternative cost returning an unblocked attacker; enters tapped and attacking
     webSlinging: authored.webSlinging || null, // { cost } — alternative cost returning a tapped creature you control
-    prepared: authored.prepared || null // { name, cost, types, spell } — a spell half castable while the permanent is prepared
+    prepared: authored.prepared || null, // { name, cost, types, spell } — a spell half castable while the permanent is prepared
+    class: authored.class || null, // { levels: [{ level, cost }] } — a Class enchantment (716)
+    unlock: authored.unlock || null // { targets?, effect } — a Room door's "when you unlock this door" (Duskmourn)
   }
 }
 

@@ -39,6 +39,13 @@ export function EngineCard({ card, className = '', onClick, onZoom, onHover, tit
       {card.damage > 0 && <span className="eng-dmg">{card.damage}</span>}
       {card.loyalty != null && <span className="eng-loyalty">◆ {card.loyalty}</span>}
       {card.defense != null && <span className="eng-loyalty" title="Defense">🛡 {card.defense}</span>}
+      {card.ringBearer && <span className="eng-badge ring" title="Your Ring-bearer: legendary, can't be blocked by creatures with greater power (and more as the Ring tempts you)">💍</span>}
+      {card.classLevel != null && <span className="eng-loyalty" title="Class level">Lv {card.classLevel}</span>}
+      {card.doors && (
+        <span className="eng-loyalty" title={card.doors.map((d) => `${d.name}: ${d.unlocked ? 'unlocked' : 'locked'}`).join('\n')}>
+          {card.doors.map((d) => (d.unlocked ? '🚪' : '🔒')).join('')}
+        </span>
+      )}
       {card.supported === false && !card.hidden && (
         <span className="eng-badge warn" title="Part of this card's text is not enforced by the rules engine — it plays with its printed characteristics only">
           !

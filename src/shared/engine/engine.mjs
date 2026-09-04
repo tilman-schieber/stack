@@ -446,6 +446,9 @@ export class GameEngine {
         case 'chooseDungeon':
           this._applyChooseDungeon(pending, answer)
           break
+        case 'chooseRingBearer':
+          this._applyChooseRingBearer(pending, answer)
+          break
         default:
           throw new Error(`unhandled decision ${pending.kind}`)
       }
@@ -519,7 +522,10 @@ export class GameEngine {
         const blocks = a.blocks || {}
         for (const [b, atk] of Object.entries(blocks)) {
           if (!pending.eligible.includes(b)) throw new Error('illegal block: that creature cannot block')
-          if (!pending.attackers.includes(atk)) throw new Error('illegal block: not an attacker aimed at you')
+          const list = Array.isArray(atk) ? atk : [atk]
+          for (const x of list) if (!pending.attackers.includes(x)) throw new Error('illegal block: not an attacker aimed at you')
+          // "Can block an additional creature" (Entourage of Trest): one more per grant.
+          if (list.length > 1 + this._extraBlocks(this.state.objects[b])) throw new Error(`illegal block: ${this.state.objects[b].chars.name} can't block that many creatures`)
         }
         // Block requirements (509.1c): a creature that must block if able, and can
         // legally block some attacker, must be assigned.
@@ -687,6 +693,11 @@ export class GameEngine {
     switch (step) {
       case 'untap': {
         this._log(`— Turn ${s.turnNumber}: ${this._nameOf(s.activePlayer)} —`, { marker: true })
+        // Day/night (731.5): as a turn begins, the previous turn's spell count
+        // may flip day to night (none cast) or night to day (two or more).
+        if (s.daytime === 'day' && s.lastTurnSpells === 0) this._becomeDayNight('night')
+        else if (s.daytime === 'night' && s.lastTurnSpells >= 2) this._becomeDayNight('day')
+        for (const p of s.players) p.spellsThisTurn = 0
         this._phasing()
         // "Until your next turn" effects created by the active player end now (611.2b).
         this._expireEffects((e) => e.duration === 'untilYourNextTurn' && e.owner === s.activePlayer)
@@ -936,6 +947,7 @@ export class GameEngine {
       this._grantPriority()
       return
     }
+    this._lastActive = s.activePlayer // for the day/night check at the next untap
     // Extra turns (rule 500.7 / 720): a queued extra turn is taken by its owner
     // before the turn would pass to the other player.
     if (s.extraTurns?.length) {
@@ -943,6 +955,7 @@ export class GameEngine {
       this._log(`${this._nameOf(s.activePlayer)} takes an extra turn`)
     } else s.activePlayer = this._otherPlayer(s.activePlayer)
     s.extraCombats = 0 // additional-combat phases don't carry across turns
+    s.lastTurnSpells = s.players[s.turnNumber >= 1 ? this._lastActive ?? s.activePlayer : s.activePlayer]?.spellsThisTurn || 0
     s.turnNumber++
     this._enterStep('untap')
   }
@@ -1100,6 +1113,7 @@ export class GameEngine {
       sourceOid: t.sourceOid,
       name: t.name || null, // a sourceless trigger of the game (the monarch, a dungeon room)
       dungeonRoom: t.dungeonRoom || null,
+      subjectOid: t.subjectOid ?? null, // what the trigger was about ("it gets +1/+0")
       effect: t.effect,
       targets: chosenTargets,
       condition: t.condition || null,
@@ -1239,6 +1253,7 @@ export class GameEngine {
   // Does a battlefield object satisfy a target spec (type + exclusions)?
   _specMatches(spec, o) {
     if (spec.type === 'creature' && !o.chars.types.includes('Creature')) return false
+    if (spec.attacking && !o.status.attacking) return false // "target attacking creature"
     if (spec.type === 'land' && !o.chars.types.includes('Land')) return false
     if (spec.type === 'artifact' && !o.chars.types.includes('Artifact')) return false
     if (spec.noncreature && o.chars.types.includes('Creature')) return false

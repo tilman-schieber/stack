@@ -793,3 +793,22 @@
   font-size: 10px;
   color: var(--muted);
 }
+.eng-badge.ring {
+  right: 24px;
+  background: #ffd66b;
+  color: #1a1206;
+}
+.eng-daynight {
+  display: inline-flex;
+  margin-left: 8px;
+}
+.eng-daynight .eng-helper-wrap {
+  width: 34px;
+}
+.eng-daynight .board-card.eng-helper {
+  width: 30px;
+  height: 42px;
+}
+.eng-daynight .eng-helper-label {
+  font-size: 9px;
+}

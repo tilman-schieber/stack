@@ -174,6 +174,16 @@ export const legalMethods = {
       for (const a of tmp) actions.push({ ...a, fromExile: true, label: `${a.label || o.printed.name} (from exile)` })
     }
 
+    // Rooms: unlock a locked door as a sorcery by paying its mana cost.
+    for (const oid of zone(s, 'battlefield')) {
+      const o = s.objects[oid]
+      if (!o.unlocked || o.controller !== pid || !sorcerySpeed) continue
+      o.faces.forEach((f, i) => {
+        if (o.unlocked.includes(i) || !this._canPay(pid, f.manaCost, [], null, f)) return
+        actions.push({ type: 'unlockDoor', oid, face: i, label: `Unlock ${f.name}` })
+      })
+    }
+
     // Plotted cards: cast from exile for free on a later turn (702.170d).
     for (const oid of zone(s, 'exile', pid)) {
       const o = s.objects[oid]

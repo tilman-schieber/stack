@@ -69,6 +69,7 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       copyEnter: 'is choosing what to copy',
       explore: 'is exploring',
       chooseName: 'is choosing a card name',
+      chooseRingBearer: 'is choosing a Ring-bearer',
       chooseRoom: 'is choosing a dungeon room',
       chooseDungeon: 'is choosing a dungeon'
     }
@@ -404,6 +405,12 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
     )
   } else if (kind === 'chooseValue') {
     body = <ValuePicker label={`${nameOf(pending.player)} — ${pending.label}`} options={pending.options} onPick={(value) => choose({ value })} />
+  } else if (kind === 'chooseRingBearer') {
+    body = (
+      <span>
+        <b>{nameOf(pending.player)}</b> — the Ring tempts you: click a creature you control to make it your Ring-bearer.
+      </span>
+    )
   } else if (kind === 'chooseName') {
     body = <NamePicker pending={pending} nameOf={nameOf} onPick={(name) => choose({ name })} />
   } else if (kind === 'chooseRoom') {

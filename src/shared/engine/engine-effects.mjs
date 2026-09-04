@@ -87,13 +87,14 @@ export const effectsMethods = {
       }
       case 'optionalPay': {
         // "You may pay {cost}. If you do, <effect>." (e.g. Nihil Spellbomb.) With
-        // `elseEffect`: "…unless you pay" (echo: sacrifice).
+        // `elseEffect`: "…unless you pay" (echo: sacrifice). `life`: pay life instead.
         const pid = source.controller
         s.pending = {
           kind: 'mayPay',
           player: pid,
-          cost: e.cost,
-          canPay: this._canPay(pid, parseManaCost(e.cost)),
+          cost: e.life ? `${e.life} life` : e.cost,
+          life: e.life || null,
+          canPay: e.life ? s.players[pid].life > e.life : this._canPay(pid, parseManaCost(e.cost)),
           _source: source,
           _effect: e.effect || [],
           _else: e.elseEffect || null
@@ -217,6 +218,9 @@ export const effectsMethods = {
         const pid = this._resolvePlayerRef(source, e.to || 'controller')
         return this._nextSacrificeChoice([pid], e.filter || {}, 1, { action: 'bounce' })
       }
+      case 'ringTempt':
+        // "The Ring tempts you" (701.54): may pause to choose a Ring-bearer.
+        return this._ringTempt(this._resolvePlayerRef(source, e.to || 'controller'))
       case 'chooseColor':
         // "…of the color of your choice": remembered on the resolving spell.
         s.pending = { kind: 'chooseValue', player: source.controller, options: ['W', 'U', 'B', 'R', 'G'], label: e.label || 'Choose a color', _holder: source }
@@ -711,6 +715,33 @@ export const effectsMethods = {
           this._createTokens(def, source.controller, n)
           break
         }
+        case 'becomeDay':
+          this._becomeDayNight('day')
+          break
+        case 'becomeNight':
+          this._becomeDayNight('night')
+          break
+        case 'levelUp': {
+          // A Class gains a level (716.2): its higher-level abilities switch on.
+          const o = s.objects[source.sourceOid]
+          if (!o || o.zoneName !== 'battlefield') break
+          o.status.classLevel = e.level
+          this._log(`${this._objName(o)} becomes level ${e.level}`)
+          this._fireTriggers('becomesLevel', o, { level: e.level })
+          break
+        }
+        case 'sacrificeAtEndOfCombat': {
+          // The Ring, level 3: the creature blocking your Ring-bearer is sacrificed
+          // at end of combat (a delayed trigger controlled by its controller).
+          const other = source.extra?.other
+          if (other?.oid) s.delayedTriggers.push({ event: 'endCombat', controller: other.controller, sourceOid: null, effect: [{ op: 'sacrificeOid', oid: other.oid }] })
+          break
+        }
+        case 'sacrificeOid': {
+          const o = s.objects[e.oid]
+          if (o?.zoneName === 'battlefield') this._sacrifice(o)
+          break
+        }
         case 'becomeMonarch':
           this._becomeMonarch(e.pid ?? this._resolvePlayerRef(source, e.to || 'controller'))
           break
@@ -962,18 +993,9 @@ export const effectsMethods = {
           }
           break
         }
-        case 'createEmblem': {
-          // An emblem (114): an object in the command zone carrying static (and
-          // triggered) abilities for its owner. It can't leave the game.
-          const em = createObject(s, { name: e.name || 'Emblem', type_line: 'Emblem', colors: [] }, source.controller)
-          em.kind = 'emblem'
-          em.behavior = { ...em.behavior, static: e.static || [], triggered: e.triggered || [], staticRules: e.staticRules || [] }
-          em.zoneName = 'command'
-          em.timestamp = ++s.tsCounter
-          s.zones.command.push(em.oid)
-          this._log(`${this._nameOf(source.controller)} gets an emblem`)
+        case 'createEmblem':
+          this._makeEmblem(source.controller, e)
           break
-        }
         case 'transform': {
           // Transform (701.28): a double-faced permanent turns to its other face.
           const t = this._resolveTargetRef(source, e.to || 'self')
@@ -1018,7 +1040,10 @@ export const effectsMethods = {
 
   _applyMayPay(pending, answer) {
     if (answer?.pay && pending.canPay) {
-      this._pay(pending.player, parseManaCost(pending.cost))
+      if (pending.life) {
+        this.state.players[pending.player].life -= pending.life
+        this._log(`${this._nameOf(pending.player)} pays ${pending.life} life`)
+      } else this._pay(pending.player, parseManaCost(pending.cost))
       if (pending._chainCopy) {
         // Copy the spell under the payer's control; they may choose a new target.
         const copy = this._copyStackSpell(pending._source, pending.player)
@@ -1162,6 +1187,12 @@ export const effectsMethods = {
       return obj ? { kind: 'object', obj } : null
     }
     if (ref === 'activePlayer') return { kind: 'player', pid: this.state.activePlayer }
+    // 'subject' — the object a triggered ability triggered on ("whenever a creature
+    // you control attacks alone, it gets…").
+    if (ref === 'subject') {
+      const obj = this.state.objects[source.subjectOid]
+      return obj ? { kind: 'object', obj } : null
+    }
     if (ref === 'controller') return { kind: 'player', pid: source.controller }
     // 'attached' — the permanent the source (an Aura/Equipment) is attached to.
     if (ref === 'attached') {

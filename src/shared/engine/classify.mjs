@@ -23,7 +23,9 @@ const SUPPORTED_KEYWORDS = new Set(
     'defender',
     'prowess',
     'hexproof',
-    'shroud'
+    'shroud',
+    'daybound',
+    'nightbound'
   ]
 )
 

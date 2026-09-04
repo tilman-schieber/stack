@@ -370,6 +370,7 @@ export const triggersMethods = {
       if (!w || w.chars?.lostAbilities) continue // "loses all abilities" (613.1f)
       for (const ab of w.behavior?.triggered || []) {
         if (ab.trigger.event !== event) continue
+        if (ab.trigger.level != null && extra.level !== ab.trigger.level) continue // "when this Class becomes level N"
         if (ab.trigger.self) {
           if (w.oid !== subject.oid) continue
         } else if (!this._matchFilter(ab.trigger.filter, subject, w)) {
@@ -587,6 +588,8 @@ export const triggersMethods = {
     if (filter.subtype && !hasSub(subject.chars, filter.subtype)) return false
     if (filter.controller === 'you' && subject.controller !== watcher.controller) return false
     if (filter.controller === 'opponent' && subject.controller === watcher.controller) return false
+    if (filter.ringBearer && !subject.ringBearer) return false // "your Ring-bearer"
+    if (filter.alone && (this.state.combat?.attackers?.length || 0) !== 1) return false // "attacks alone"
     return true
   },
 

@@ -5,7 +5,8 @@ import { createState, createObject, createAbility, computeChars, zone, zoneKey, 
 import { manaAbilityColors, loadBehavior } from './behaviors.mjs'
 import { isPermanent, parseManaCost, manaValue, BASIC_LAND_MANA } from './cards.mjs'
 import { recompute, matchStatic, hasSub } from './layers.mjs'
-import { DUNGEONS, REGULAR_DUNGEONS, roomOf } from './dungeons.mjs'
+import { DUNGEONS, REGULAR_DUNGEONS, roomOf, RING_EMBLEM } from './dungeons.mjs'
+import { combinedPrinted } from './cards.mjs'
 import { STEP_ORDER, PRIORITY_STEPS, MAIN_STEPS, tags, addCosts } from './engineShared.mjs'
 
 export const designationsMethods = {
@@ -217,4 +218,110 @@ export const designationsMethods = {
     return this
   },
 
+  // ---- day and night (731) ----------------------------------------------
+
+  _isDaybound(o) {
+    return !!o?.faces?.[0]?.keywords?.includes('Daybound') && o.layout === 'transform'
+  },
+
+  // It becomes day or night: daybound permanents show their day face, nightbound
+  // ones their night face (731.3), and "becomes day/night" abilities trigger.
+  _becomeDayNight(which) {
+    const s = this.state
+    if (s.daytime === which) return
+    s.daytime = which
+    this._log(`It becomes ${which}`, { marker: true })
+    for (const o of objectsIn(s, 'battlefield')) {
+      if (!this._isDaybound(o) || !o.faces?.[1]) continue
+      const want = which === 'night' ? 1 : 0
+      if ((o.face || 0) === want) continue
+      setFace(o, want)
+      this._log(`${this._objName(o)} transforms`)
+      this._fireTriggers('transforms', o)
+    }
+    recompute(s)
+    for (const p of s.players) if (!p.hasLost) this._firePlayerEvent(which === 'day' ? 'becomesDay' : 'becomesNight', p.id)
+  },
+
+  // ---- the Ring (701.54) --------------------------------------------------
+
+  // The Ring tempts `pid`: the emblem if they lack it, one more temptation, then
+  // a Ring-bearer among their creatures (a choice; auto: the biggest).
+  _ringTempt(pid) {
+    const s = this.state
+    const p = s.players[pid]
+    if (p.hasLost) return false
+    if (!this._emblems().some((oid) => s.objects[oid].owner === pid && s.objects[oid].printed?.name === 'The Ring')) this._makeEmblem(pid, RING_EMBLEM)
+    p.ringTempts = (p.ringTempts || 0) + 1
+    this._log(`The Ring tempts ${p.name} (${p.ringTempts})`)
+    this._firePlayerEvent('ringTempts', pid)
+    const cands = objectsIn(s, 'battlefield').filter((o) => o.controller === pid && o.chars.types.includes('Creature'))
+    if (!cands.length) return false
+    if (cands.length === 1 || this._autoOrder) {
+      this._setRingBearer(pid, cands.sort((a, b) => (b.chars.power || 0) - (a.chars.power || 0))[0])
+      return false
+    }
+    s.pending = { kind: 'chooseRingBearer', player: pid, choices: cands.map((o) => o.oid) }
+    return true
+  },
+
+  _setRingBearer(pid, o) {
+    for (const x of objectsIn(this.state, 'battlefield')) if (x.controller === pid) x.ringBearer = false
+    o.ringBearer = true
+    this._log(`${this._objName(o)} is ${this._nameOf(pid)}'s Ring-bearer`)
+    recompute(this.state)
+    this._firePlayerEvent('choosesRingBearer', pid)
+  },
+
+  _applyChooseRingBearer(pending, answer) {
+    const o = this.state.objects[answer?.oid]
+    if (!o || !pending.choices.includes(answer?.oid)) throw new Error('choose one of your creatures as your Ring-bearer')
+    this._setRingBearer(pending.player, o)
+    this._resumeResolution()
+  },
+
+  // An emblem (114): an object in the command zone carrying static (and
+  // triggered) abilities for its owner. It can't leave the game.
+  _makeEmblem(controller, e) {
+    const s = this.state
+    const em = createObject(s, { name: e.name || 'Emblem', type_line: 'Emblem', colors: [] }, controller)
+    em.kind = 'emblem'
+    em.behavior = { ...em.behavior, static: e.static || [], triggered: e.triggered || [], staticRules: e.staticRules || [] }
+    em.zoneName = 'command'
+    em.timestamp = ++s.tsCounter
+    s.zones.command.push(em.oid)
+    this._log(`${this._nameOf(controller)} gets an emblem${e.name ? ` (${e.name})` : ''}`)
+    return em
+  },
+
+  // ---- Rooms (Duskmourn) --------------------------------------------------
+
+  _isRoom(o) {
+    return o?.layout === 'split' && !!o.faces?.every((f) => f.subtypes?.includes('Room'))
+  },
+
+  // A Room's characteristics and abilities are those of its unlocked doors.
+  _refreshRoom(o) {
+    const faces = (o.unlocked || []).map((i) => o.faces[i])
+    if (!faces.length) return
+    o.printed = faces.length === 1 ? faces[0] : combinedPrinted(faces)
+    const bs = faces.map((f) => loadBehavior(f))
+    const cat = (k) => bs.flatMap((b) => b[k] || [])
+    o.behavior = { ...bs[0], triggered: cat('triggered'), activated: cat('activated'), static: cat('static'), staticRules: cat('staticRules'), replacement: cat('replacement') }
+    computeChars(o)
+  },
+
+  // "When you unlock this door, …" — the door face's authored `unlock` ability.
+  _unlockTrigger(o, face) {
+    const b = loadBehavior(o.faces[face])
+    if (!b.unlock) return
+    this.state.pendingTriggers.push({
+      controller: o.controller,
+      sourceOid: o.oid,
+      subjectOid: o.oid,
+      name: `${o.faces[face].name} — unlocked`,
+      effect: b.unlock.effect,
+      targetSpec: b.unlock.targets || []
+    })
+  },
 }

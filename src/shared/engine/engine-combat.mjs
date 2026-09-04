@@ -41,6 +41,7 @@ export const combatMethods = {
       typeof a === 'string' ? { oid: a, defender: { player: def } } : a
     )
     s.combat.bands = {}
+    s.combat.attackers = entries.map((e) => e.oid) // known before "attacks" triggers ("attacks alone")
     for (const { oid, defender, band } of entries) {
       const o = s.objects[oid]
       o.status.band = band || null
@@ -52,6 +53,7 @@ export const combatMethods = {
       this._fireTriggers('attacks', o)
     }
     s.combat.attackers = entries.map((e) => e.oid)
+    if (entries.length) this._firePlayerEvent('youAttack', s.activePlayer) // "whenever you attack" (once per combat)
     if (entries.length === 0) {
       this._log(`${this._nameOf(s.activePlayer)} doesn't attack`)
       this._gotoStep('main2')
@@ -123,7 +125,14 @@ export const combatMethods = {
     const s = this.state
     const def = s.combat.blockQueue.shift()
     const attackers = s.combat.attackers.filter((oid) => this._defenderOfAttacker(s.objects[oid]) === def)
-    s.pending = { kind: 'declareBlockers', player: def, eligible: this._eligibleBlockers(def), attackers }
+    const eligible = this._eligibleBlockers(def)
+    // For the UI: blockers that may block additional creatures (Entourage of Trest).
+    const extraBlocks = {}
+    for (const oid of eligible) {
+      const n = this._extraBlocks(s.objects[oid])
+      if (n > 0) extraBlocks[oid] = n
+    }
+    s.pending = { kind: 'declareBlockers', player: def, eligible, attackers, extraBlocks }
   },
 
   // Resolve an attacker's declared target into a _dealDamage target.
@@ -158,6 +167,14 @@ export const combatMethods = {
   // Does an attack/block *requirement* apply to `o` (508.1d / 509.1c) — its own
   // "attacks each combat if able", or a rule-modifying static ("Other Goblins
   // you control attack each combat if able")?
+  // How many creatures beyond one this creature may block ("can block an
+  // additional creature each combat").
+  _extraBlocks(o) {
+    let n = 0
+    for (const { source, mod } of this._ruleMods()) if (mod.extraBlocks && matchStatic(mod.affects, source, o)) n += mod.extraBlocks
+    return n
+  },
+
   _required(o, action) {
     if (action === 'attack' && this._ability(o, 'mustAttack')) return true
     if (action === 'attack' && this._goadedBy(o).length) return true // goaded (701.15b)
@@ -173,6 +190,8 @@ export const combatMethods = {
   _canBlock(blocker, attacker) {
     const kw = (o, k) => this._hasKW(o, k)
     if (this._ability(blocker, 'cantBlock') || this._ability(attacker, 'cantBeBlocked')) return false
+    // The Ring (701.54c): your Ring-bearer can't be blocked by creatures with greater power.
+    if (attacker.ringBearer && (blocker.chars.power ?? 0) > (attacker.chars.power ?? 0)) return false
     if (kw(attacker, 'Unblockable')) return false // granted "can't be blocked this turn"
     if (kw(attacker, 'Flying') && !kw(blocker, 'Flying') && !kw(blocker, 'Reach')) return false
     const bColors = blocker.chars.colors || []
@@ -201,17 +220,31 @@ export const combatMethods = {
 
   _applyBlockers(answer) {
     const s = this.state
-    const blocks = answer?.blocks || {}
+    // A blocker may name one attacker, or several when something lets it block
+    // additional creatures (Entourage of Trest); the first is its primary block.
+    const blocks = {}
+    const multi = {}
+    for (const [b, v] of Object.entries(answer?.blocks || {})) {
+      const list = Array.isArray(v) ? v : [v]
+      if (!list.length) continue
+      blocks[b] = list[0]
+      if (list.length > 1) multi[b] = list
+    }
 
     // Validate legality before committing (evasion + menace).
     const perAttacker = {}
     for (const [blockerOid, attackerOid] of Object.entries(blocks)) {
       const b = s.objects[blockerOid]
-      const a = s.objects[attackerOid]
-      if (!b || !a || !a.status.attacking) throw new Error('illegal block: not an attacker')
+      if (!b) throw new Error('illegal block: no such creature')
       if (this._restricted(b, 'block')) throw new Error(`illegal block: ${b.chars.name} can't block`)
-      if (!this._canBlock(b, a)) throw new Error(`illegal block: ${b.chars.name} can't block ${a.chars.name}`)
-      ;(perAttacker[attackerOid] ||= []).push(blockerOid)
+      const list = multi[blockerOid] || [attackerOid]
+      if (list.length > 1 + this._extraBlocks(b)) throw new Error(`illegal block: ${b.chars.name} can't block ${list.length} creatures`)
+      for (const aOid of list) {
+        const a = s.objects[aOid]
+        if (!a || !a.status.attacking) throw new Error('illegal block: not an attacker')
+        if (!this._canBlock(b, a)) throw new Error(`illegal block: ${b.chars.name} can't block ${a.chars.name}`)
+        ;(perAttacker[aOid] ||= []).push(blockerOid)
+      }
     }
     for (const atkOid of s.combat.attackers) {
       const n = perAttacker[atkOid]?.length || 0
@@ -225,14 +258,15 @@ export const combatMethods = {
     // Merge this defender's blocks into the combat (other defenders add theirs).
     const defender = this.state.pending?.player ?? this._defendingPlayer()
     const desc = Object.entries(blocks).map(
-      ([b, a]) => `${this._objName(s.objects[b])} blocks ${this._objName(s.objects[a])}`
+      ([b, a]) => `${this._objName(s.objects[b])} blocks ${(multi[b] || [a]).map((x) => this._objName(s.objects[x])).join(' and ')}`
     )
     this._log(desc.length ? `${this._nameOf(defender)}: ${desc.join(', ')}` : `${this._nameOf(defender)} doesn't block`)
     Object.assign((s.combat.blocks ||= {}), blocks)
+    Object.assign((s.combat.multiBlocks ||= {}), multi)
     s.combat.bandBlocks ||= {}
     for (const [blockerOid, attackerOid] of Object.entries(blocks)) {
       s.objects[blockerOid].status.blocking = attackerOid
-      s.objects[attackerOid].status.blocked = true // stays blocked even if blockers leave
+      for (const aOid of multi[blockerOid] || [attackerOid]) s.objects[aOid].status.blocked = true // stays blocked even if blockers leave
       // Banding (702.22c): blocking one member of a band blocks all of them.
       const band = s.objects[attackerOid].status.band
       if (band && s.combat.bands?.[band]) {
@@ -304,7 +338,7 @@ export const combatMethods = {
       if (!onBf(atkOid) || !this._dealsInPass(atk, pass)) continue
       const power = atk.chars.power
       // A creature blocking one member of a band blocks the whole band (702.22c).
-      const blocksAtk = (b, a) => a === atkOid || !!s.combat.bandBlocks?.[b]?.includes(atkOid)
+      const blocksAtk = (b, a) => a === atkOid || !!s.combat.bandBlocks?.[b]?.includes(atkOid) || !!s.combat.multiBlocks?.[b]?.includes(atkOid)
       const blockers = (s.combat.blocks
         ? Object.entries(s.combat.blocks)
             .filter(([b, a]) => blocksAtk(b, a))
@@ -359,6 +393,22 @@ export const combatMethods = {
         // The band controller's chosen split (702.22c).
         for (const [m, amt] of Object.entries(assign))
           if (amt > 0 && onBf(m) && s.objects[m].status.attacking) this._dealDamage(b, { obj: s.objects[m] }, amt, { combat: true })
+        continue
+      }
+      // 510.1d: a creature blocking several attackers divides its damage among
+      // them, lethal-first in the order it declared them.
+      const multi = s.combat.multiBlocks?.[blkOid]
+      if (multi?.length > 1) {
+        let remaining = b.chars.power
+        const deathtouch = this._hasKW(b, 'Deathtouch')
+        const alive = multi.filter((m) => onBf(m) && s.objects[m].status.attacking)
+        for (let i = 0; i < alive.length && remaining > 0; i++) {
+          const a = s.objects[alive[i]]
+          const lethal = deathtouch ? 1 : Math.max(1, a.chars.toughness - a.status.damage)
+          const amt = i === alive.length - 1 ? remaining : Math.min(remaining, lethal)
+          this._dealDamage(b, { obj: a }, amt, { combat: true })
+          remaining -= amt
+        }
         continue
       }
       let victim = atkOid

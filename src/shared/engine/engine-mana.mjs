@@ -381,6 +381,10 @@ export const manaMethods = {
     if (cond.spellsCastThisTurn) return inRange(s.spellsCastThisTurn || 0, cond.spellsCastThisTurn)
     if (cond.counters) return inRange(w?.status?.counters?.[cond.counters.counter] || 0, cond.counters)
     if (cond.untapped != null) return !w?.status?.tapped === cond.untapped // "when this enters untapped"
+    if (cond.classLevel) return inRange(w?.status?.classLevel || 1, cond.classLevel) // a Class's level (716)
+    if (cond.ringTempts) return inRange(s.players[pid].ringTempts || 0, cond.ringTempts) // the Ring's levels (701.54c)
+    if (cond.day != null) return (s.daytime === 'day') === cond.day
+    if (cond.night != null) return (s.daytime === 'night') === cond.night
     // Designations (725/726) and dungeons (309): "as long as you're the monarch",
     // "if you have the initiative", "as long as you've completed a dungeon",
     // "unless defending player is the monarch" (some opponent is).

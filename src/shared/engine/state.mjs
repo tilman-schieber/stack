@@ -201,6 +201,9 @@ export function moveObject(state, oid, toName, { toTop = false } = {}) {
     obj.playableUntilTurn = null
     obj.prepared = false
     obj.sneaked = null
+    obj.ringBearer = false // a designation, not copiable, lost on leaving (701.54b)
+    obj.unlocked = null // a Room's unlocked doors
+    delete obj.status.classLevel
     obj.mutateCast = false
     // A mutated pile (702.140) comes apart: each merged card goes to the same zone
     // as its own object again.
@@ -256,6 +259,8 @@ export function createState({ players, seed = 'stack', format = null, startingLi
     oidCounter: 0, // object ids, per game
     monarch: null, // the player who is the monarch (725), if any
     initiative: null, // the player who has the initiative (726), if any
+    daytime: null, // null | 'day' | 'night' (731) — neither until a daybound permanent or an effect sets it
+    lastTurnSpells: 0, // spells the previous turn's active player cast that turn (731.5)
     log: [],
     players: [],
     objects: {},
@@ -273,7 +278,9 @@ export function createState({ players, seed = 'stack', format = null, startingLi
       restrictedPool: [], // floating mana that may be spent only on certain spells (106.6)
       counters: {},
       dungeon: null, // { name, room } — the dungeon card this player owns in the command zone (309)
-      completedDungeons: 0
+      completedDungeons: 0,
+      spellsThisTurn: 0, // spells this player cast this turn (day/night, 731.5)
+      ringTempts: 0 // how many times the Ring has tempted this player (701.54)
     })
     for (const name of PERSONAL_ZONES) state.zones[zoneKey(name, pid)] = []
 

@@ -51,6 +51,7 @@ export function matchStatic(affects, source, o) {
   if (affects.nonbasic && o.chars.supertypes.includes('Basic')) return false
   if (affects.self && o.oid !== source.oid) return false
   if (affects.token && !o.token) return false // "creature tokens you control"
+  if (affects.ringBearer && !o.ringBearer) return false // "your Ring-bearer"
   if (affects.another && o.oid === source.oid) return false
   if (affects.controller === 'you' && o.controller !== source.controller) return false
   if (affects.controller === 'opponent' && o.controller === source.controller) return false
@@ -165,7 +166,7 @@ export function recompute(state) {
       if (ab.if && state._condFn && !state._condFn(ab.if, src)) continue
       const e = { source: src, ability: ab, timestamp: src.timestamp || 0 }
       if (ab.setSubtypes) layer3.push(e)
-      if (ab.addTypes || ab.addSubtypes) layer4.push(e)
+      if (ab.addTypes || ab.addSubtypes || ab.addSupertypes) layer4.push(e)
       if (ab.setColors) layer5.push(e)
       if (ab.grantKeywords || ab.removeAbilities) layer6.push(e)
       if (ab.setPT) layer7b.push(e)
@@ -175,7 +176,7 @@ export function recompute(state) {
   for (const f of state.continuous) {
     const e = { floating: f, timestamp: f.timestamp }
     if (f.setSubtypes) layer3.push(e)
-    if (f.addTypes || f.addSubtypes) layer4.push(e)
+    if (f.addTypes || f.addSubtypes || f.addSupertypes) layer4.push(e)
     if (f.setColors) layer5.push(e)
     if (f.grantKeywords || f.removeAbilities) layer6.push(e)
     if (f.setPT) layer7b.push(e)
@@ -198,6 +199,7 @@ export function recompute(state) {
       if (!effTargets(e, o)) continue
       for (const t of d.addTypes || []) if (!o.chars.types.includes(t)) o.chars.types.push(t)
       for (const t of d.addSubtypes || []) if (!o.chars.subtypes.includes(t)) o.chars.subtypes.push(t)
+      for (const t of d.addSupertypes || []) if (!o.chars.supertypes.includes(t)) o.chars.supertypes.push(t)
     }
   })
 

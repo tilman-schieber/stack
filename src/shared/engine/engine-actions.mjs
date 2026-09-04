@@ -231,6 +231,16 @@ export const actionsMethods = {
         this._checkWard(o.oid, o.controller, o.targets)
         break
       }
+      case 'unlockDoor': {
+        // A Room's locked door: pay its mana cost as a sorcery to unlock it.
+        const o = s.objects[action.oid]
+        this._pay(pid, o.faces[action.face].manaCost, [], null, o.faces[action.face])
+        o.unlocked = [...(o.unlocked || []), action.face]
+        this._refreshRoom(o)
+        this._log(`${this._nameOf(pid)} unlocks ${o.faces[action.face].name}`)
+        this._unlockTrigger(o, action.face)
+        break
+      }
       case 'castDisturb': {
         // Disturb (702.148): from the graveyard, transformed, for the disturb cost.
         // The back face carries its own "exile instead of the graveyard" clause.
@@ -379,6 +389,8 @@ export const actionsMethods = {
     const s = this.state
     s.spellsCastThisTurn = (s.spellsCastThisTurn || 0) + 1
     o._stormCount = s.spellsCastThisTurn - 1
+    const p = s.players[o.controller]
+    if (p) p.spellsThisTurn = (p.spellsThisTurn || 0) + 1 // day/night (731.5)
   },
 
   // Can `pid` currently pay ability `ab`'s activation cost with source `o`?
@@ -398,6 +410,7 @@ export const actionsMethods = {
         return false
     }
     if (ab.oncePerTurn && (o.status.abilityUsed || []).includes(ab)) return false
+    if (ab.if && !this._cond(ab.if, o)) return false // a Class level's ability, "as long as…"
     // "Activated abilities of sources with the chosen name can't be activated
     // unless they're mana abilities" (Pithing Needle).
     if (!ab.manaAbility && this._ruleMods().some(({ source, mod }) => mod.cantActivate?.chosenName && this._nameMatches(o, source.chosen))) return false
@@ -536,6 +549,8 @@ export const actionsMethods = {
         }
       }
       this._log(`${this._objName(o)} enters the battlefield`)
+      // 731.7: a daybound permanent entering at night enters transformed.
+      if (s.daytime === 'night' && this._isDaybound(o) && o.faces?.[1] && !o.face) setFace(o, 1)
       // "Enter as a copy of…" (rule 614.12): before the permanent is on the
       // battlefield, let its controller pick a permanent to copy. Pausing here
       // means it never briefly exists as its printed 0/0 (no SBA flicker).
@@ -887,6 +902,15 @@ export const actionsMethods = {
     if (o.printed.types.includes('Creature')) o.status.summoningSick = true
     // Prepared (Elite Interceptor): enters prepared.
     if (o.behavior?.prepared) o.prepared = true
+    // Daybound (731.4): as a daybound permanent enters, if it's neither day nor
+    // night, it becomes day.
+    if (this._isDaybound(o) && !this.state.daytime) this._becomeDayNight('day')
+    // A Room (DSK): the door it was cast as is unlocked; "when you unlock this door" triggers.
+    if (this._isRoom(o)) {
+      o.unlocked = [o.face || 0]
+      this._refreshRoom(o)
+      this._unlockTrigger(o, o.face || 0)
+    }
     // Sneak: enters tapped and attacking the returned attacker's target.
     if (o.sneaked) {
       const c = this.state.combat
