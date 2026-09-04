@@ -4,6 +4,7 @@
 
 import { zone } from './state.mjs'
 import { recompute } from './layers.mjs'
+import { DUNGEONS, roomOf, HELPER_CARDS } from './dungeons.mjs'
 
 function cardView(o, viewerPid = null, engine = null) {
   // A face-down permanent (morph) shows only as an anonymous 2/2 creature — its
@@ -88,7 +89,10 @@ function stackView(state, oid) {
     return {
       oid: o.oid,
       kind: 'ability',
-      name: (src?.printed?.name || 'Ability') + ' — ability',
+      // A sourceless trigger of the game (the monarch's draw, a dungeon room) is
+      // named by what it is; the room's text is shown too.
+      name: src ? (src.printed?.name || 'Ability') + ' — ability' : o.name || 'Ability',
+      text: o.dungeonRoom ? roomOf(o.dungeonRoom.dungeon, o.dungeonRoom.room)?.text || '' : '',
       cardId: src?.cardId || null,
       controller: o.controller,
       targets: o.targets || [],
@@ -124,6 +128,20 @@ export function projectGame(engine, viewerPid = null) {
   const players = state.players.map((p) => {
     const controlled = bf.map((oid) => state.objects[oid]).filter((o) => o.controller === p.id)
     const hidden = viewerPid != null && p.id !== viewerPid // hide this player's hand from the viewer
+    // The top card of the library, when a static makes it visible: revealed to
+    // everyone (Future Sight), or only to its owner (Experimental Frenzy).
+    const topVis = engine._topCardVisibility(p.id)
+    const topOid = zone(state, 'library', p.id)[0]
+    const topVisible = topOid && (topVis === 'reveal' || (topVis === 'look' && !hidden))
+    const dungeon = p.dungeon
+      ? {
+          name: p.dungeon.name,
+          room: p.dungeon.room,
+          roomName: roomOf(p.dungeon.name, p.dungeon.room)?.name || '',
+          scryfallId: DUNGEONS[p.dungeon.name]?.scryfallId || null,
+          rooms: (DUNGEONS[p.dungeon.name]?.rooms || []).map((r) => ({ id: r.id, name: r.name, text: r.text, next: r.next || [], current: r.id === p.dungeon.room }))
+        }
+      : null
     return {
       id: p.id,
       name: p.name,
@@ -141,9 +159,19 @@ export function projectGame(engine, viewerPid = null) {
       exile: zone(state, 'exile', p.id).map((oid) => cardView(state.objects[oid])),
       // Commander: this player's cards in the (shared) command zone.
       command: zone(state, 'command')
-        .filter((oid) => state.objects[oid]?.owner === p.id)
+        .filter((oid) => state.objects[oid]?.owner === p.id && state.objects[oid].kind !== 'emblem')
         .map((oid) => ({ ...cardView(state.objects[oid]), commanderCasts: state.objects[oid].commanderCasts || 0 })),
       commanderDamage: p.commanderDamage || {},
+      // Emblems (114) this player has, named after the planeswalker that made them.
+      emblems: zone(state, 'command')
+        .filter((oid) => state.objects[oid]?.owner === p.id && state.objects[oid].kind === 'emblem')
+        .map((oid) => ({ oid, name: state.objects[oid].printed?.name || 'Emblem' })),
+      // Designations (725/726) and the dungeon card this player owns (309).
+      monarch: state.monarch === p.id,
+      initiative: state.initiative === p.id,
+      dungeon,
+      completedDungeons: p.completedDungeons || 0,
+      libraryTop: topVisible ? { ...cardView(state.objects[topOid]), visibility: topVis } : null,
       // Phased-out permanents (702.26): out of the game until they phase back in.
       phasedOut: (state.phasedOut || [])
         .filter((x) => x.controller === p.id)
@@ -158,9 +186,11 @@ export function projectGame(engine, viewerPid = null) {
   let pending = state.pending
   const privateToViewer = viewerPid == null || pending?.player === viewerPid
   if (pending?.kind === 'scry' || pending?.kind === 'search')
-    pending = privateToViewer
-      ? { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])) }
-      : { ...pending, cards: pending.cards.map((oid) => ({ oid, hidden: true })) }
+    pending =
+      privateToViewer || pending.revealed // a revealed search (Throne of the Dead Three) is public
+        ? { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])) }
+        : { ...pending, cards: pending.cards.map((oid) => ({ oid, hidden: true })) }
+  else if (pending?.kind === 'chooseName') pending = { ...pending, _holder: undefined }
   else if (pending?.kind === 'lookAtHand' || pending?.kind === 'chooseFromHand')
     // A revealed hand is public information (701.15): every viewer sees the cards.
     pending = { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])), hand: (pending.hand || pending.cards).map((oid) => cardView(state.objects[oid])) }
@@ -171,6 +201,9 @@ export function projectGame(engine, viewerPid = null) {
 
   return {
     format: state.format || null,
+    monarch: state.monarch ?? null,
+    initiative: state.initiative ?? null,
+    helperCards: HELPER_CARDS, // which printings picture the monarch / the initiative
     turnNumber: state.turnNumber,
     step: state.step,
     activePlayer: state.activePlayer,

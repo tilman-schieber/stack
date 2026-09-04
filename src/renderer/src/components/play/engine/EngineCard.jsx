@@ -53,6 +53,54 @@ export function EngineCard({ card, className = '', onClick, onZoom, onHover, tit
   )
 }
 
+// A helper card that isn't part of anyone's deck: the Monarch, the Initiative,
+// a dungeon card (with the current room), an emblem. Art comes from the real
+// Scryfall printing (`def.scryfallId`, else looked up by name); clicking zooms
+// it — and, like a token, its art can be cycled there.
+export function HelperCard({ def, label, sub, info, dungeon, onZoom, onHover }) {
+  const key = tokenKey(def)
+  const artId = useTokenArt((s) => s.cache[key]?.chosenId)
+  const ensure = useTokenArt((s) => s.ensure)
+  useEffect(() => {
+    ensure(def)
+  }, [key, ensure]) // eslint-disable-line react-hooks/exhaustive-deps
+  const img = artId ? `card://${artId}${def.face === 'back' ? '/back' : ''}` : null
+  const card = {
+    oid: 'helper:' + key,
+    name: label || def.name,
+    token: true,
+    helper: true,
+    tokenDef: def,
+    dungeon: dungeon || null,
+    oracleText: info || '',
+    types: [],
+    supertypes: [],
+    keywords: [],
+    printedKeywords: [],
+    counters: {},
+    supported: true
+  }
+  return (
+    <div className="eng-helper-wrap">
+      <div
+        className="board-card eng-helper"
+        title={sub ? `${card.name} — ${sub}` : card.name}
+        onClick={() => onZoom?.(card)}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          onZoom?.(card)
+        }}
+        onMouseEnter={onHover ? () => onHover(card) : undefined}
+        onMouseLeave={onHover ? () => onHover(null) : undefined}
+      >
+        {img ? <img src={img} alt={card.name} draggable={false} /> : <div className="cardback" />}
+        {sub && <span className="eng-helper-sub">{sub}</span>}
+      </div>
+      <span className="eng-helper-label">{label || def.name}</span>
+    </div>
+  )
+}
+
 export function Pile({ label, count, topCard, faceDown, onOpen }) {
   return (
     <div className="rail-pile">

@@ -626,6 +626,99 @@ export const BEHAVIORS = {
   },
   Peek: { spell: { targets: [{ type: 'player' }], effect: [{ op: 'revealHand', to: 'target0' }, { op: 'draw', amount: 1 }] } },
   'Gitaxian Probe': { spell: { targets: [{ type: 'player' }], effect: [{ op: 'revealHand', to: 'target0' }, { op: 'draw', amount: 1 }] } },
+  // ---- The monarch (725) — Pauper's Palace Sentinels / Thorn of the Black Rose ----
+  'Palace Sentinels': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] }] },
+  'Thorn of the Black Rose': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] }] },
+  'Crown-Hunter Hireling': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] }],
+    // "can't attack unless defending player is the monarch": a conditional restriction.
+    staticRules: [{ restrict: ['attack'], affects: { self: true }, if: { opponentMonarch: false } }]
+  },
+  'Custodi Lich': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] },
+      { trigger: { event: 'becomesMonarch' }, targets: [{ type: 'player' }], effect: [{ op: 'targetPlayerSacrifices', to: 'target0', filter: { types: ['Creature'] } }] }
+    ]
+  },
+  'Skyline Despot': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] },
+      {
+        trigger: { event: 'upkeep', yourTurn: true, if: { monarch: true } },
+        effect: [{ op: 'createToken', token: { name: 'Dragon', types: ['Creature'], subtypes: ['Dragon'], colors: ['R'], power: 5, toughness: 5, keywords: ['Flying'] } }]
+      }
+    ]
+  },
+  'Court of Grace': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] },
+      {
+        trigger: { event: 'upkeep', yourTurn: true },
+        effect: [
+          { op: 'createToken', if: { monarch: false }, token: { name: 'Spirit', types: ['Creature'], subtypes: ['Spirit'], colors: ['W'], power: 1, toughness: 1, keywords: ['Flying'] } },
+          { op: 'createToken', if: { monarch: true }, token: { name: 'Angel', types: ['Creature'], subtypes: ['Angel'], colors: ['W'], power: 4, toughness: 4, keywords: ['Flying'] } }
+        ]
+      }
+    ]
+  },
+  // ---- The initiative (726) and dungeons (309) ----
+  'Avenging Hunter': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'takeInitiative' }] }] },
+  'Goliath Paladin': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'takeInitiative' }] }] },
+  'Gloom Stalker': { static: [{ affects: { self: true }, grantKeywords: ['Double strike'], if: { completedDungeon: true } }] },
+  'Nadaar, Selfless Paladin': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'venture' }] },
+      { trigger: { event: 'attacks', self: true }, effect: [{ op: 'venture' }] }
+    ],
+    static: [{ affects: { scope: 'creatures', controller: 'you', another: true }, modifyPT: { power: 1, toughness: 1 }, if: { completedDungeon: true } }]
+  },
+  'Cloister Gargoyle': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'venture' }] }],
+    static: [{ affects: { self: true }, modifyPT: { power: 3, toughness: 0 }, grantKeywords: ['Flying'], if: { completedDungeon: true } }]
+  },
+  // A Treasure token: sacrifice for one mana of any colour (a mana ability with
+  // a sacrifice cost, offered as an explicit action like an Eldrazi Spawn).
+  Treasure: {
+    activated: ['W', 'U', 'B', 'R', 'G'].map((c) => ({ manaAbility: true, label: `Sacrifice: add {${c}}`, cost: { sacrifice: 'self' }, effect: [{ op: 'addMana', mana: c }] }))
+  },
+  // ---- Choosing a card name (201.3) ----
+  'Cabal Therapy': {
+    spell: { targets: [{ type: 'player' }], effect: [{ op: 'chooseName', nonland: true }, { op: 'discardNamed', to: 'target0' }] },
+    flashback: { sacrifice: { types: ['Creature'] } }
+  },
+  'Pithing Needle': {
+    chooseOnEnter: { kind: 'cardName', label: 'Pithing Needle — choose a card name' },
+    staticRules: [{ cantActivate: { chosenName: true } }] // …unless they're mana abilities
+  },
+  'Meddling Mage': {
+    chooseOnEnter: { kind: 'cardName', nonland: true, label: 'Meddling Mage — choose a nonland card name' },
+    staticRules: [{ cantCast: { spell: { chosenName: true } } }]
+  },
+  // ---- "Triggers an additional time" / counter and token doubling (614) ----
+  Panharmonicon: { staticRules: [{ triggerTwice: { events: ['enters:battlefield'], subject: { types: ['Artifact', 'Creature'] } } }] },
+  'Yarok, the Desecrated': { staticRules: [{ triggerTwice: { events: ['enters:battlefield'] } }] },
+  'Teysa Karlov': {
+    staticRules: [{ triggerTwice: { events: ['dies', 'toGraveyard'], subject: { type: 'Creature' } } }],
+    static: [{ affects: { scope: 'creatures', controller: 'you', token: true }, grantKeywords: ['Vigilance', 'Lifelink'] }]
+  },
+  'Doubling Season': { staticRules: [{ tokenMod: { double: true } }, { counterMod: { double: true } }] },
+  'Hardened Scales': { staticRules: [{ counterMod: { counter: '+1/+1', creaturesOnly: true, plus: 1 } }] },
+  'Parallel Lives': { staticRules: [{ tokenMod: { double: true } }] },
+  // ---- Playing from the top of the library ----
+  'Future Sight': { staticRules: [{ revealTop: true }, { playFromTop: { lands: true, spells: true } }] },
+  'Experimental Frenzy': {
+    staticRules: [{ lookAtTop: true }, { playFromTop: { lands: true, spells: true } }, { cantPlayFromHand: true }],
+    activated: [{ cost: { mana: '{3}{R}' }, label: '{3}{R}: Destroy this enchantment', effect: [{ op: 'destroy', to: 'self' }] }]
+  },
+  'Courser of Kruphix': {
+    staticRules: [{ revealTop: true }, { playFromTop: { lands: true } }],
+    triggered: [{ trigger: { event: 'enters:battlefield', filter: { type: 'Land', controller: 'you' } }, effect: [{ op: 'gainLife', amount: 1 }] }]
+  },
+  'Oracle of Mul Daya': { staticRules: [{ extraLands: 1 }, { revealTop: true }, { playFromTop: { lands: true } }] },
+  'Mystic Forge': {
+    staticRules: [{ lookAtTop: true }, { playFromTop: { spells: { anyOf: [{ type: 'Artifact' }, { colorless: true }] } } }],
+    activated: [{ cost: { tap: true, payLife: 1 }, label: '{T}, Pay 1 life: Exile the top card of your library', effect: [{ op: 'exileTop', amount: 1 }] }]
+  },
   // Batch 6: multi-mana and restricted mana, proliferate, mutate, Lab Man, dredge.
   'Sol Ring': { manaOptions: [{ colors: ['C'], amount: 2 }] },
   'Eldrazi Temple': {

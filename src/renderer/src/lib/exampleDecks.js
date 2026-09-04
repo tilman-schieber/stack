@@ -157,10 +157,13 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-green-stompy',
     name: 'Green Stompy (sample)',
     description:
-      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout (hexproof: opponents can\'t target it) and Tomakul Honor Guard (Ward {2}), Great Sable Stag (can\'t be countered), and Patron of the Wild, a Morph creature you can cast face down as a 2/2 and later flip up.',
+      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout (hexproof: opponents can\'t target it) and Tomakul Honor Guard (Ward {2}), Great Sable Stag (can\'t be countered), Patron of the Wild, a Morph creature you can cast face down as a 2/2 and later flip up, Avenging Hunter (take the initiative: venture into Undercity), Hardened Scales (one more +1/+1 counter every time) and Courser of Kruphix (play lands from the top of your library, revealed).',
     cards: [
       [14, 'Forest'],
       [4, 'Llanowar Elves'],
+      [1, 'Avenging Hunter'], // the initiative (726)
+      [1, 'Hardened Scales'], // counter replacement (614): +1/+1 counters come with one more
+      [1, 'Courser of Kruphix'], // play lands from the top of your library; the top card is revealed
       [2, 'Gladecover Scout'], // hexproof: can't be targeted by opponents (Bogles-style aura carrier)
       [2, 'Tomakul Honor Guard'], // ward {2}: opponents pay {2} or their spell/ability is countered
       [2, 'Great Sable Stag'], // "This spell can't be countered" + protection
@@ -180,10 +183,12 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-white-skies',
     name: 'White Skies (sample)',
     description:
-      'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers, with two replacement effects (Rhox Faithmender doubles life gained, Samite Healer prevents damage), Flickerwisp (a delayed-trigger blink), two rule-modifying statics — Pacifism ("enchanted creature can\'t attack or block") and Thalia, Guardian of Thraben (noncreature spells cost {1} more) — and White Knight, whose protection from black now also stops black removal (Doom Blade, Murder) from even targeting it, not just from blocking/damage.',
+      'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers, with two replacement effects (Rhox Faithmender doubles life gained, Samite Healer prevents damage), Flickerwisp (a delayed-trigger blink), two rule-modifying statics — Pacifism ("enchanted creature can\'t attack or block") and Thalia, Guardian of Thraben (noncreature spells cost {1} more) — White Knight, whose protection from black now also stops black removal (Doom Blade, Murder) from even targeting it, not just from blocking/damage, Palace Sentinels (you become the monarch: draw at your end step, lose the crown to combat damage) and Goliath Paladin (you take the initiative and venture into Undercity, room by room).',
     cards: [
       [15, 'Plains'],
       [4, 'Soul Warden'],
+      [2, 'Palace Sentinels'], // the monarch (725): a designation with the real Monarch card on the board
+      [1, 'Goliath Paladin'], // the initiative (726): venture into Undercity each upkeep
       [2, 'Samite Healer'], // replacement: prevent the next 1 damage to any target
       [3, 'Flickerwisp'], // delayed trigger: exile a creature, return it at end step
       [3, 'White Knight'],
@@ -200,10 +205,12 @@ export const EXAMPLE_DECKS = [
     slug: 'sample-black-midrange',
     name: 'Black Midrange (sample)',
     description:
-      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger), Nightmare (a */* whose P/T equals the Swamps you control — a characteristic-defining P/T, layer 7a), Aphotic Wisps (a layer-5 color change), Drudge Skeletons ({B}: Regenerate — a replacement shield), and Platinum Angel (you can\'t lose the game while it\'s out).',
+      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger), Nightmare (a */* whose P/T equals the Swamps you control — a characteristic-defining P/T, layer 7a), Aphotic Wisps (a layer-5 color change), Drudge Skeletons ({B}: Regenerate — a replacement shield), Platinum Angel (you can\'t lose the game while it\'s out), Thorn of the Black Rose (Pauper\'s monarch enabler), and Cabal Therapy (name a card; that player reveals their hand and discards every copy).',
     cards: [
       [16, 'Swamp'],
       [2, 'Walking Corpse'],
+      [2, 'Thorn of the Black Rose'], // the monarch (725)
+      [2, 'Cabal Therapy'], // choose a card name (201.3); flashback by sacrificing a creature
       [2, 'Drudge Skeletons'], // {B}: Regenerate — a regeneration replacement shield
       [1, 'Platinum Angel'], // you can't lose the game while it's out
       [4, 'Typhoid Rats'],

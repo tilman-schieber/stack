@@ -50,6 +50,7 @@ export function matchStatic(affects, source, o) {
   if (affects.type && !o.chars.types.includes(affects.type)) return false
   if (affects.nonbasic && o.chars.supertypes.includes('Basic')) return false
   if (affects.self && o.oid !== source.oid) return false
+  if (affects.token && !o.token) return false // "creature tokens you control"
   if (affects.another && o.oid === source.oid) return false
   if (affects.controller === 'you' && o.controller !== source.controller) return false
   if (affects.controller === 'opponent' && o.controller === source.controller) return false

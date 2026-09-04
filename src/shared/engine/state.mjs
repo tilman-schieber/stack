@@ -197,6 +197,7 @@ export function moveObject(state, oid, toName, { toTop = false } = {}) {
     obj.echoDue = false
     if (toName !== 'exile') obj.suspended = false
     obj.chosen = null // "as this enters, choose…" is chosen anew next time
+    obj.playableFromExile = null // "you may play them" ends when the card leaves exile
     obj.mutateCast = false
     // A mutated pile (702.140) comes apart: each merged card goes to the same zone
     // as its own object again.
@@ -250,6 +251,8 @@ export function createState({ players, seed = 'stack', format = null, startingLi
     replacements: [], // active replacement effects: floating shields (rule 614/616)
     tsCounter: 0, // monotonic timestamps for layer ordering (rule 613)
     oidCounter: 0, // object ids, per game
+    monarch: null, // the player who is the monarch (725), if any
+    initiative: null, // the player who has the initiative (726), if any
     log: [],
     players: [],
     objects: {},
@@ -265,7 +268,9 @@ export function createState({ players, seed = 'stack', format = null, startingLi
       mulligans: 0,
       manaPool: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 },
       restrictedPool: [], // floating mana that may be spent only on certain spells (106.6)
-      counters: {}
+      counters: {},
+      dungeon: null, // { name, room } — the dungeon card this player owns in the command zone (309)
+      completedDungeons: 0
     })
     for (const name of PERSONAL_ZONES) state.zones[zoneKey(name, pid)] = []
 

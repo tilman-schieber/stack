@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
-import { EngineCard, Pile, ManaPool, isCreature, isLand } from './engine/EngineCard.jsx'
+import { EngineCard, Pile, ManaPool, HelperCard, isCreature, isLand } from './engine/EngineCard.jsx'
 import Prompt from './engine/Prompt.jsx'
 import { GameLog, StopsPanel, Inspector } from './engine/Panels.jsx'
 import { ZoneViewer, SearchOverlay, ScryOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
@@ -591,6 +591,69 @@ export default function EnginePlayArea() {
           />
         )}
       </div>
+      {(p.libraryTop || p.monarch || p.initiative || p.dungeon || p.emblems?.length > 0) && (
+        <div className="eng-designations">
+          {p.libraryTop && (
+            <div className="eng-helper-wrap eng-libtop">
+              <EngineCard
+                card={p.libraryTop}
+                className={kind === 'priority' && p.id === pending.player && actionFor(p.libraryTop.oid) ? 'playable' : ''}
+                onClick={(ev) => onHandCard(p.libraryTop, p.id, ev)}
+                onZoom={setZoom}
+                onHover={setHover}
+                title={`Top of ${p.name}'s library (${p.libraryTop.visibility === 'reveal' ? 'revealed' : 'you may look at it'})${
+                  kind === 'priority' && p.id === pending.player && actionFor(p.libraryTop.oid) ? ' — click to play it' : ''
+                }`}
+              />
+              <span className="eng-helper-label">top of library</span>
+            </div>
+          )}
+          {p.monarch && (
+            <HelperCard
+              def={view.helperCards.monarch}
+              label="The Monarch"
+              info="At the beginning of your end step, draw a card.\nWhenever a creature deals combat damage to you, its controller becomes the monarch."
+              onZoom={setZoom}
+              onHover={setHover}
+            />
+          )}
+          {p.initiative && (
+            <HelperCard
+              def={view.helperCards.initiative}
+              label="The Initiative"
+              info="At the beginning of your upkeep, venture into Undercity.\nWhenever one or more creatures a player controls deal combat damage to you, that player takes the initiative.\nWhenever a player takes the initiative, they venture into Undercity."
+              onZoom={setZoom}
+              onHover={setHover}
+            />
+          )}
+          {p.dungeon && (
+            <HelperCard
+              def={{ name: p.dungeon.name, helper: true, scryfallId: p.dungeon.scryfallId }}
+              label={p.dungeon.name}
+              sub={p.dungeon.roomName}
+              dungeon={p.dungeon}
+              info={p.dungeon.rooms.map((r) => `${r.current ? '▶ ' : ''}${r.name} — ${r.text}`).join('\n')}
+              onZoom={setZoom}
+              onHover={setHover}
+            />
+          )}
+          {(p.emblems || []).map((em) => (
+            <HelperCard
+              key={em.oid}
+              def={{ name: em.name.replace(/\s*emblem$/i, '') + ' Emblem', helper: true }}
+              label={em.name}
+              info="An emblem: it stays in the command zone and can't be removed."
+              onZoom={setZoom}
+              onHover={setHover}
+            />
+          ))}
+        </div>
+      )}
+      {p.completedDungeons > 0 && (
+        <div className="eng-count" title="Dungeons completed (some abilities check this)">
+          🏰 completed dungeons: {p.completedDungeons}
+        </div>
+      )}
       {p.phasedOut?.length > 0 && (
         <div className="eng-count" title="Phased out — treated as though they don't exist until they phase in">
           ◌ phased out: {p.phasedOut.map((c) => c.name).join(', ')}
@@ -803,7 +866,11 @@ export default function EnginePlayArea() {
             kind === 'priority' && zoneView.pid === pending.player
               ? pending.actions?.find(
                   (a) =>
-                    (a.type === 'castFlashback' || a.type === 'castPlotted' || a.type === 'unearth' || (a.type === 'cast' && zoneView.zone === 'command')) &&
+                    (a.type === 'castFlashback' ||
+                      a.type === 'castPlotted' ||
+                      a.type === 'unearth' ||
+                      (a.type === 'cast' && zoneView.zone === 'command') ||
+                      ((a.type === 'cast' || a.type === 'playLand') && a.fromExile)) &&
                     a.oid === oid
                 )
               : null
@@ -818,6 +885,20 @@ export default function EnginePlayArea() {
       )}
 
       {zoom && (zoom.cardId || zoom.realCardId || zoom.token) && <ZoomOverlay card={zoom} onClose={() => setZoom(null)} />}
+      {kind === 'chooseDungeon' && myTurn && (
+        <div className="eng-scry">
+          <div className="eng-scry-panel">
+            <div className="eng-scry-title">Venture into the dungeon — choose a dungeon</div>
+            <div className="eng-scry-cards">
+              {pending.options.map((o) => (
+                <div className="eng-scry-card" key={o.name} onClick={() => choose({ dungeon: o.name })} title={o.name}>
+                  <HelperCard def={{ name: o.name, helper: true, scryfallId: o.scryfallId }} label={o.name} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {abilityMenu && (
         <div className="card-menu eng-ability-menu" style={{ left: abilityMenu.x, top: abilityMenu.y }}>

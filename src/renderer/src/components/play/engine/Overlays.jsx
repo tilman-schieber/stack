@@ -6,7 +6,8 @@ import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
 // Graveyard / exile viewer. Cards with a castable option (flashback from the
 // graveyard, or a plotted card in exile) are highlighted and clickable.
 export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose }) {
-  const castLabel = (a) => (a.type === 'castPlotted' ? 'Plotted' : a.type === 'cast' ? 'Cast' : a.type === 'unearth' ? 'Unearth' : 'Flashback')
+  const castLabel = (a) =>
+    a.type === 'castPlotted' ? 'Plotted' : a.type === 'playLand' ? 'Play' : a.type === 'cast' ? 'Cast' : a.type === 'unearth' ? 'Unearth' : 'Flashback'
   return (
     <div className="eng-zoneviewer" onClick={onClose}>
       <div className="eng-zoneviewer-panel" onClick={(e) => e.stopPropagation()}>
@@ -89,7 +90,9 @@ export function HandRevealOverlay({ pending, targetName, onPick, onDecline, onOk
     <div className="eng-scry">
       <div className="eng-scry-panel">
         <div className="eng-scry-title">
-          {targetName}'s hand{choosing ? ` — choose a card to ${pending.then === 'exile' ? 'exile' : 'discard'}` : ''}
+          {pending.then === 'castFree'
+            ? 'Cards drawn — you may cast one without paying its mana cost'
+            : `${targetName}'s hand${choosing ? ` — choose a card to ${pending.then === 'exile' ? 'exile' : 'discard'}` : ''}`}
         </div>
         <div className="eng-scry-cards">
           {cards.map((c) => (
@@ -173,6 +176,9 @@ export function ZoomOverlay({ card, onClose }) {
   const prints = entry?.prints || []
   const canCycle = card.token && prints.length > 1
   const idx = imgId ? prints.findIndex((p) => p.id === imgId) : -1
+  // The back face: a transformed card, or a helper shown by its back (the Initiative).
+  const back = card.token ? card.tokenDef?.face === 'back' : !!card.face
+  const what = card.helper ? card.name : `${card.name} token`
 
   return (
     <div className="eng-zoom" onClick={onClose} title="Click to close">
@@ -189,20 +195,29 @@ export function ZoomOverlay({ card, onClose }) {
       )}
       <div className="eng-zoom-body" onClick={(e) => card.token && e.stopPropagation()}>
         {imgId ? (
-          <img src={`card://${imgId}${!card.token && card.face ? '/back' : ''}`} alt={card.name} />
+          <img src={`card://${imgId}${back ? '/back' : ''}`} alt={card.name} />
         ) : (
           <div className="eng-zoom-placeholder">
-            {card.token ? (entry?.loading ? 'Finding token art…' : 'No art found') : ''}
+            {card.token ? (entry?.loading ? 'Finding card art…' : 'No art found') : ''}
           </div>
         )}
         {card.token && (
           <div className="eng-zoom-hint">
-            {prints.length > 1
-              ? `${card.name} token — art ${idx + 1}/${prints.length} (use ‹ ›, remembered)`
-              : `${card.name} token`}
+            {prints.length > 1 ? `${what} — art ${idx + 1}/${prints.length} (use ‹ ›, remembered)` : what}
           </div>
         )}
       </div>
+      {card.dungeon && (
+        <div className="eng-zoom-rooms" onClick={(e) => e.stopPropagation()}>
+          <div className="eng-zoom-rooms-title">{card.dungeon.name}</div>
+          {card.dungeon.rooms.map((r) => (
+            <div key={r.id} className={'eng-zoom-room' + (r.current ? ' cur' : '')}>
+              <b>{r.current ? '▶ ' : ''}{r.name}</b> — {r.text}
+            </div>
+          ))}
+          <div className="muted small">Venture: move to a room an arrow leads to; the bottom room completes the dungeon.</div>
+        </div>
+      )}
       {canCycle && (
         <button
           className="eng-zoom-arrow"

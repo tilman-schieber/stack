@@ -87,13 +87,25 @@ flashback, madness, morph, bestow, ninjutsu, plot, omens, storm, split cards, mo
 transforming double-faced cards, Sagas, emblems, Edict effects (the affected player chooses), extra turns/combats/land drops, hand-size modifiers,
 "instead of the graveyard" replacements, "enters tapped unless", "can't gain life / be countered / cast / be prevented" statics, the legend rule as a choice, the repeated cleanup step (514.3a),
 targeted modal and divided spells, revealing hands and choosing from them (Duress,
-Thoughtseize, Peek), partial target legality on resolution, state-based
+Thoughtseize, Peek), choosing a card name (Cabal Therapy, Meddling Mage, Pithing Needle —
+any name, with suggestions), "triggers an additional time" (Panharmonicon, Teysa Karlov),
+counter and token doubling (Doubling Season, Hardened Scales, Parallel Lives — Sagas trigger
+every chapter reached), playing from the top of the library (Future Sight, Experimental
+Frenzy, Courser of Kruphix, Mystic Forge — the top card is shown revealed or to its owner),
+the monarch and the initiative with their inherent triggers, dungeons (Undercity and the three
+Forgotten Realms dungeons: room choices at forks, completion as a state-based action, goad),
+partial target legality on resolution, state-based
 actions, draws and concessions, multiplayer elimination, and the Commander format (command
 zone, tax, 21-damage rule, 40 life).
 
+Designations show up on the board as the real helper cards — the Monarch token, the
+Undercity // The Initiative card (its back for the initiative, its front with the current room
+for the dungeon), the Adventures in the Forgotten Realms dungeon cards, and planeswalker
+emblems — with art from Scryfall that you can cycle like token art.
+
 Card characteristics come straight from Scryfall data; only cards whose text implies effects
 get an entry in `behaviors.mjs`, written against a small vocabulary of effect ops. Cards
-without an entry play with their printed characteristics. Dredge replaces draws; proliferate, the band controller's damage split, a Siege's protector and London mulligan rounds are all real player decisions. Two-Headed Giant is the one variant not implemented; no
+without an entry play with their printed characteristics. Dredge replaces draws; proliferate, the band controller's damage split, a Siege's protector and London mulligan rounds are all real player decisions. Two-Headed Giant is the one variant not implemented (Baldur's Gate Wilderness, the Commander Legends dungeon, is also left out); no
 TURN relay, reconnection or spectators online.
 
 Tests are plain Node scripts (`node src/shared/engine/<name>.test.mjs`, or `npm test`).

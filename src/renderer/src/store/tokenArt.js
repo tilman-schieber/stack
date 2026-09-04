@@ -5,10 +5,16 @@ import { create } from 'zustand'
 // token's characteristics, default to a saved choice (or the first), and let the
 // player cycle art in the zoom view. The chosen art is persisted per token type
 // so future tokens of that type reuse it.
+//
+// The same store serves the game's *helper cards* — the Monarch, the
+// Initiative (the back of the Undercity card), dungeon cards, emblems — which
+// are real Scryfall objects (`def.helper`, optionally with a default
+// `scryfallId` printing); those are looked up by exact name.
 
 // A stable key for a token type.
 export function tokenKey(def) {
   if (!def) return ''
+  if (def.helper) return 'helper|' + def.name
   const pt = def.power != null ? `${def.power}/${def.toughness}` : ''
   return [def.name, pt, (def.colors || []).join(''), (def.subtypes || []).join('')].join('|')
 }
@@ -23,6 +29,31 @@ function buildQuery(def) {
 
 const prefKey = (key) => 'token:' + key
 
+// Every printing of a helper card: the known printing (if any) first, then the
+// rest of its printings by exact name.
+async function helperPrints(def) {
+  let base = null
+  if (def.scryfallId) {
+    try {
+      const { cards } = await window.api.ensureCards([def.scryfallId])
+      base = cards?.[0] || null
+    } catch {
+      base = null
+    }
+  }
+  if (!base) {
+    const results = await window.api.searchCards(`!"${def.name}" include:extras`)
+    base = results.find((c) => c.name === def.name) || results[0] || null
+  }
+  let prints = base ? [base] : []
+  if (base?.prints_search_uri) {
+    const { cards } = await window.api.getPrints(base.prints_search_uri)
+    const exact = (cards || []).filter((c) => c.name === def.name)
+    if (exact.length) prints = [base, ...exact.filter((c) => c.id !== base.id)]
+  }
+  return prints
+}
+
 export const useTokenArt = create((set, get) => ({
   cache: {}, // tokenKey -> { loading, prints: [scryfallCard], chosenId }
 
@@ -35,19 +66,23 @@ export const useTokenArt = create((set, get) => ({
     // "Goblin // Soldier" whose front art is a different creature.
     const exact = (list) => (list || []).filter((c) => c.name === def.name && !c.card_faces)
     try {
-      const results = await window.api.searchCards(buildQuery(def))
-      const base = exact(results)[0] || results[0]
-      let prints = exact(results)
-      // Fetch every printing (art variant) of the matched token.
-      if (base?.prints_search_uri) {
-        const { cards } = await window.api.getPrints(base.prints_search_uri)
-        const ex = exact(cards)
-        if (ex.length) prints = ex
-        else if (cards?.length) prints = cards
-      }
-      if (!prints.length) {
-        const fb = await window.api.searchCards(`is:token !"${def.name}"`)
-        prints = exact(fb).length ? exact(fb) : fb
+      let prints
+      if (def.helper) prints = await helperPrints(def)
+      else {
+        const results = await window.api.searchCards(buildQuery(def))
+        const base = exact(results)[0] || results[0]
+        prints = exact(results)
+        // Fetch every printing (art variant) of the matched token.
+        if (base?.prints_search_uri) {
+          const { cards } = await window.api.getPrints(base.prints_search_uri)
+          const ex = exact(cards)
+          if (ex.length) prints = ex
+          else if (cards?.length) prints = cards
+        }
+        if (!prints.length) {
+          const fb = await window.api.searchCards(`is:token !"${def.name}"`)
+          prints = exact(fb).length ? exact(fb) : fb
+        }
       }
       const { favorites } = await window.api.getPrefs(prefKey(key))
       const savedId = favorites?.[0]

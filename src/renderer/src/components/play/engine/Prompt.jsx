@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 // Mode selection for a modal spell ("Choose one/two —"). Click modes to select;
 // once `count` are chosen it commits (and the parent collects any per-mode targets).
@@ -67,7 +67,10 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       madness: 'is deciding on a madness cast',
       chooseValue: 'is choosing',
       copyEnter: 'is choosing what to copy',
-      explore: 'is exploring'
+      explore: 'is exploring',
+      chooseName: 'is choosing a card name',
+      chooseRoom: 'is choosing a dungeon room',
+      chooseDungeon: 'is choosing a dungeon'
     }
     body = (
       <span className="eng-waiting">
@@ -392,6 +395,27 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
     )
   } else if (kind === 'chooseValue') {
     body = <ValuePicker label={`${nameOf(pending.player)} — ${pending.label}`} options={pending.options} onPick={(value) => choose({ value })} />
+  } else if (kind === 'chooseName') {
+    body = <NamePicker pending={pending} nameOf={nameOf} onPick={(name) => choose({ name })} />
+  } else if (kind === 'chooseRoom') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — venture into {pending.dungeon}: choose the next room.
+        </span>
+        {pending.options.map((o) => (
+          <button key={o.id} className="mini" title={o.text} onClick={() => choose({ room: o.id })}>
+            {o.name} — <span className="muted">{o.text}</span>
+          </button>
+        ))}
+      </>
+    )
+  } else if (kind === 'chooseDungeon') {
+    body = (
+      <span>
+        <b>{nameOf(pending.player)}</b> — venture into the dungeon: click a dungeon to enter.
+      </span>
+    )
   } else if (kind === 'mayPay') {
     body = (
       <>
@@ -612,6 +636,56 @@ function BlockerOrderer({ pending, nameOf, onDone }) {
             {b.name}
           </button>
         ))}
+    </>
+  )
+}
+
+// "Choose a card name" (201.3): free text with suggestions — the names the
+// engine knows are in this game, plus live Scryfall name matches as you type.
+function NamePicker({ pending, nameOf, onPick }) {
+  const [text, setText] = useState('')
+  const [remote, setRemote] = useState([])
+  useEffect(() => {
+    const q = text.trim()
+    if (q.length < 3) return
+    let alive = true
+    const t = setTimeout(async () => {
+      try {
+        const cards = await window.api.searchCards(`name:${JSON.stringify(q)}${pending.nonland ? ' -t:land' : ''}`)
+        if (alive) setRemote([...new Set(cards.map((c) => c.name))].slice(0, 30))
+      } catch {
+        /* offline: local suggestions only */
+      }
+    }, 300)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [text, pending.nonland])
+  const options = [...new Set([...(pending.suggestions || []), ...remote])].sort()
+  const submit = () => text.trim() && onPick(text.trim())
+  return (
+    <>
+      <span>
+        <b>{nameOf(pending.player)}</b> — {pending.label}:
+      </span>
+      <input
+        className="eng-name-input"
+        list="eng-card-names"
+        value={text}
+        autoFocus
+        placeholder="Type a card name…"
+        onChange={(ev) => setText(ev.target.value)}
+        onKeyDown={(ev) => ev.key === 'Enter' && submit()}
+      />
+      <datalist id="eng-card-names">
+        {options.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
+      <button className="primary" disabled={!text.trim()} onClick={submit}>
+        Name it
+      </button>
     </>
   )
 }
