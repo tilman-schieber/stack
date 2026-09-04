@@ -17,6 +17,7 @@ export default function GameSetup() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [commander, setCommander] = useState(false) // play the Commander format (903)
+  const [vsBot, setVsBot] = useState(true) // player 2 is the computer
 
   async function startLocal() {
     setBusy(true)
@@ -25,7 +26,8 @@ export default function GameSetup() {
       const [d0, d1] = await Promise.all([resolvePlayableDeck(e0), resolvePlayableDeck(e1)])
       if (commander && (!d0.commander || !d1.commander))
         throw new Error("Commander needs a commander in each deck (a card in the deck's Commander section).")
-      startEngineGame({ decks: [d0, d1], format: commander ? 'commander' : null })
+      if (vsBot) d1.name = `Computer (${d1.name})`
+      startEngineGame({ decks: [d0, d1], format: commander ? 'commander' : null, bots: vsBot ? [1] : [] })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -47,7 +49,7 @@ export default function GameSetup() {
         )}
         <div className="mode-tabs">
           <button className={mode === 'local' ? 'active' : ''} onClick={() => setMode('local')}>
-            Local hot-seat
+            Local / vs. computer
           </button>
           <button className={mode === 'host' ? 'active' : ''} onClick={() => setMode('host')}>
             Host online
@@ -60,10 +62,16 @@ export default function GameSetup() {
         {mode === 'local' && (
           <>
             <p className="muted" style={{ marginTop: 0 }}>
-              Two players on this screen, with automatic rule enforcement. Both hands are visible.
+              {vsBot
+                ? 'You against the computer, with automatic rule enforcement. Its hand is hidden.'
+                : 'Two players on this screen, with automatic rule enforcement. Both hands are visible.'}
             </p>
             <DeckPicker label="Player 1 deck" value={e0} onChange={setE0} />
-            <DeckPicker label="Player 2 deck" value={e1} onChange={setE1} />
+            <DeckPicker label={vsBot ? 'Computer deck' : 'Player 2 deck'} value={e1} onChange={setE1} />
+            <label className="setup-check">
+              <input type="checkbox" checked={vsBot} onChange={(ev) => setVsBot(ev.target.checked)} />
+              Player 2 is the computer (a simple opponent: plays lands and spells, attacks when safe, blocks when it trades)
+            </label>
             <label className="setup-check">
               <input type="checkbox" checked={commander} onChange={(ev) => setCommander(ev.target.checked)} />
               Commander — 40 life, commanders start in the command zone (both decks need one)

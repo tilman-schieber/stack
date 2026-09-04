@@ -32,8 +32,9 @@ export default function EnginePlayArea() {
   const toggleStop = useEngineGame((s) => s.toggleStop)
   const mode = useEngineGame((s) => s.mode)
   const mySeat = useEngineGame((s) => s.netSeat)
-  // Online: whether the local player is the one who currently must act.
-  const myTurn = mode === 'local' || view?.pending?.player === mySeat
+  const botSeats = useEngineGame((s) => s.botSeats)
+  // Online / vs. the computer: whether the local player is the one who must act.
+  const myTurn = (mode === 'local' && !botSeats.includes(view?.pending?.player)) || view?.pending?.player === mySeat
   const [showStops, setShowStops] = useState(false)
   const [confirmExit, setConfirmExit] = useState(false) // "Concede?" two-step confirmation
   const [zoom, setZoom] = useState(null) // card being previewed (right-click)
@@ -774,8 +775,8 @@ export default function EnginePlayArea() {
             <span className="eng-active">Active: {view.players[view.activePlayer].name}</span>
           </>
         )}
-        {mode !== 'local' && !myTurn && kind !== 'gameOver' && (
-          <span className="eng-waiting">Waiting for opponent…</span>
+        {!myTurn && kind !== 'gameOver' && (
+          <span className="eng-waiting">{botSeats.length ? 'The computer is thinking…' : 'Waiting for opponent…'}</span>
         )}
         <div className="turn-active">
           <button className="mini" onClick={() => setShowStops((s) => !s)}>
@@ -783,12 +784,12 @@ export default function EnginePlayArea() {
           </button>
           {confirmExit ? (
             <span className="eng-confirm">
-              {mode === 'local' ? 'Exit this game?' : 'Concede the game?'}
+              {mode === 'local' && !botSeats.length ? 'Exit this game?' : 'Concede the game?'}
               <button
                 className="mini danger"
                 onClick={() => {
                   setConfirmExit(false)
-                  if (mode === 'local' || kind === 'gameOver') endGame()
+                  if ((mode === 'local' && !botSeats.length) || kind === 'gameOver') endGame()
                   else concede()
                 }}
               >
@@ -809,7 +810,7 @@ export default function EnginePlayArea() {
             stops={stops}
             toggleStop={toggleStop}
             players={view.players}
-            canToggle={(pid) => mode === 'local' || pid === mySeat}
+            canToggle={(pid) => (mode === 'local' && !botSeats.includes(pid)) || pid === mySeat}
             currentStep={view.step}
             onClose={() => setShowStops(false)}
           />

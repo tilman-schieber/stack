@@ -45,7 +45,11 @@ so the exact printings round-trip), **Delete**.
 
 Pick a mode, pick decks (the built-in example decks or any deck you saved), start.
 
-- **Local hot-seat** — two players on one screen, both hands visible.
+- **Local / vs. computer** — two players on one screen (both hands visible), or you against
+  a simple computer opponent (its hand hidden). The bot plays lands, casts the most useful
+  spell it can afford with sensible targets, attacks when it is safe or lethal, blocks when
+  it trades well or must chump, and takes the obvious default for every other decision. It
+  acts only in its main phases and on its own blocks — it never responds at instant speed.
 - **Host online / Join online** — serverless peer-to-peer over WebRTC. The host creates a
   connection code, the guest pastes it and sends back an answer code, and the game
   starts. The host's app runs the rules engine and pushes each player a view with the

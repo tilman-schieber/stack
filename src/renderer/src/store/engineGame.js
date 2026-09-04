@@ -1,5 +1,7 @@
 import { create } from 'zustand'
-import { GameEngine, projectGame } from '@engine/index.mjs'
+import { GameEngine, projectGame, botChoose, botFallback } from '@engine/index.mjs'
+
+const BOT_DELAY_MS = 450 // a beat between computer moves so they can be followed
 
 // Steps that grant priority (where a stop can be set). Untap and cleanup never
 // grant priority, so they are omitted.
@@ -55,21 +57,56 @@ export const useEngineGame = create((set, get) => ({
   notice: null, // why the last game ended unexpectedly (disconnect etc.), shown on the setup screen
   mode: 'local',
   netSeat: 0, // which player id the local human controls
+  botSeats: [], // seats played by the computer (local mode)
   stops: defaultStops(),
   _engine: null,
   _transport: null,
+  _botTimer: null,
 
-  // ---- local hot-seat ------------------------------------------------------
-  // decks: [{ name, cards: [scryfallCard…], commander? }, …]; format: null | 'commander'
-  startEngineGame: ({ decks, format = null }) => {
+  // ---- local hot-seat / vs. computer ---------------------------------------
+  // decks: [{ name, cards: [scryfallCard…], commander? }, …]; format: null | 'commander';
+  // bots: seat ids the computer plays (their hands are hidden like an opponent's).
+  startEngineGame: ({ decks, format = null, bots = [] }) => {
     const engine = new GameEngine({
       seed: 'game-' + Date.now(),
       format,
       players: decks.map((d) => ({ name: d.name, deck: d.cards, commander: format === 'commander' ? d.commander : null }))
     })
     engine.start()
-    settle(engine, get().stops)
-    set({ started: true, mode: 'local', netSeat: 0, _engine: engine, view: projectGame(engine), error: null, notice: null })
+    const stops = defaultStops(decks.length)
+    for (const b of bots) stops[b] = new Set(['main1', 'main2']) // the bot acts in its main phases
+    settle(engine, stops)
+    set({ started: true, mode: 'local', netSeat: 0, botSeats: bots, stops, _engine: engine, error: null, notice: null })
+    get()._commit()
+  },
+
+  // Let the computer take its decisions, one every BOT_DELAY_MS, until a human
+  // must act. Scheduled after every commit; harmless when it's not a bot's turn.
+  _scheduleBot: () => {
+    const { _engine, botSeats, _botTimer } = get()
+    if (!_engine || !botSeats.length) return
+    const pid = _engine.state.pending?.player
+    if (pid == null || !botSeats.includes(pid) || _engine.state.pending.kind === 'gameOver') return
+    if (_botTimer) clearTimeout(_botTimer)
+    const timer = setTimeout(() => {
+      set({ _botTimer: null })
+      const e = get()._engine
+      if (e !== _engine || !e.state.pending || e.state.pending.player !== pid) return
+      try {
+        e.choose(botChoose(e, pid))
+      } catch (err) {
+        console.warn('bot answer rejected, falling back:', err)
+        try {
+          e.choose(botFallback(e, pid))
+        } catch (err2) {
+          console.error('bot fallback rejected — conceding for it:', err2)
+          e.concede(pid)
+        }
+      }
+      settle(e, get().stops)
+      get()._commit()
+    }, BOT_DELAY_MS)
+    set({ _botTimer: timer })
   },
 
   clearNotice: () => set({ notice: null }),
@@ -101,6 +138,7 @@ export const useEngineGame = create((set, get) => ({
     if (!_engine) return
     // Host may only act on its own decisions (seat 0); the guest's come over the wire.
     if (mode === 'host' && view?.pending && view.pending.player !== 0) return
+    if (view?.pending && get().botSeats.includes(view.pending.player)) return // the computer's decision
     try {
       _engine.choose(answer)
       settle(_engine, stops)
@@ -110,11 +148,14 @@ export const useEngineGame = create((set, get) => ({
     }
   },
 
-  // Push the fresh view locally and (host) the redacted view to the guest.
+  // Push the fresh view locally and (host) the redacted view to the guest. With a
+  // computer opponent the human's seat is the viewer, so the bot's hand is hidden.
   _commit: () => {
-    const { _engine, mode, _transport } = get()
-    set({ view: projectGame(_engine, mode === 'host' ? 0 : null), error: null })
+    const { _engine, mode, _transport, botSeats, netSeat } = get()
+    const viewer = mode === 'host' ? 0 : botSeats.length ? netSeat : null
+    set({ view: projectGame(_engine, viewer), error: null })
     if (mode === 'host') _transport?.send({ t: 'view', view: projectGame(_engine, 1) })
+    get()._scheduleBot()
   },
 
   _onHostMessage: (msg, myDeck) => {
@@ -200,7 +241,8 @@ export const useEngineGame = create((set, get) => ({
   // End the game (concede / exit / connection lost). `reason`, if given, is shown
   // on the setup screen so an unexpected end isn't silent.
   endGame: (reason = null) => {
-    const { _transport } = get()
+    const { _transport, _botTimer } = get()
+    if (_botTimer) clearTimeout(_botTimer)
     if (_transport) {
       // Detach first so closing the channel doesn't re-enter endGame with a
       // "connection lost" notice of its own.
@@ -219,6 +261,8 @@ export const useEngineGame = create((set, get) => ({
       netSeat: 0,
       _engine: null,
       _transport: null,
+      _botTimer: null,
+      botSeats: [],
       view: null,
       error: null,
       notice: typeof reason === 'string' ? reason : null
