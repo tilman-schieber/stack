@@ -788,3 +788,8 @@
   min-width: 240px;
   padding: 4px 8px;
 }
+.eng-stops-sub {
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--muted);
+}

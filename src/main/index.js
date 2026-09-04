@@ -52,7 +52,9 @@ function createWindow() {
     title: 'MTG Deck Builder',
     webPreferences: {
       preload: path.join(import.meta.dirname, '../preload/index.js'),
-      sandbox: false,
+      // The preload only uses contextBridge/ipcRenderer, so the renderer can run
+      // in Chromium's OS sandbox.
+      sandbox: true,
       contextIsolation: true
     }
   })

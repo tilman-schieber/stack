@@ -18,11 +18,14 @@ export const PRIORITY_STEPS = [
   'end'
 ]
 
-// MTGO-style default stops: each player stops in the main phases so they can act.
-// Everything else auto-passes unless a stop is added. One Set per seat.
+// MTGO-style default stops: each player stops in their own main phases and at
+// the end step of an opponent's turn (to act at instant speed before it ends).
+// Everything else auto-passes unless a stop is added. One Set per seat, holding
+// step names for the player's own turn and "opp:<step>" for opponents' turns.
+export const stopKey = (step, oppTurn) => (oppTurn ? 'opp:' + step : step)
 const defaultStops = (n = 2) => {
   const s = {}
-  for (let i = 0; i < n; i++) s[i] = new Set(['main1', 'main2'])
+  for (let i = 0; i < n; i++) s[i] = new Set(['main1', 'main2', 'opp:end'])
   return s
 }
 
@@ -36,7 +39,7 @@ function settle(engine, stops) {
     const p = engine.state.pending
     // Tapping for mana is always available and never a reason to stop.
     const canAct = (p.actions || []).some((a) => a.type !== 'pass' && !a.mana)
-    const stopHere = stops[p.player]?.has(engine.state.step)
+    const stopHere = stops[p.player]?.has(stopKey(engine.state.step, engine.state.activePlayer !== p.player))
     if (canAct && stopHere) break // hand this player priority
     engine.choose({ type: 'pass' })
   }
@@ -205,14 +208,17 @@ export const useEngineGame = create((set, get) => ({
     else if (msg.t === 'bye') get().endGame(get().started ? 'The host ended the game.' : 'The host cancelled.')
   },
 
-  // Toggle a stop for the local seat. Local mode can toggle either seat.
-  toggleStop: (pid, step) => {
-    const { mode, netSeat, _engine, _transport } = get()
+  // Toggle a stop for the local seat (`oppTurn`: on opponents' turns rather than
+  // the player's own). Local mode can toggle either human seat.
+  toggleStop: (pid, step, oppTurn = false) => {
+    const { mode, netSeat, _engine, _transport, botSeats } = get()
     if (mode !== 'local' && pid !== netSeat) return // online: only your own stops
+    if (botSeats.includes(pid)) return
+    const key = stopKey(step, oppTurn)
     const stops = {}
     for (const k of Object.keys(get().stops)) stops[k] = new Set(get().stops[k])
-    if (stops[pid].has(step)) stops[pid].delete(step)
-    else stops[pid].add(step)
+    if (stops[pid].has(key)) stops[pid].delete(key)
+    else stops[pid].add(key)
     if (mode === 'guest') {
       _transport?.send({ t: 'stops', steps: [...stops[pid]] })
       set({ stops })

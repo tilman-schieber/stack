@@ -65,7 +65,8 @@ fully enforce (it plays with its printed characteristics only). Ability menus sh
 auto-payment would tap; hybrid and two-brid pips get a "pay each pip with" picker (or
 auto-pay). Unplayable hand cards say why on hover; declaring attackers previews total
 power and which attackers have no possible blocker.
-**Space / Enter** passes priority, **Escape** cancels. **Stops** sets the Magic Online-style steps at which you receive priority;
+**Space / Enter** passes priority, **Escape** cancels. **Stops** sets the Magic Online-style steps at which you receive priority,
+separately for your own turn and the opponent's (default: your main phases and the opponent's end step);
 everything else auto-passes. A public game log runs down the left.
 
 ## Rules engine (`src/shared/engine/`)

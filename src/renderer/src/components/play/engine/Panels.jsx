@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import { PRIORITY_STEPS } from '../../../store/engineGame.js'
+import { PRIORITY_STEPS, stopKey } from '../../../store/engineGame.js'
 
 // The public game log, newest at the bottom, kept scrolled to the latest entry.
 export function GameLog({ log }) {
@@ -96,14 +96,24 @@ export function StopsPanel({ stops, toggleStop, players, canToggle, currentStep,
         </button>
       </div>
       <div className="eng-stops-hint">
-        Steps without a stop pass priority automatically (stops apply on both players' turns).
+        Steps without a stop pass priority automatically. Set them separately for your own turn and for the opponent's.
       </div>
       <table className="eng-stops-table">
         <thead>
           <tr>
-            <th>Step</th>
+            <th rowSpan={2}>Step</th>
             {players.map((p) => (
-              <th key={p.id}>{p.name}</th>
+              <th key={p.id} colSpan={2}>
+                {p.name}
+              </th>
+            ))}
+          </tr>
+          <tr>
+            {players.map((p) => (
+              <React.Fragment key={p.id}>
+                <th className="eng-stops-sub">own turn</th>
+                <th className="eng-stops-sub">opp. turn</th>
+              </React.Fragment>
             ))}
           </tr>
         </thead>
@@ -112,15 +122,19 @@ export function StopsPanel({ stops, toggleStop, players, canToggle, currentStep,
             <tr key={step} className={step === currentStep ? 'now' : ''}>
               <td>{STOP_STEP_LABEL[step] || step}</td>
               {players.map((p) => (
-                <td key={p.id}>
-                  <input
-                    type="checkbox"
-                    checked={stops[p.id]?.has(step) || false}
-                    disabled={!canToggle(p.id)}
-                    title={canToggle(p.id) ? undefined : 'Only your own stops can be changed online'}
-                    onChange={() => toggleStop(p.id, step)}
-                  />
-                </td>
+                <React.Fragment key={p.id}>
+                  {[false, true].map((opp) => (
+                    <td key={String(opp)}>
+                      <input
+                        type="checkbox"
+                        checked={stops[p.id]?.has(stopKey(step, opp)) || false}
+                        disabled={!canToggle(p.id)}
+                        title={canToggle(p.id) ? (opp ? "On the opponent's turn" : 'On your own turn') : "Only your own stops can be changed"}
+                        onChange={() => toggleStop(p.id, step, opp)}
+                      />
+                    </td>
+                  ))}
+                </React.Fragment>
               ))}
             </tr>
           ))}
