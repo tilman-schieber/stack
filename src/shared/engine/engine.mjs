@@ -232,7 +232,11 @@ export class GameEngine {
   _objName(o) {
     if (!o) return 'something'
     if (o.faceDown) return 'a face-down creature'
-    if (o.kind === 'ability') return o.sourceOid ? `${this._objName(this.state.objects[o.sourceOid])}'s ability` : o.name || 'an ability'
+    if (o.kind === 'ability') {
+      const src = o.sourceOid != null ? this.state.objects[o.sourceOid] : null
+      const srcName = src ? this._objName(src) : o.sourceName
+      return srcName ? `${srcName}'s ability` : o.name || 'an ability'
+    }
     return o.chars?.name || o.printed?.name || 'a card'
   }
 

@@ -71,7 +71,7 @@ export function Inspector({ card }) {
   )
 }
 
-const STOP_STEP_LABEL = {
+export const STOP_STEP_LABEL = {
   upkeep: 'Upkeep',
   draw: 'Draw',
   main1: 'Main 1',
@@ -82,6 +82,47 @@ const STOP_STEP_LABEL = {
   endCombat: 'End of combat',
   main2: 'Main 2',
   end: 'End step'
+}
+const SHORT_STEP_LABEL = {
+  upkeep: 'Upkeep',
+  draw: 'Draw',
+  main1: 'Main 1',
+  beginCombat: 'Combat',
+  declareAttackers: 'Attackers',
+  declareBlockers: 'Blockers',
+  combatDamage: 'Damage',
+  endCombat: 'End combat',
+  main2: 'Main 2',
+  end: 'End'
+}
+
+// Magic Online-style phase bar: the steps of the current turn with the current
+// one lit. Each step shows whether `seat` has a stop there for this kind of turn
+// (own or opponent's); clicking toggles it. Steps without a stop pass by; an
+// opponent's spell or ability always gives a chance to respond.
+export function PhaseBar({ step, oppTurn, seat, stops, toggleStop, canToggle }) {
+  const set = stops[seat] || new Set()
+  return (
+    <div className="eng-phasebar" title={oppTurn ? "Opponent's turn — click a step to stop there on opponents' turns" : 'Your turn — click a step to stop there on your turns'}>
+      <span className="eng-phasebar-who">{oppTurn ? 'Opp. turn' : 'Your turn'}</span>
+      {PRIORITY_STEPS.map((st) => {
+        const on = set.has(stopKey(st, oppTurn))
+        const now = st === step
+        return (
+          <button
+            key={st}
+            className={'eng-phase' + (now ? ' now' : '') + (on ? ' stop' : '')}
+            disabled={!canToggle}
+            onClick={() => toggleStop(seat, st, oppTurn)}
+            title={`${STOP_STEP_LABEL[st]}${now ? ' (now)' : ''} — ${on ? 'stop set' : 'passes automatically'}${canToggle ? '. Click to toggle.' : ''}`}
+          >
+            {on && <span className="eng-phase-dot" />}
+            {SHORT_STEP_LABEL[st]}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 // Magic Online-style stop matrix: each player picks the steps they want priority
@@ -96,7 +137,8 @@ export function StopsPanel({ stops, toggleStop, players, canToggle, currentStep,
         </button>
       </div>
       <div className="eng-stops-hint">
-        Steps without a stop pass priority automatically. Set them separately for your own turn and for the opponent's.
+        Steps without a stop pass priority automatically, set separately for your own turn and for the opponent's. You
+        always get to respond to an opponent's spell or ability, and always declare your own attackers and blockers.
       </div>
       <table className="eng-stops-table">
         <thead>

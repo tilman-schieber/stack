@@ -335,7 +335,15 @@ export const triggersMethods = {
       o.spell = o.behavior.spell
       o.madnessCast = !pending.free && !pending.miracle // madness spells are exiled when they leave the stack
       this._assertTargetsLegal(o.targets, o.controller, tags(o.printed))
-      this._log(`${this._nameOf(pending.player)} casts ${this._objName(o)}${pending.free ? ' without paying its mana cost' : ' (madness)'}`)
+      this._log(
+        `${this._nameOf(pending.player)} casts ${this._objName(o)}${
+          pending.free
+            ? ' without paying its mana cost'
+            : pending.miracle
+              ? ` for its miracle cost ${pending.cost}`
+              : ` for its madness cost ${pending.cost} (it was discarded)`
+        }`
+      )
       if (pending._haste) o.suspendHaste = true
       this._countSpellCast(o)
       this._fireTriggers('castSpell', o)

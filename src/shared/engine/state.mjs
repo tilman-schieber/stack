@@ -58,6 +58,10 @@ export function createAbility(state, fields) {
     targets: null,
     ...fields
   }
+  // Remember the source's name: a sacrificed token is gone from the game by the
+  // time its ability resolves, and the log should still name it.
+  const src = fields.sourceOid != null ? state.objects[fields.sourceOid] : null
+  if (src && !o.sourceName) o.sourceName = src.chars?.name || src.printed?.name || null
   state.objects[oid] = o
   return o
 }

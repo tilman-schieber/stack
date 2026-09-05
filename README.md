@@ -107,9 +107,22 @@ fully enforce (it plays with its printed characteristics only). Ability menus sh
 auto-payment would tap; hybrid and two-brid pips get a "pay each pip with" picker (or
 auto-pay). Unplayable hand cards say why on hover; declaring attackers previews total
 power and which attackers have no possible blocker.
-**Space / Enter** passes priority, **Escape** cancels. **Stops** sets the Magic Online-style steps at which you receive priority,
-separately for your own turn and the opponent's (default: your main phases and the opponent's end step);
-everything else auto-passes. A public game log runs down the left.
+**Space / Enter** passes priority, **Escape** cancels. A public game log runs down the left.
+
+Your hand is a compact fan along the bottom edge — card tops showing, a card rises on hover,
+right-click zooms. A hand you can't see (the computer's, an online opponent's) isn't drawn at
+all; its size is in the sidebar.
+
+Priority works the way Magic Online does. The **phase bar** in the turn bar shows the steps of
+the current turn with the current one lit; a red dot marks the steps where you have a **stop**,
+kept separately for your own turns and for opponents' turns (the bar shows whichever applies to
+the turn in progress; click a step to toggle, or open **All stops…** for the full matrix).
+Defaults: your main phases, and the opponent's declare-attackers and end steps. Steps without
+a stop pass by automatically, but whenever an opponent puts a spell or ability on the stack you
+get a chance to respond regardless of stops, and you always declare your own attackers and
+blockers. Windows where you have nothing to do pass by themselves. **Pass turn** (F4) passes
+the rest of the turn but still stops if the opponent does something you could respond to;
+**Yield all** (F6) passes everything for the rest of the turn; F3 cancels.
 
 ## Rules engine (`src/shared/engine/`)
 

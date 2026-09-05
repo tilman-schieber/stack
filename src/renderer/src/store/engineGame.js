@@ -18,35 +18,62 @@ export const PRIORITY_STEPS = [
   'end'
 ]
 
-// MTGO-style default stops: each player stops in their own main phases and at
-// the end step of an opponent's turn (to act at instant speed before it ends).
-// Everything else auto-passes unless a stop is added. One Set per seat, holding
-// step names for the player's own turn and "opp:<step>" for opponents' turns.
+// Magic Online-style stops: each player marks the steps at which they want
+// priority, separately for their own turn and for opponents' turns. Defaults:
+// your main phases (to cast sorcery-speed spells), plus the opponent's declare
+// attackers and end step (to act at instant speed after attacks are known and
+// before the turn ends). One Set per seat, holding step names for the player's
+// own turn and "opp:<step>" for opponents' turns.
 export const stopKey = (step, oppTurn) => (oppTurn ? 'opp:' + step : step)
+export const DEFAULT_STOPS = ['main1', 'main2', 'opp:declareAttackers', 'opp:end']
 const defaultStops = (n = 2) => {
   const s = {}
-  for (let i = 0; i < n; i++) s[i] = new Set(['main1', 'main2', 'opp:end'])
+  for (let i = 0; i < n; i++) s[i] = new Set(DEFAULT_STOPS)
   return s
 }
 
-// Auto-pass through priority the way Magic Online does: pass automatically unless
-// the player both *can* act and has a stop set for the current step. Windows
-// where the only legal move is pass always auto-pass. Stops at real decisions
-// (attackers/blockers/discard/game over) and at any step a player has stopped on.
+// Yields (Magic Online's F-keys), per seat and for the current turn only:
+//   'turn'     F4 — pass every remaining stop this turn, but still stop when an
+//              opponent puts something on the stack you could respond to (the
+//              yield is cancelled when that happens).
+//   'all'      F6 — pass everything this turn, responses included. Real decisions
+//              (attackers, blockers, discards, choices) still come to you.
+export const YIELD_KINDS = ['turn', 'all']
+
+// Auto-pass through priority the way Magic Online does. A player is handed
+// priority when they can do something (tapping for mana never counts) and either
+//   - an opponent's spell or ability is on top of the stack — you can always
+//     respond, regardless of stops (unless you yielded the whole turn, F6), or
+//   - they have a stop at this step and haven't yielded the turn.
+// Everything else passes automatically. Real decisions (attackers/blockers/
+// discard/game over) are separate pending kinds and always stop.
 // A computer seat sees every priority window; when its answer is simply to
 // pass, that happens here at once (no delay), so only its real moves take time.
-function settle(engine, stops, botSeats = []) {
+function settle(engine, stops, botSeats = [], yields = {}) {
   let guard = 0
   while (engine.state.pending?.kind === 'priority' && guard++ < 4000) {
-    const p = engine.state.pending
-    // Tapping for mana is always available and never a reason to stop.
+    const s = engine.state
+    const p = s.pending
+    const me = p.player
     const canAct = (p.actions || []).some((a) => a.type !== 'pass' && !a.mana)
-    const stopHere = stops[p.player]?.has(stopKey(engine.state.step, engine.state.activePlayer !== p.player))
-    if (canAct && stopHere) {
-      if (!botSeats.includes(p.player)) break // hand this player priority
+    const stack = s.zones.stack || []
+    const top = stack.length ? s.objects[stack[stack.length - 1]] : null
+    const respondable = !!top && top.controller !== me
+    const y = yields[me]?.turn === s.turnNumber ? yields[me].kind : null
+    const stopHere = stops[me]?.has(stopKey(s.step, s.activePlayer !== me))
+    let give = false
+    if (canAct) {
+      if (y === 'all') give = false
+      else if (respondable) {
+        give = true
+        if (y === 'turn') delete yields[me] // something happened: F4 is cancelled
+      } else give = !y && stopHere
+    }
+    if (give) {
+      if (!botSeats.includes(me)) break // hand this player priority
       let ans = null
       try {
-        ans = botChoose(engine, p.player)
+        ans = botChoose(engine, me)
       } catch {
         ans = { type: 'pass' }
       }
@@ -75,6 +102,7 @@ export const useEngineGame = create((set, get) => ({
   netSeat: 0, // which player id the local human controls
   botSeats: [], // seats played by the computer (local mode)
   stops: defaultStops(),
+  yields: {}, // per seat: { kind: 'turn' | 'all', turn } — see YIELD_KINDS
   _engine: null,
   _transport: null,
   _botTimer: null,
@@ -91,8 +119,9 @@ export const useEngineGame = create((set, get) => ({
     engine.start()
     const stops = defaultStops(decks.length)
     for (const b of bots) stops[b] = new Set(BOT_STOPS) // the bot sees every window; passes are instant
-    settle(engine, stops, bots)
-    set({ started: true, mode: 'local', netSeat: 0, botSeats: bots, stops, _engine: engine, error: null, notice: null })
+    const yields = {}
+    settle(engine, stops, bots, yields)
+    set({ started: true, mode: 'local', netSeat: 0, botSeats: bots, stops, yields, _engine: engine, error: null, notice: null })
     get()._commit()
   },
 
@@ -119,7 +148,7 @@ export const useEngineGame = create((set, get) => ({
           e.concede(pid)
         }
       }
-      settle(e, get().stops, get().botSeats)
+      settle(e, get().stops, get().botSeats, get().yields)
       get()._commit()
     }, BOT_DELAY_MS)
     set({ _botTimer: timer })
@@ -131,7 +160,7 @@ export const useEngineGame = create((set, get) => ({
   hostGame: ({ myDeck, transport }) => {
     transport.onMessage = (msg) => get()._onHostMessage(msg, myDeck)
     transport.onClose = () => get().endGame(LOST_CONNECTION)
-    set({ mode: 'host', netSeat: 0, _transport: transport, stops: defaultStops(2), started: false, notice: null })
+    set({ mode: 'host', netSeat: 0, _transport: transport, stops: defaultStops(2), yields: {}, started: false, notice: null })
   },
 
   // ---- networked: guest (no engine, seat 1) --------------------------------
@@ -157,7 +186,7 @@ export const useEngineGame = create((set, get) => ({
     if (view?.pending && get().botSeats.includes(view.pending.player)) return // the computer's decision
     try {
       _engine.choose(answer)
-      settle(_engine, stops, get().botSeats)
+      settle(_engine, stops, get().botSeats, get().yields)
       get()._commit()
     } catch (err) {
       set({ error: String(err?.message || err) })
@@ -169,7 +198,7 @@ export const useEngineGame = create((set, get) => ({
   _commit: () => {
     const { _engine, mode, _transport, botSeats, netSeat } = get()
     const viewer = mode === 'host' ? 0 : botSeats.length ? netSeat : null
-    set({ view: projectGame(_engine, viewer), error: null })
+    set({ view: projectGame(_engine, viewer), error: null, yields: { ...get().yields } })
     if (mode === 'host') _transport?.send({ t: 'view', view: projectGame(_engine, 1) })
     get()._scheduleBot()
   },
@@ -189,14 +218,14 @@ export const useEngineGame = create((set, get) => ({
         ]
       })
       engine.start()
-      settle(engine, stops)
+      settle(engine, stops, [], get().yields)
       set({ started: true, _engine: engine })
       get()._commit()
     } else if (msg.t === 'choose') {
       if (!_engine || _engine.state.pending?.player !== 1) return // only the guest's decisions
       try {
         _engine.choose(msg.answer)
-        settle(_engine, get().stops)
+        settle(_engine, get().stops, [], get().yields)
         get()._commit()
       } catch {
         /* illegal remote choice: ignore, state is untouched */
@@ -204,12 +233,20 @@ export const useEngineGame = create((set, get) => ({
     } else if (msg.t === 'concede') {
       if (!_engine) return
       _engine.concede(1)
-      settle(_engine, get().stops)
+      settle(_engine, get().stops, [], get().yields)
       get()._commit()
     } else if (msg.t === 'stops') {
       const next = { ...get().stops, 1: new Set(msg.steps) }
-      if (_engine) settle(_engine, next)
+      if (_engine) settle(_engine, next, [], get().yields)
       set({ stops: next })
+      get()._commit()
+    } else if (msg.t === 'yield') {
+      // The guest yielded (or cancelled a yield) for this turn.
+      const yields = { ...get().yields }
+      if (msg.kind && YIELD_KINDS.includes(msg.kind) && _engine) yields[1] = { kind: msg.kind, turn: _engine.state.turnNumber }
+      else delete yields[1]
+      if (_engine) settle(_engine, get().stops, [], yields)
+      set({ yields })
       get()._commit()
     } else if (msg.t === 'bye') {
       get().endGame(get().started ? 'Your opponent left the game.' : 'Your opponent cancelled.')
@@ -237,9 +274,30 @@ export const useEngineGame = create((set, get) => ({
       set({ stops })
       return
     }
-    if (_engine) settle(_engine, stops, get().botSeats)
+    if (_engine) settle(_engine, stops, get().botSeats, get().yields)
     set({ stops })
     if (_engine) get()._commit()
+  },
+
+  // Yield for the rest of this turn (`kind`: 'turn' = F4, 'all' = F6) or cancel
+  // with null (F3). Online the guest's yield is applied by the host's engine.
+  setYield: (kind) => {
+    const { mode, netSeat, _engine, _transport } = get()
+    if (mode === 'guest') {
+      _transport?.send({ t: 'yield', kind: kind || null })
+      const yields = { ...get().yields }
+      if (kind) yields[netSeat] = { kind, turn: get().view?.turnNumber ?? 0 }
+      else delete yields[netSeat]
+      set({ yields })
+      return
+    }
+    if (!_engine) return
+    const yields = { ...get().yields }
+    if (kind) yields[netSeat] = { kind, turn: _engine.state.turnNumber }
+    else delete yields[netSeat]
+    settle(_engine, get().stops, get().botSeats, yields)
+    set({ yields })
+    get()._commit()
   },
 
   // Concede as a game action (104.3a): the local seat leaves the game and the
@@ -253,7 +311,7 @@ export const useEngineGame = create((set, get) => ({
     }
     if (!_engine) return
     _engine.concede(netSeat)
-    settle(_engine, stops, get().botSeats)
+    settle(_engine, stops, get().botSeats, get().yields)
     get()._commit()
   },
 
@@ -282,6 +340,7 @@ export const useEngineGame = create((set, get) => ({
       _transport: null,
       _botTimer: null,
       botSeats: [],
+      yields: {},
       view: null,
       error: null,
       notice: typeof reason === 'string' ? reason : null

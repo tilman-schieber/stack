@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
 import { EngineCard, Pile, ManaPool, HelperCard, isCreature, isLand } from './engine/EngineCard.jsx'
 import Prompt from './engine/Prompt.jsx'
-import { GameLog, StopsPanel, Inspector } from './engine/Panels.jsx'
+import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
 import { ZoneViewer, SearchOverlay, ScryOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
 import '../../play.css'
 import './engine.css'
@@ -30,6 +30,8 @@ export default function EnginePlayArea() {
   const concede = useEngineGame((s) => s.concede)
   const stops = useEngineGame((s) => s.stops)
   const toggleStop = useEngineGame((s) => s.toggleStop)
+  const yields = useEngineGame((s) => s.yields)
+  const setYield = useEngineGame((s) => s.setYield)
   const mode = useEngineGame((s) => s.mode)
   const mySeat = useEngineGame((s) => s.netSeat)
   const botSeats = useEngineGame((s) => s.botSeats)
@@ -90,7 +92,11 @@ export default function EnginePlayArea() {
 
   // Keyboard: Escape closes the zoom / cancels an in-progress cast; Space or
   // Enter passes priority when it's yours and nothing else is being chosen.
+  // Magic Online's yields: F4 passes the rest of the turn (but stops when an
+  // opponent does something you can respond to), F6 passes everything this
+  // turn, F3 cancels a yield.
   const pendingKind = view?.pending?.kind
+  const gameOn = !!view && pendingKind !== 'gameOver' && pendingKind !== 'mulligan' && pendingKind !== 'bottom'
   useEffect(() => {
     const onKey = (e) => {
       const tag = e.target?.tagName
@@ -101,6 +107,11 @@ export default function EnginePlayArea() {
         else if (cast) setCast(null)
         return
       }
+      if (gameOn && (e.key === 'F4' || e.key === 'F6' || e.key === 'F3')) {
+        e.preventDefault()
+        setYield(e.key === 'F4' ? 'turn' : e.key === 'F6' ? 'all' : null)
+        return
+      }
       if ((e.key === ' ' || e.key === 'Enter') && pendingKind === 'priority' && myTurn && !cast && !abilityMenu && !zoom) {
         e.preventDefault()
         choose({ type: 'pass' })
@@ -108,7 +119,7 @@ export default function EnginePlayArea() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [zoom, abilityMenu, cast, pendingKind, myTurn, chooseRaw]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [zoom, abilityMenu, cast, pendingKind, myTurn, chooseRaw, gameOn, setYield]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!view) return null
   const pending = view.pending || {}
@@ -705,9 +716,14 @@ export default function EnginePlayArea() {
     </div>
   )
 
+  // A hand whose cards are all hidden from this viewer (the computer's, an online
+  // opponent's) isn't drawn at all — the count is in the sidebar and the space is
+  // better spent on the battlefield. Visible hands are a compact fan: card tops
+  // showing, a card rising on hover; right-click still zooms.
+  const handHidden = (p) => p.hand.length > 0 && p.hand.every((c) => c.hidden)
   const handRow = (p) => (
-    <div className="eng-hand" data-player={p.id}>
-      {p.hand.map((c) => {
+    <div className={'eng-hand' + (handHidden(p) ? ' hidden' : '')} data-player={p.id}>
+      {!handHidden(p) && p.hand.map((c) => {
         const a = actionFor(c.oid)
         const playable = kind === 'priority' && p.id === pending.player && !!a && a.type !== 'pass'
         const selecting =
@@ -717,24 +733,25 @@ export default function EnginePlayArea() {
           (needDiscard && p.id === pending.player && c.oid !== cast.action.oid)
         const chosen = discardSel.includes(c.oid) || bottomSel.includes(c.oid)
         return (
-          <EngineCard
-            key={c.oid}
-            card={c}
-            className={
-              'eng-hand-card ' +
-              (playable ? 'playable ' : '') +
-              (selecting ? 'selectable ' : '') +
-              (chosen ? 'chosen ' : '')
-            }
-            onClick={(ev) => onHandCard(c, p.id, ev)}
-            onZoom={setZoom}
-            onHover={setHover}
-            title={
-              kind === 'priority' && p.id === pending.player && !playable && pending.reasons?.[c.oid]
-                ? `${c.name} — can't play: ${pending.reasons[c.oid]}`
-                : undefined
-            }
-          />
+          <div className="eng-hand-slot" key={c.oid}>
+            <EngineCard
+              card={c}
+              className={
+                'eng-hand-card ' +
+                (playable ? 'playable ' : '') +
+                (selecting ? 'selectable ' : '') +
+                (chosen ? 'chosen ' : '')
+              }
+              onClick={(ev) => onHandCard(c, p.id, ev)}
+              onZoom={setZoom}
+              onHover={setHover}
+              title={
+                kind === 'priority' && p.id === pending.player && !playable && pending.reasons?.[c.oid]
+                  ? `${c.name} — can't play: ${pending.reasons[c.oid]}`
+                  : undefined
+              }
+            />
+          </div>
         )
       })}
     </div>
@@ -800,9 +817,55 @@ export default function EnginePlayArea() {
           <span className="phase-pill on">Mulligan</span>
         ) : (
           <>
-            <span className="eng-turn">Turn {view.turnNumber}</span>
-            <span className="phase-pill on">{STEP_LABEL[view.step] || view.step}</span>
-            <span className="eng-active">Active: {view.players[view.activePlayer].name}</span>
+            <span className="eng-turn" title={`Active player: ${view.players[view.activePlayer].name}`}>
+              Turn {view.turnNumber}
+            </span>
+            {(() => {
+              // Whose stops the bar shows: in a two-human hot-seat game, the player
+              // who is deciding; otherwise the local seat.
+              const seat = mode === 'local' && !botSeats.length ? (pending.player ?? view.activePlayer) : mySeat
+              const oppTurn = view.activePlayer !== seat
+              const y = yields[seat]?.turn === view.turnNumber ? yields[seat].kind : null
+              const canYield = gameOn && !botSeats.includes(seat)
+              return (
+                <>
+                  <PhaseBar
+                    step={view.step}
+                    oppTurn={oppTurn}
+                    seat={seat}
+                    stops={stops}
+                    toggleStop={toggleStop}
+                    canToggle={(mode === 'local' && !botSeats.includes(seat)) || seat === mySeat}
+                  />
+                  <span className="eng-yield">
+                    {y ? (
+                      <button className="mini on" onClick={() => setYield(null)} title="Cancel the yield (F3)">
+                        {y === 'all' ? 'Yielding everything this turn' : 'Passing this turn'} ✕
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          className="mini"
+                          disabled={!canYield}
+                          onClick={() => setYield('turn')}
+                          title="Pass the rest of this turn, but stop if the opponent does something you can respond to (F4)"
+                        >
+                          Pass turn
+                        </button>
+                        <button
+                          className="mini"
+                          disabled={!canYield}
+                          onClick={() => setYield('all')}
+                          title="Pass everything for the rest of this turn, responses included (F6)"
+                        >
+                          Yield all
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </>
+              )
+            })()}
             {view.daytime && (
               <span className="eng-daynight" title={view.daytime === 'day' ? 'It is day: if the active player casts no spells this turn, it becomes night next turn.' : 'It is night: if the active player casts two or more spells this turn, it becomes day next turn.'}>
                 <HelperCard def={view.helperCards[view.daytime]} label={view.daytime === 'day' ? 'Day' : 'Night'} onZoom={setZoom} onHover={setHover} />
@@ -814,8 +877,8 @@ export default function EnginePlayArea() {
           <span className="eng-waiting">{botSeats.length ? 'The computer is thinking…' : 'Waiting for opponent…'}</span>
         )}
         <div className="turn-active">
-          <button className="mini" onClick={() => setShowStops((s) => !s)}>
-            ⏹ Stops
+          <button className="mini" onClick={() => setShowStops((s) => !s)} title="Every stop, for your turn and the opponent's">
+            All stops…
           </button>
           {confirmExit ? (
             <span className="eng-confirm">
