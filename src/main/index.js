@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
-import { promises as fs } from 'fs'
+import { promises as fs, existsSync } from 'fs'
 import * as scryfall from './scryfall.js'
 import * as db from './db.js'
 import * as deckStore from './deckStore.js'
@@ -123,24 +123,26 @@ function registerIpc() {
 
   // Deck manager file I/O: the renderer hands us decklist text to write, or asks
   // us to pick a text file to read. Paths never leave the main process.
-  ipcMain.handle('decks:exportFile', async (e, defaultName, text) => {
+  ipcMain.handle('decks:exportFile', async (e, defaultName, text, ext = 'txt') => {
     const win = BrowserWindow.fromWebContents(e.sender)
+    const json = ext === 'json'
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
-      title: 'Export decklist',
-      defaultPath: `${String(defaultName || 'deck').replace(/[\\/:*?"<>|]+/g, '-')}.txt`,
-      filters: [{ name: 'Decklist', extensions: ['txt'] }]
+      title: json ? 'Save deck backup' : 'Export decklist',
+      defaultPath: `${String(defaultName || 'deck').replace(/[\\/:*?"<>|]+/g, '-')}.${json ? 'json' : 'txt'}`,
+      filters: [json ? { name: 'Deck backup', extensions: ['json'] } : { name: 'Decklist', extensions: ['txt'] }]
     })
     if (canceled || !filePath) return null
     await fs.writeFile(filePath, String(text), 'utf8')
     return path.basename(filePath)
   })
-  ipcMain.handle('decks:importFile', async (e) => {
+  ipcMain.handle('decks:importFile', async (e, ext = 'txt') => {
     const win = BrowserWindow.fromWebContents(e.sender)
+    const json = ext === 'json'
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-      title: 'Import decklist',
+      title: json ? 'Restore deck backup' : 'Import decklist',
       properties: ['openFile'],
       filters: [
-        { name: 'Decklist', extensions: ['txt', 'dec', 'dek', 'mwdeck'] },
+        json ? { name: 'Deck backup', extensions: ['json'] } : { name: 'Decklist', extensions: ['txt', 'dec', 'dek', 'mwdeck'] },
         { name: 'All files', extensions: ['*'] }
       ]
     })
@@ -151,7 +153,29 @@ function registerIpc() {
   })
 }
 
-app.whenReady().then(() => {
+// The packaged app used to be called "MTG Deck Builder", which named its
+// user-data folder. On the first start under the new name, adopt that folder's
+// contents (card cache, decks, settings) so nothing is lost.
+async function adoptOldUserData() {
+  const userData = app.getPath('userData')
+  const old = path.join(app.getPath('appData'), 'MTG Deck Builder')
+  try {
+    const hasNew = existsSync(path.join(userData, 'mtg.db'))
+    if (hasNew || !existsSync(old) || old === userData) return
+    await fs.mkdir(userData, { recursive: true })
+    for (const name of ['mtg.db', 'mtg.db-wal', 'mtg.db-shm', 'settings.json', 'decks', 'card-cache']) {
+      const from = path.join(old, name)
+      if (!existsSync(from)) continue
+      await fs.cp(from, path.join(userData, name), { recursive: true })
+    }
+    console.log(`[main] adopted user data from ${old}`)
+  } catch (err) {
+    console.error('[main] could not adopt old user data:', err.message)
+  }
+}
+
+app.whenReady().then(async () => {
+  await adoptOldUserData()
   db.init()
   registerHandler()
   registerIpc()

@@ -32,6 +32,8 @@ export default function EnginePlayArea() {
   const toggleStop = useEngineGame((s) => s.toggleStop)
   const yields = useEngineGame((s) => s.yields)
   const setYield = useEngineGame((s) => s.setYield)
+  const holds = useEngineGame((s) => s.holds)
+  const setHold = useEngineGame((s) => s.setHold)
   const mode = useEngineGame((s) => s.mode)
   const mySeat = useEngineGame((s) => s.netSeat)
   const botSeats = useEngineGame((s) => s.botSeats)
@@ -229,7 +231,7 @@ export default function EnginePlayArea() {
   function finalizeCast(c, chosen) {
     const a = c.action
     if (a.type === 'activate')
-      choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: chosen, sacrifice: c.sac, x: c.x })
+      choose({ type: 'activate', oid: a.oid, ability: a.ability, targets: chosen, sacrifice: c.sac, discard: c.disc, x: c.x })
     else if (a.type === 'madness') choose({ cast: true, targets: chosen })
     else if (a.type === 'castFlashback') choose({ type: 'castFlashback', oid: a.oid, targets: chosen })
     else if (a.type === 'castOmen') choose({ type: 'castOmen', oid: a.oid, targets: chosen })
@@ -409,6 +411,8 @@ export default function EnginePlayArea() {
     }
     if (targeting || needSac || needX) return
     if (kind === 'priority' && pid === pending.player) {
+      // Shift-click: keep priority after this spell (to respond to it yourself).
+      if (ev?.shiftKey && !holds[mySeat]) setHold(true)
       const acts = pending.actions.filter(
         (a) =>
           a.oid === card.oid &&
@@ -813,8 +817,8 @@ export default function EnginePlayArea() {
   return (
     <div className="play-area engine">
       <div className="turnbar eng-turnbar">
-        {kind === 'mulligan' || kind === 'bottom' ? (
-          <span className="phase-pill on">Mulligan</span>
+        {kind === 'mulligan' || kind === 'bottom' || kind === 'playOrDraw' ? (
+          <span className="phase-pill on">{kind === 'playOrDraw' ? 'Play or draw' : 'Mulligan'}</span>
         ) : (
           <>
             <span className="eng-turn" title={`Active player: ${view.players[view.activePlayer].name}`}>
@@ -838,6 +842,14 @@ export default function EnginePlayArea() {
                     canToggle={(mode === 'local' && !botSeats.includes(seat)) || seat === mySeat}
                   />
                   <span className="eng-yield">
+                    <button
+                      className={'mini' + (holds[seat] ? ' on' : '')}
+                      disabled={!canYield}
+                      onClick={() => setHold(!holds[seat])}
+                      title="Keep priority after your next spell or ability so you can respond to it yourself (or shift-click a card to cast). Used once."
+                    >
+                      {holds[seat] ? 'Holding priority ✕' : 'Hold priority'}
+                    </button>
                     {y ? (
                       <button className="mini on" onClick={() => setYield(null)} title="Cancel the yield (F3)">
                         {y === 'all' ? 'Yielding everything this turn' : 'Passing this turn'} ✕

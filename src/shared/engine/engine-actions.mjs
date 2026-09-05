@@ -313,6 +313,7 @@ export const actionsMethods = {
       case 'activate': {
         const o = s.objects[action.oid]
         const ab = o.behavior.activated[action.ability]
+        const sourceName = this._objName(o) // before costs: a sacrificed token is gone afterwards
         this._payActivationCost(pid, o, ab, action)
         if (ab.manaAbility) {
           // Mana abilities don't use the stack (605.3b): resolve immediately.
@@ -324,12 +325,21 @@ export const actionsMethods = {
         const aoid = createAbility(s, {
           controller: pid,
           sourceOid: o.oid,
+          sourceName,
           effect: ab.effect,
           targets: action.targets || [],
           xValue: action._xValue || 0 // X chosen for an {X} activation cost
         })
         zone(s, 'stack').push(aoid.oid)
         this._checkWard(aoid.oid, pid, aoid.targets)
+        // A madness card discarded as a cost is offered now, above the ability.
+        if (s.pendingMadness.length) {
+          this._castPaused = true
+          this._processMadness(() => {
+            this._castPaused = false
+            this._grantPriorityTo(pid)
+          })
+        }
         break
       }
       case 'plot': {
@@ -419,6 +429,8 @@ export const actionsMethods = {
     const actx = { byPid: pid, sourceColors: tags(o.chars || o.printed) }
     if (ab.targets?.length && !ab.targets.every((t) => this._legalTargetsExist(t, actx))) return false
     const cost = ab.cost || {}
+    // Discard N as a cost needs that many cards in hand.
+    if (cost.discard && zone(s, 'hand', pid).length < cost.discard) return false
     if (cost.tap) {
       if (o.status.tapped) return false
       if (o.printed.types.includes('Creature') && !this._canTap(o)) return false
@@ -478,6 +490,11 @@ export const actionsMethods = {
       const { counter, amount = 1 } = cost.removeCounters
       o.status.counters[counter] -= amount
       if (o.status.counters[counter] <= 0) delete o.status.counters[counter]
+    }
+    // Discard as a cost (a Blood token): a discarded madness card is queued and
+    // offered once the ability is on the stack.
+    if (cost.discard && action.discard?.length) {
+      for (const d of action.discard) if (zone(s, 'hand', pid).includes(d)) this._discardCard(pid, d)
     }
     if (cost.sacrifice === 'self') this._sacrifice(o)
     else if (cost.sacrifice && action.sacrifice) {

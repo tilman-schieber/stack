@@ -1314,13 +1314,13 @@ export const BEHAVIORS = {
   // Recursion: when you draw your third card in a turn, return this from your
   // graveyard to the battlefield tapped. (It's never hard-cast in mono-red.)
   'Sneaky Snacker': { returnOnThirdDraw: true },
-  // Blood token: {1}, {T}, Discard a card, Sacrifice: draw a card. (Discard modelled
-  // as part of the effect, so it still enables madness.)
+  // Blood token: {1}, {T}, Discard a card, Sacrifice: draw a card. The discard is a
+  // cost, paid on activation (a discarded madness card is offered right away).
   Blood: {
     activated: [
       {
-        cost: { mana: '{1}', tap: true, sacrifice: 'self' },
-        effect: [{ op: 'discard', amount: 1 }, { op: 'draw', amount: 1 }]
+        cost: { mana: '{1}', tap: true, discard: 1, sacrifice: 'self' },
+        effect: [{ op: 'draw', amount: 1 }]
       }
     ]
   }

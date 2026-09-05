@@ -282,6 +282,7 @@ export const legalMethods = {
           needsTargets: targets.length,
           loyalty: ab.loyalty, // present for planeswalker loyalty abilities
           sacChoose: sac && sac !== 'self' ? sac : null, // { types } to pick a sacrifice
+          discChoose: ab.cost?.discard || null, // discard N cards from hand as a cost
           hasX: xCost > 0,
           maxX:
             xCost > 0

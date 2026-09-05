@@ -6,6 +6,7 @@ import { promises as fs } from 'fs'
 import { existsSync } from 'fs'
 import path from 'path'
 import * as db from './db.js'
+import * as scryfall from './scryfall.js'
 import { imageUrlFor } from '../shared/scryfall.mjs'
 
 const IMG_HEADERS = { 'User-Agent': 'Stack/0.2 (github.com/tilman-schieber/stack)' }
@@ -32,7 +33,14 @@ async function ensureImage(id, face) {
   const file = path.join(cacheDir(), `${id}${suffix}.jpg`)
   if (existsSync(file)) return file
 
-  const card = db.getCard(id)
+  // A card we've never seen (an online opponent's, referenced by id only): fetch
+  // its data first so the image — and later lookups — work.
+  let card = db.getCard(id)
+  if (!card) {
+    const { found } = await scryfall.resolveByIds([id])
+    db.putCards(found)
+    card = db.getCard(id)
+  }
   const url = imageUrlFor(card, face)
   if (!url) throw new Error(`No image url for card ${id}${suffix}`)
 

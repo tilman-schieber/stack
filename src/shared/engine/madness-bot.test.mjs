@@ -5,7 +5,7 @@
 import { GameEngine } from './engine.mjs'
 import { SAMPLE_CARDS } from './cards.mjs'
 import { botChoose, botFallback } from './bot.mjs'
-import { DEFAULT_DECKS } from '../../renderer/src/lib/defaultDecks.js'
+import { DEFAULT_DECKS } from '../../renderer/src/lib/defaultDecks.mjs'
 import { makeAsserter } from './_testutil.mjs'
 
 const { assert, stats } = makeAsserter()

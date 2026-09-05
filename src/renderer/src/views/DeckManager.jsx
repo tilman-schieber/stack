@@ -177,6 +177,35 @@ export default function DeckManager() {
     return Number.isNaN(d.getTime()) ? '' : d.toLocaleString()
   }
 
+  // Backup: every deck record in one JSON file; restore adds them back (a deck
+  // with the same name is replaced).
+  async function backupAll() {
+    const records = []
+    for (const d of decks) records.push(await window.api.loadDeck(d.slug))
+    const text = JSON.stringify({ app: 'stack', format: 1, exportedAt: new Date().toISOString(), decks: records }, null, 2)
+    const file = await window.api.exportDeckFile(`stack-decks-${new Date().toISOString().slice(0, 10)}`, text, 'json')
+    if (file) flash(`Backed up ${records.length} deck(s) to ${file}.`)
+  }
+  async function restoreBackup() {
+    const picked = await window.api.importDeckFile('json')
+    if (!picked) return
+    try {
+      const data = JSON.parse(picked.text)
+      const list = Array.isArray(data?.decks) ? data.decks : Array.isArray(data) ? data : null
+      if (!list) throw new Error('not a Stack deck backup')
+      let n = 0
+      for (const rec of list) {
+        if (!rec?.name || !Array.isArray(rec.entries)) continue
+        await window.api.saveDeck({ name: rec.name, description: rec.description || '', entries: rec.entries })
+        n++
+      }
+      await refresh()
+      flash(`Restored ${n} deck(s) from ${picked.name}.`)
+    } catch (err) {
+      flash(`Could not restore: ${err.message}`)
+    }
+  }
+
   const missing = missingDefaults(decks)
 
   return (
@@ -200,6 +229,12 @@ export default function DeckManager() {
               {seeding ? 'Restoring…' : `Restore default decks (${missing.length})`}
             </button>
           )}
+          <RowMenu
+            items={[
+              { label: 'Back up all decks…', onClick: backupAll, title: 'Save every deck to one JSON file' },
+              { label: 'Restore from backup…', onClick: restoreBackup, title: 'Add the decks from a backup file (same names are replaced)' }
+            ]}
+          />
         </div>
       </div>
       {status && <div className="status-msg">{status}</div>}

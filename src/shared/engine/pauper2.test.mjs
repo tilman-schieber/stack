@@ -9,7 +9,7 @@ import { zone } from './state.mjs'
 import { SAMPLE_CARDS } from './cards.mjs'
 import { classifyCard } from './classify.mjs'
 import { recompute } from './layers.mjs'
-import { DEFAULT_DECKS } from '../../renderer/src/lib/defaultDecks.js'
+import { DEFAULT_DECKS } from '../../renderer/src/lib/defaultDecks.mjs'
 import { makeEngine, put, refresh, advanceToPriorityAt, inZone, combat, makeAsserter } from './_testutil.mjs'
 
 const { assert, stats } = makeAsserter()

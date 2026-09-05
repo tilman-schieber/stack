@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_DECKS, deckCardNames } from '../lib/defaultDecks.js'
+import { DEFAULT_DECKS, deckCardNames } from '../lib/defaultDecks.mjs'
 import { buildLookup } from '../lib/resolveDeck.js'
 import { slugify } from '../../../shared/backend.mjs'
 

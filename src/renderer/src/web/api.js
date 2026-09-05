@@ -199,13 +199,15 @@ export async function createWebApi() {
   // The File System Access API gives real save/open dialogs where it exists
   // (Chromium); elsewhere a download link and a file input do the job.
   const DECKLIST_TYPES = [{ description: 'Decklist', accept: { 'text/plain': ['.txt', '.dec', '.dek', '.mwdeck'] } }]
+  const BACKUP_TYPES = [{ description: 'Deck backup', accept: { 'application/json': ['.json'] } }]
+  const typesFor = (ext) => (ext === 'json' ? BACKUP_TYPES : DECKLIST_TYPES)
   const stripExt = (name) => String(name).replace(/\.[^.]+$/, '')
 
-  async function exportDeckFile(defaultName, text) {
-    const fileName = `${String(defaultName || 'deck').replace(/[\\/:*?"<>|]+/g, '-')}.txt`
+  async function exportDeckFile(defaultName, text, ext = 'txt') {
+    const fileName = `${String(defaultName || 'deck').replace(/[\\/:*?"<>|]+/g, '-')}.${ext === 'json' ? 'json' : 'txt'}`
     if (typeof window.showSaveFilePicker === 'function') {
       try {
-        const handle = await window.showSaveFilePicker({ suggestedName: fileName, types: DECKLIST_TYPES })
+        const handle = await window.showSaveFilePicker({ suggestedName: fileName, types: typesFor(ext) })
         const writable = await handle.createWritable()
         await writable.write(String(text))
         await writable.close()
@@ -215,7 +217,7 @@ export async function createWebApi() {
         // e.g. no user activation left: fall through to a plain download
       }
     }
-    const url = URL.createObjectURL(new Blob([String(text)], { type: 'text/plain' }))
+    const url = URL.createObjectURL(new Blob([String(text)], { type: ext === 'json' ? 'application/json' : 'text/plain' }))
     const a = document.createElement('a')
     a.href = url
     a.download = fileName
@@ -224,10 +226,10 @@ export async function createWebApi() {
     return fileName
   }
 
-  async function importDeckFile() {
+  async function importDeckFile(ext = 'txt') {
     if (typeof window.showOpenFilePicker === 'function') {
       try {
-        const [handle] = await window.showOpenFilePicker({ types: DECKLIST_TYPES, multiple: false })
+        const [handle] = await window.showOpenFilePicker({ types: typesFor(ext), multiple: false })
         const file = await handle.getFile()
         return { name: stripExt(file.name), text: await file.text() }
       } catch (err) {
@@ -238,7 +240,7 @@ export async function createWebApi() {
     return new Promise((resolve, reject) => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = '.txt,.dec,.dek,.mwdeck,text/plain'
+      input.accept = ext === 'json' ? '.json,application/json' : '.txt,.dec,.dek,.mwdeck,text/plain'
       input.onchange = () => {
         const file = input.files?.[0]
         if (!file) return resolve(null)
