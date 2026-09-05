@@ -6,6 +6,7 @@ import PlayArea from './views/PlayArea.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
 import { useSettings } from './store/settings.js'
 import { useNav } from './store/nav.js'
+import { useDecks } from './store/decks.js'
 
 // Keeps a render error in one view from white-screening the whole app.
 class ErrorBoundary extends React.Component {
@@ -42,10 +43,13 @@ export default function App() {
   const go = useNav((s) => s.go)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const loadSettings = useSettings((s) => s.load)
+  const initDecks = useDecks((s) => s.init)
 
   useEffect(() => {
     loadSettings()
-  }, [loadSettings])
+    // Loads the deck list and, on first start, saves the default decks into it.
+    initDecks().catch((err) => console.warn('deck setup failed:', err))
+  }, [loadSettings, initDecks])
 
   return (
     <div className="root">

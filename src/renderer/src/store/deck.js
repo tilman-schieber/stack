@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { deckCardNames } from '../lib/exampleDecks.js'
 
 // An entry pairs a resolved Scryfall card with a quantity + section.
 // entries: { id, card, qty, section }[]   section = 'main' | 'sideboard' | 'commander'
@@ -28,38 +27,17 @@ function mergeEntry(entries, card, qty, section) {
 
 export const useDeck = create((set, get) => ({
   deckName: 'Untitled Deck',
+  description: '', // free-text notes saved with the deck
   entries: [],
   loading: false,
   notFound: [], // names that could not be resolved
   parseErrors: [], // raw lines the parser could not read
-  origin: null, // 'example' while editing a built-in deck (saving stores a copy)
 
   setDeckName: (name) => set({ deckName: name }),
+  setDescription: (description) => set({ description }),
 
   newDeck: () =>
-    set({ deckName: 'Untitled Deck', entries: [], notFound: [], parseErrors: [], origin: null }),
-
-  // Open one of the built-in example decks ({ name, cards: [[qty, name]] }).
-  loadExample: async (deck) => {
-    set({ loading: true })
-    try {
-      const { cards, notFound } = await window.api.resolveDeck(deckCardNames(deck))
-      const lookup = buildLookup(cards)
-      const entries = []
-      const unresolved = [...notFound]
-      for (const [qty, name] of deck.cards) {
-        const card = lookup(name)
-        if (!card) {
-          if (!unresolved.includes(name)) unresolved.push(name)
-          continue
-        }
-        mergeEntry(entries, card, qty, 'main')
-      }
-      set({ entries, deckName: deck.name, notFound: unresolved, parseErrors: [], origin: 'example', loading: false })
-    } catch (err) {
-      set({ loading: false, notFound: [`Error: ${err.message}`] })
-    }
-  },
+    set({ deckName: 'Untitled Deck', description: '', entries: [], notFound: [], parseErrors: [] }),
 
   // Import a parsed decklist (from parseDecklist): resolve names -> cards.
   importParsed: async (parsed, deckName) => {
@@ -88,7 +66,6 @@ export const useDeck = create((set, get) => ({
         notFound: unresolved,
         parseErrors: parsed.errors || [],
         deckName: deckName || get().deckName,
-        origin: null,
         loading: false
       })
     } catch (err) {
@@ -169,9 +146,9 @@ export const useDeck = create((set, get) => ({
       set({
         entries,
         deckName: record.name,
+        description: record.description || '',
         notFound: unresolved,
         parseErrors: [],
-        origin: null,
         loading: false
       })
     } catch (err) {
@@ -181,9 +158,10 @@ export const useDeck = create((set, get) => ({
 
   // Serialize the current deck for saving.
   serialize: () => {
-    const { deckName, entries } = get()
+    const { deckName, description, entries } = get()
     return {
       name: deckName,
+      description,
       entries: entries.map((e) => ({
         scryfallId: e.id,
         name: e.card.name,

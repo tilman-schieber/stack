@@ -9,7 +9,7 @@ import { zone } from './state.mjs'
 import { SAMPLE_CARDS } from './cards.mjs'
 import { classifyCard } from './classify.mjs'
 import { recompute } from './layers.mjs'
-import { EXAMPLE_DECKS } from '../../renderer/src/lib/exampleDecks.js'
+import { DEFAULT_DECKS } from '../../renderer/src/lib/defaultDecks.js'
 import { makeEngine, put, refresh, advanceToPriorityAt, inZone, combat, makeAsserter } from './_testutil.mjs'
 
 const { assert, stats } = makeAsserter()
@@ -48,7 +48,7 @@ const tokensOf = (e, pid, name) => zone(e.state, 'battlefield').filter((oid) => 
 section('Both decks are fully engine-supported')
 {
   for (const slug of ['pauper-white-weenie', 'pauper-mono-red-rally']) {
-    const deck = EXAMPLE_DECKS.find((d) => d.slug === slug)
+    const deck = DEFAULT_DECKS.find((d) => d.slug === slug)
     const total = deck.cards.reduce((n, [q]) => n + q, 0)
     const bad = deck.cards.filter(([, name]) => {
       const sf = SAMPLE_CARDS[name] || Object.values(SAMPLE_CARDS).find((c) => c.name.split(' // ')[0] === name)

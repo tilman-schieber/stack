@@ -10,13 +10,14 @@ function decksDir() {
   return dir
 }
 
-// deck: { name, entries: [{ scryfallId, name, qty, section }] }
+// deck: { name, description?, entries: [{ scryfallId, name, qty, section }] }
 export async function saveDeck(deck) {
   await fs.mkdir(decksDir(), { recursive: true })
   const slug = slugify(deck.name)
   const record = {
     slug,
     name: deck.name,
+    description: deck.description || '',
     updatedAt: new Date().toISOString(),
     entries: deck.entries || []
   }

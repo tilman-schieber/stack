@@ -244,9 +244,11 @@ code {
 .deck-counts {
   margin: -4px 0 10px;
 }
-.origin-note {
-  margin: -6px 0 6px;
-  color: var(--accent);
+.notes-input {
+  font-family: inherit;
+  font-size: 12px;
+  resize: vertical;
+  margin: -4px 0 4px;
 }
 .manage-link {
   margin-top: 12px;
@@ -913,6 +915,11 @@ code {
   color: var(--muted);
   margin-top: 2px;
   max-width: 560px;
+  /* Two lines at most; the full text is the tooltip. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .dm-scroll {
   overflow-x: auto;
@@ -1063,17 +1070,11 @@ code {
   .viewnav button {
     padding: 6px 9px;
   }
-  /* Deck tables: name + actions only; long descriptions clamp to two lines. */
+  /* Deck tables: name + actions only. */
   .dm-table .num,
   .dm-table td:nth-child(3):not(.dm-row-actions),
   .dm-table th:nth-child(3):not(:last-child) {
     display: none;
-  }
-  .dm-desc {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
   }
   .dm-name {
     max-width: 55vw;

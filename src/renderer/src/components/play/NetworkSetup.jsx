@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
-import { EXAMPLE_DECKS } from '../../lib/exampleDecks.js'
-import { resolvePlayableDeck } from '../../lib/resolveDeck.js'
+import { resolveSavedDeck } from '../../lib/resolveDeck.js'
+import { useDecks } from '../../store/decks.js'
 import { WebrtcTransport } from '../../net/webrtcTransport.js'
 import DeckPicker from './DeckPicker.jsx'
 
@@ -16,7 +16,11 @@ export default function NetworkSetup({ role }) {
   const hostGame = useEngineGame((s) => s.hostGame)
   const guestGame = useEngineGame((s) => s.guestGame)
   const endGame = useEngineGame((s) => s.endGame)
-  const [deck, setDeck] = useState(`example:${EXAMPLE_DECKS[0].slug}`)
+  const decks = useDecks((s) => s.decks)
+  const [deck, setDeck] = useState('')
+  useEffect(() => {
+    if (decks.length && !decks.some((d) => d.slug === deck)) setDeck(decks[0].slug)
+  }, [decks]) // eslint-disable-line react-hooks/exhaustive-deps
   const [myCode, setMyCode] = useState('') // code to hand to the other player
   const [theirCode, setTheirCode] = useState('') // code pasted from the other player
   const [phase, setPhase] = useState('idle') // idle | working | waiting | connecting
@@ -46,7 +50,7 @@ export default function NetworkSetup({ role }) {
     setError('')
     setPhase('working')
     try {
-      const myDeck = await resolvePlayableDeck(deck)
+      const myDeck = await resolveSavedDeck(deck)
       const t = new WebrtcTransport()
       transportRef.current = t
       const code = await t.createOffer()
@@ -74,7 +78,7 @@ export default function NetworkSetup({ role }) {
     setError('')
     setPhase('working')
     try {
-      const myDeck = await resolvePlayableDeck(deck)
+      const myDeck = await resolveSavedDeck(deck)
       const t = new WebrtcTransport()
       transportRef.current = t
       const code = await t.acceptOffer(theirCode)

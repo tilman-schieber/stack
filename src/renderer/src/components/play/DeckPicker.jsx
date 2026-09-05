@@ -1,27 +1,19 @@
 import React, { useEffect, useState } from 'react'
-import { listPlayableDecks, resolvePlayableDeck } from '../../lib/resolveDeck.js'
+import { useDecks } from '../../store/decks.js'
+import { resolveSavedDeck } from '../../lib/resolveDeck.js'
 
-// A deck <select> covering the built-in example decks and the decks saved in the
-// deck builder, with a rules-engine coverage note for the chosen deck. `value`
-// is a deck key ("example:<slug>" / "saved:<slug>"); `onChange(key)`.
+// A <select> over the saved decks, with a rules-engine coverage note for the
+// chosen one. `value` is a deck slug; `onChange(slug)`.
 export default function DeckPicker({ label, value, onChange, disabled }) {
-  const [decks, setDecks] = useState([])
+  const decks = useDecks((s) => s.decks)
   const [coverage, setCoverage] = useState(null)
-
-  useEffect(() => {
-    let alive = true
-    listPlayableDecks().then((list) => alive && setDecks(list))
-    return () => {
-      alive = false
-    }
-  }, [])
 
   // Resolve the chosen deck once to report how much of it the engine supports.
   useEffect(() => {
     let alive = true
     setCoverage(null)
     if (!value) return
-    resolvePlayableDeck(value)
+    resolveSavedDeck(value)
       .then((d) => alive && setCoverage({ ...d.coverage, commander: d.commander?.name || null, commanderIssues: d.commanderIssues || [] }))
       .catch((err) => alive && setCoverage({ error: err.message }))
     return () => {
@@ -29,21 +21,15 @@ export default function DeckPicker({ label, value, onChange, disabled }) {
     }
   }, [value])
 
-  const groups = [...new Set(decks.map((d) => d.group))]
   return (
     <>
       <label className="field-label">{label}</label>
-      <select value={value} onChange={(ev) => onChange(ev.target.value)} disabled={disabled}>
-        {groups.map((g) => (
-          <optgroup key={g} label={g}>
-            {decks
-              .filter((d) => d.group === g)
-              .map((d) => (
-                <option key={d.key} value={d.key}>
-                  {d.name}
-                </option>
-              ))}
-          </optgroup>
+      <select value={value || ''} onChange={(ev) => onChange(ev.target.value)} disabled={disabled || decks.length === 0}>
+        {decks.length === 0 && <option value="">No decks yet</option>}
+        {decks.map((d) => (
+          <option key={d.slug} value={d.slug}>
+            {d.name} ({d.count})
+          </option>
         ))}
       </select>
       {coverage?.error && <div className="deck-coverage warn">{coverage.error}</div>}

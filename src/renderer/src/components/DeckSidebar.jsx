@@ -1,18 +1,21 @@
 import React, { useState } from 'react'
 import { useDeck } from '../store/deck.js'
+import { useDecks } from '../store/decks.js'
 import { useNav } from '../store/nav.js'
 import { formatDecklist } from '../lib/deckExport.js'
 
-// Left sidebar of the builder: the deck being edited — name, save/new, copy the
-// list, play it. Listing, importing, exporting and deleting saved decks lives in
-// the Decks view.
+// Left sidebar of the builder: the deck being edited — name, notes, save/new,
+// copy the list, play it. Listing, importing, exporting and deleting decks lives
+// in the Decks view.
 export default function DeckSidebar() {
   const deckName = useDeck((s) => s.deckName)
   const setDeckName = useDeck((s) => s.setDeckName)
+  const description = useDeck((s) => s.description)
+  const setDescription = useDeck((s) => s.setDescription)
   const serialize = useDeck((s) => s.serialize)
   const newDeck = useDeck((s) => s.newDeck)
   const entries = useDeck((s) => s.entries)
-  const origin = useDeck((s) => s.origin)
+  const refreshDecks = useDecks((s) => s.refresh)
   const go = useNav((s) => s.go)
   const play = useNav((s) => s.play)
 
@@ -36,7 +39,7 @@ export default function DeckSidebar() {
       return
     }
     const saved = await window.api.saveDeck(serialize())
-    useDeck.setState({ origin: null })
+    refreshDecks()
     flash(`Saved “${saved.name}”.`)
     return saved
   }
@@ -44,7 +47,7 @@ export default function DeckSidebar() {
   // Play the deck as it is on screen: save first so the game setup can find it.
   async function playThis() {
     const saved = await save()
-    if (saved) play(`saved:${saved.slug}`)
+    if (saved) play(saved.slug)
   }
 
   async function copyList() {
@@ -65,9 +68,13 @@ export default function DeckSidebar() {
         {counts.main} main{counts.side ? ` · ${counts.side} sideboard` : ''}
         {counts.cmd ? ` · ${counts.cmd} commander` : ''}
       </div>
-      {origin === 'example' && (
-        <div className="muted small origin-note">Built-in deck — Save keeps your own copy under Your decks.</div>
-      )}
+      <textarea
+        className="notes-input"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Notes (optional) — what the deck does, where the list is from…"
+        rows={3}
+      />
 
       <div className="sidebar-actions">
         <button className="primary" onClick={save}>

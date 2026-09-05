@@ -1,10 +1,12 @@
-// Built-in example decks for the rules-engine play mode. Every card here is
-// engine-supported: basic lands, vanilla/keyword creatures (derived for free
-// from Scryfall data), and spells the engine implements (see
-// src/shared/engine/behaviors.mjs). Loading resolves the names against Scryfall
-// so real card art appears, while the engine enforces the rules by card name.
+// The decks the app starts with. On first start they are saved into the deck
+// store as ordinary decks (src/renderer/src/store/decks.js), so the player can
+// edit, rename or delete them; "Restore default decks" brings back any that are
+// missing. Every card here is engine-supported: basic lands, vanilla/keyword
+// creatures (derived for free from Scryfall data), and spells the engine
+// implements (see src/shared/engine/behaviors.mjs). Saving resolves the names
+// against Scryfall, so real printings and art are stored.
 
-export const EXAMPLE_DECKS = [
+export const DEFAULT_DECKS = [
   // ---- Pauper archetypes ----
   {
     slug: 'pauper-jund-wildfire',
@@ -274,20 +276,4 @@ export const EXAMPLE_DECKS = [
 // Flatten a deck's cards into a de-duplicated list of names for resolution.
 export function deckCardNames(deck) {
   return [...new Set(deck.cards.map(([, name]) => name))]
-}
-
-// Expand a deck against a name -> Scryfall card lookup into an array of card
-// objects (one per copy) suitable for the engine's createState({ deck }).
-export function expandExampleDeck(deck, lookup) {
-  const out = []
-  const missing = []
-  for (const [qty, name] of deck.cards) {
-    const card = lookup(name)
-    if (!card) {
-      missing.push(name)
-      continue
-    }
-    for (let i = 0; i < qty; i++) out.push(card)
-  }
-  return { cards: out, missing }
 }

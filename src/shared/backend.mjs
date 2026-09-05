@@ -50,6 +50,7 @@ export function deckSummary(rec) {
   return {
     slug: rec.slug,
     name: rec.name,
+    description: rec.description || '',
     updatedAt: rec.updatedAt,
     count: (rec.entries || []).reduce((s, e) => s + (e.qty || 0), 0)
   }
@@ -62,7 +63,9 @@ export const SETTINGS_DEFAULTS = {
   // oversized, memorabilia, digital-only, etc.).
   ignoreNonTournamentLegal: true,
   // Additional set codes (lowercase) to hide.
-  ignoredSets: []
+  ignoredSets: [],
+  // Set once the default decks have been saved into the deck store.
+  seededDecks: false
 }
 
 // Merge a settings patch, normalizing set codes.

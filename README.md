@@ -39,21 +39,24 @@ page must be served over HTTPS (or from localhost) for WebRTC and the clipboard.
 
 ## Home
 
-The landing page: what the app does, the three places to go (Play, Decks, Build), your most
-recent decks and the built-in Pauper decks, each with **Play** and **Edit**/**Open** buttons.
-The 🃏 Stack brand in the top bar returns here; **Settings** (⚙, top right) filters which
-printings the art picker shows.
+The landing page: what the app does, the three places to go (Play, Decks, Build), and your
+decks, each with **Play** and **Edit**. The 🃏 Stack brand in the top bar returns here;
+**Settings** (⚙, top right) filters which printings the art picker shows.
 
 ## Decks (deck manager)
 
-Two lists. **Your decks**: every deck you saved — **Play** starts a game with it as Player 1,
-**Edit** opens it in Build, and the ⋯ menu has **Rename**, **Duplicate**, **Copy list**
-(decklist text to the clipboard), **Export file…** (a `.txt` with set codes and collector
-numbers so the exact printings round-trip) and **Delete**. **Built-in decks**: the example
-decks that ship with the app, with a short description each — **Play** them as they are, or
-**Open** one in the builder and Save to keep your own version (the originals never change).
-**Import…** a decklist by pasting Arena/MTGO text or opening a `.txt` file; it is resolved
-against Scryfall and saved (*Import & edit* opens it in the builder).
+Every deck in one list — **Play** starts a game with it as Player 1, **Edit** opens it in
+Build, and the ⋯ menu has **Rename**, **Duplicate**, **Copy list** (decklist text to the
+clipboard), **Export file…** (a `.txt` with set codes and collector numbers so the exact
+printings round-trip) and **Delete**. **Import…** a decklist by pasting Arena/MTGO text or
+opening a `.txt` file; it is resolved against Scryfall and saved (*Import & edit* opens it in
+the builder).
+
+The app starts with ten **default decks** (`src/renderer/src/lib/defaultDecks.js`): on first
+start they are resolved against Scryfall and saved as ordinary decks, so you can edit, rename
+or delete them like any other. **Restore default decks** (shown whenever one is missing) adds
+back the ones you deleted; it never touches decks you kept or changed. A deck's **notes**
+(edited in the builder) show under its name.
 
 ## Build (deck builder)
 
@@ -74,7 +77,7 @@ against Scryfall and saved (*Import & edit* opens it in the builder).
 
 ## Play tab
 
-Pick a mode, pick decks (the built-in example decks or any deck you saved), start.
+Pick a mode, pick decks (any deck in Decks), start.
 
 - **Local / vs. computer** — two players on one screen (both hands visible), or you against
   a computer opponent (its hand hidden). The bot works from a situation read — who is the
@@ -152,7 +155,7 @@ its temptation count), the Day // Night card, and planeswalker emblems — with 
 Scryfall that you can cycle like token art. A Ring-bearer wears a 💍 badge, a Class shows its
 level, a Room its locked and unlocked doors.
 
-The built-in Pauper decks are the top three of Paupergeddon Summer 2026 plus the most-played
+The default Pauper decks are the top three of Paupergeddon Summer 2026 plus the most-played
 archetype — Jund Wildfire, White Weenie, Mono Red Rally, Grixis Affinity — and Mono-Red Madness,
 every card enforced (sneak, web-slinging, disturb, prepared, connive, flashback by tapping
 creatures, Chain Lightning's copy-back, energy equip, "play it until the end of your next turn").

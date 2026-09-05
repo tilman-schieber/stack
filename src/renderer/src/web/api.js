@@ -158,6 +158,7 @@ export async function createWebApi() {
     const record = {
       slug: slugify(deck.name),
       name: deck.name,
+      description: deck.description || '',
       updatedAt: new Date().toISOString(),
       entries: deck.entries || []
     }

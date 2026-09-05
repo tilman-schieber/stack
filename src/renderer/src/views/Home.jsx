@@ -1,34 +1,24 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { useNav } from '../store/nav.js'
 import { useDeck } from '../store/deck.js'
-import { EXAMPLE_DECKS } from '../lib/exampleDecks.js'
+import { useDecks } from '../store/decks.js'
 
-const deckSize = (d) => d.cards.reduce((s, [qty]) => s + qty, 0)
+const SHOWN = 8
 
 // Landing page: what the app does, the three places to go, and the quickest
-// routes into a game — your recent decks and the built-in ones.
+// route into a game — your decks, each with Play and Edit.
 export default function Home() {
   const go = useNav((s) => s.go)
   const play = useNav((s) => s.play)
   const newDeck = useDeck((s) => s.newDeck)
   const loadSaved = useDeck((s) => s.loadSaved)
-  const loadExample = useDeck((s) => s.loadExample)
-  const [saved, setSaved] = useState([])
+  const decks = useDecks((s) => s.decks)
+  const loaded = useDecks((s) => s.loaded)
+  const seeding = useDecks((s) => s.seeding)
+  const seedError = useDecks((s) => s.seedError)
 
-  useEffect(() => {
-    let alive = true
-    window.api.listDecks().then((list) => alive && setSaved(list))
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  async function editSaved(slug) {
+  async function edit(slug) {
     await loadSaved(await window.api.loadDeck(slug))
-    go('build')
-  }
-  async function editExample(deck) {
-    await loadExample(deck)
     go('build')
   }
   function createNew() {
@@ -36,8 +26,7 @@ export default function Home() {
     go('build')
   }
 
-  const recent = saved.slice(0, 5)
-  const featured = EXAMPLE_DECKS.filter((d) => /Pauper/.test(d.name))
+  const shown = decks.slice(0, SHOWN)
 
   return (
     <div className="home">
@@ -53,11 +42,11 @@ export default function Home() {
         <div className="tile">
           <h3>Play</h3>
           <p className="muted">
-            Start a game with any built-in or saved deck. The engine handles priority, the stack, combat and triggers;
-            you make the decisions.
+            Start a game with any of your decks. The engine handles priority, the stack, combat and triggers; you make
+            the decisions.
           </p>
           <div className="tile-actions">
-            <button className="primary" onClick={() => play(null)}>
+            <button className="primary" onClick={() => play(null)} disabled={decks.length === 0}>
               New game
             </button>
           </div>
@@ -65,10 +54,8 @@ export default function Home() {
         <div className="tile">
           <h3>Decks</h3>
           <p className="muted">
-            {saved.length
-              ? `${saved.length} saved deck${saved.length === 1 ? '' : 's'} plus ${EXAMPLE_DECKS.length} built-in ones.`
-              : `No saved decks yet — ${EXAMPLE_DECKS.length} built-in decks are ready to play or copy.`}{' '}
-            Import lists, export them, rename, duplicate.
+            {decks.length ? `${decks.length} deck${decks.length === 1 ? '' : 's'}. ` : ''}
+            Import lists, export them, rename, duplicate, delete.
           </p>
           <div className="tile-actions">
             <button className="secondary" onClick={() => go('decks')}>
@@ -93,52 +80,40 @@ export default function Home() {
         </div>
       </section>
 
-      {recent.length > 0 && (
-        <section className="home-section">
-          <h3>Your recent decks</h3>
+      <section className="home-section">
+        <h3>Your decks</h3>
+        {seeding && <p className="muted small">Setting up the default decks — fetching their cards from Scryfall…</p>}
+        {seedError && <p className="deck-coverage warn">Could not set up the default decks: {seedError}</p>}
+        {loaded && !seeding && decks.length === 0 && (
+          <p className="muted small">No decks yet. Import a list, build one, or restore the default decks in Decks.</p>
+        )}
+        {shown.length > 0 && (
           <div className="home-list">
-            {recent.map((d) => (
+            {shown.map((d) => (
               <div key={d.slug} className="home-row">
-                <span className="home-row-name">{d.name}</span>
+                <span className="home-row-name" title={d.description || undefined}>
+                  {d.name}
+                </span>
                 <span className="muted small">{d.count} cards</span>
                 <span className="home-row-actions">
-                  <button className="mini primary" onClick={() => play(`saved:${d.slug}`)}>
+                  <button className="mini primary" onClick={() => play(d.slug)}>
                     Play
                   </button>
-                  <button className="mini" onClick={() => editSaved(d.slug)}>
+                  <button className="mini" onClick={() => edit(d.slug)}>
                     Edit
                   </button>
                 </span>
               </div>
             ))}
+            {decks.length > SHOWN && (
+              <div className="home-row">
+                <button className="mini" onClick={() => go('decks')}>
+                  All {decks.length} decks →
+                </button>
+              </div>
+            )}
           </div>
-        </section>
-      )}
-
-      <section className="home-section">
-        <h3>Built-in decks</h3>
-        <p className="muted small">
-          Real tournament lists, every card fully supported by the rules engine. Play them as they are, or open one
-          and save your own version.
-        </p>
-        <div className="home-list">
-          {featured.map((d) => (
-            <div key={d.slug} className="home-row">
-              <span className="home-row-name" title={d.description}>
-                {d.name}
-              </span>
-              <span className="muted small">{deckSize(d)} cards</span>
-              <span className="home-row-actions">
-                <button className="mini primary" onClick={() => play(`example:${d.slug}`)}>
-                  Play
-                </button>
-                <button className="mini" onClick={() => editExample(d)}>
-                  Open
-                </button>
-              </span>
-            </div>
-          ))}
-        </div>
+        )}
       </section>
     </div>
   )

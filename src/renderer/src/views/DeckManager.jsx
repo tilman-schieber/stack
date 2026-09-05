@@ -1,11 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useDeck } from '../store/deck.js'
 import { useNav } from '../store/nav.js'
+import { useDecks, missingDefaults } from '../store/decks.js'
 import { parseDecklist } from '../lib/deckParser.js'
 import { exportDeckText } from '../lib/deckExport.js'
-import { EXAMPLE_DECKS } from '../lib/exampleDecks.js'
-
-const deckSize = (d) => d.cards.reduce((s, [qty]) => s + qty, 0)
 
 // A "⋯" button with a small popover of secondary actions.
 function RowMenu({ items }) {
@@ -51,21 +49,25 @@ function RowMenu({ items }) {
   )
 }
 
-// Deck manager: your saved decks and the built-in ones in one place — play or
-// edit any of them; import (paste or file), export (clipboard or file), rename,
-// duplicate and delete your own.
+// Deck manager: every deck in one list — play or edit any of them; import (paste
+// or file), export (clipboard or file), rename, duplicate, delete. The default
+// decks the app started with are ordinary decks here; "Restore default decks"
+// brings back any that were deleted.
 export default function DeckManager() {
   const go = useNav((s) => s.go)
   const play = useNav((s) => s.play)
   const intent = useNav((s) => s.intent)
   const consumeIntent = useNav((s) => s.consumeIntent)
+  const decks = useDecks((s) => s.decks)
+  const refresh = useDecks((s) => s.refresh)
+  const seeding = useDecks((s) => s.seeding)
+  const seedError = useDecks((s) => s.seedError)
+  const restoreDefaults = useDecks((s) => s.restoreDefaults)
   const loadSaved = useDeck((s) => s.loadSaved)
-  const loadExample = useDeck((s) => s.loadExample)
   const importParsed = useDeck((s) => s.importParsed)
   const serialize = useDeck((s) => s.serialize)
   const newDeck = useDeck((s) => s.newDeck)
 
-  const [decks, setDecks] = useState([])
   const [status, setStatus] = useState('') // transient feedback line
   const [renaming, setRenaming] = useState(null) // { slug, name }
   const [confirmDelete, setConfirmDelete] = useState(null) // slug
@@ -74,9 +76,6 @@ export default function DeckManager() {
   const [impText, setImpText] = useState('')
   const [busy, setBusy] = useState(false)
 
-  async function refresh() {
-    setDecks(await window.api.listDecks())
-  }
   useEffect(() => {
     refresh()
     if (intent) consumeIntent()
@@ -89,11 +88,6 @@ export default function DeckManager() {
 
   async function edit(slug) {
     await loadSaved(await window.api.loadDeck(slug))
-    go('build')
-  }
-
-  async function openExample(deck) {
-    await loadExample(deck)
     go('build')
   }
 
@@ -155,6 +149,7 @@ export default function DeckManager() {
         flash(parsed.errors.length ? `Nothing importable — ${parsed.errors.length} unreadable line(s).` : 'Paste a decklist first.')
         return
       }
+      newDeck()
       await importParsed(parsed, impName.trim() || 'Imported deck')
       const { entries, notFound } = useDeck.getState()
       if (entries.length === 0) {
@@ -182,6 +177,8 @@ export default function DeckManager() {
     return Number.isNaN(d.getTime()) ? '' : d.toLocaleString()
   }
 
+  const missing = missingDefaults(decks)
+
   return (
     <div className="deck-manager">
       <div className="dm-head">
@@ -193,9 +190,20 @@ export default function DeckManager() {
           <button className="secondary" onClick={() => setImporting((v) => !v)}>
             {importing ? 'Close import' : 'Import…'}
           </button>
+          {missing.length > 0 && (
+            <button
+              className="secondary"
+              onClick={restoreDefaults}
+              disabled={seeding}
+              title={'Adds back: ' + missing.map((d) => d.name).join(', ')}
+            >
+              {seeding ? 'Restoring…' : `Restore default decks (${missing.length})`}
+            </button>
+          )}
         </div>
       </div>
       {status && <div className="status-msg">{status}</div>}
+      {seedError && <div className="deck-coverage warn">Could not set up the default decks: {seedError}</div>}
 
       {importing && (
         <div className="dm-import">
@@ -224,11 +232,11 @@ export default function DeckManager() {
         </div>
       )}
 
-      <h3 className="dm-section">Your decks</h3>
       {decks.length === 0 ? (
         <p className="muted">
-          Nothing saved yet. Import a decklist, build one from scratch, or open a built-in deck below and save your own
-          version.
+          {seeding
+            ? 'Setting up the default decks — fetching their cards from Scryfall…'
+            : 'No decks. Import a decklist, build one from scratch, or restore the default decks.'}
         </p>
       ) : (
         <div className="dm-scroll">
@@ -257,9 +265,16 @@ export default function DeckManager() {
                         onBlur={commitRename}
                       />
                     ) : (
-                      <span className="dm-link" onClick={() => edit(d.slug)} title="Open in the builder">
-                        {d.name}
-                      </span>
+                      <>
+                        <span className="dm-link" onClick={() => edit(d.slug)} title="Open in the builder">
+                          {d.name}
+                        </span>
+                        {d.description && (
+                          <div className="dm-desc" title={d.description}>
+                            {d.description}
+                          </div>
+                        )}
+                      </>
                     )}
                   </td>
                   <td className="num">{d.count}</td>
@@ -277,7 +292,7 @@ export default function DeckManager() {
                       </>
                     ) : (
                       <>
-                        <button className="mini primary" onClick={() => play(`saved:${d.slug}`)} title="Start a game with this deck">
+                        <button className="mini primary" onClick={() => play(d.slug)} title="Start a game with this deck">
                           Play
                         </button>
                         <button className="mini" onClick={() => edit(d.slug)}>
@@ -301,44 +316,6 @@ export default function DeckManager() {
           </table>
         </div>
       )}
-
-      <h3 className="dm-section">Built-in decks</h3>
-      <p className="muted small">
-        Every card in these is fully supported by the rules engine. Open one in the builder and Save to keep your own
-        version; the originals never change.
-      </p>
-      <div className="dm-scroll">
-        <table className="dm-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th className="num">Cards</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {EXAMPLE_DECKS.map((d) => (
-              <tr key={d.slug}>
-                <td className="dm-name">
-                  <span className="dm-link" onClick={() => openExample(d)} title="Open in the builder">
-                    {d.name}
-                  </span>
-                  {d.description && <div className="dm-desc">{d.description}</div>}
-                </td>
-                <td className="num">{deckSize(d)}</td>
-                <td className="dm-row-actions">
-                  <button className="mini primary" onClick={() => play(`example:${d.slug}`)} title="Start a game with this deck">
-                    Play
-                  </button>
-                  <button className="mini" onClick={() => openExample(d)} title="Open in the builder; Save keeps your own copy">
-                    Open
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   )
 }
