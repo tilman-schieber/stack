@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react'
+import Home from './views/Home.jsx'
 import DeckManager from './views/DeckManager.jsx'
 import DeckBuilder from './views/DeckBuilder.jsx'
 import PlayArea from './views/PlayArea.jsx'
+import SettingsModal from './components/SettingsModal.jsx'
 import { useSettings } from './store/settings.js'
+import { useNav } from './store/nav.js'
 
 // Keeps a render error in one view from white-screening the whole app.
 class ErrorBoundary extends React.Component {
@@ -28,13 +31,16 @@ class ErrorBoundary extends React.Component {
 }
 
 const VIEWS = [
+  ['home', 'Home'],
   ['decks', 'Decks'],
   ['build', 'Build'],
   ['play', 'Play']
 ]
 
 export default function App() {
-  const [view, setView] = useState('decks')
+  const view = useNav((s) => s.view)
+  const go = useNav((s) => s.go)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const loadSettings = useSettings((s) => s.load)
 
   useEffect(() => {
@@ -44,24 +50,24 @@ export default function App() {
   return (
     <div className="root">
       <header className="topbar">
-        <div className="topbrand">🃏 MTG</div>
+        <button className="topbrand" onClick={() => go('home')} title="Home">
+          🃏 Stack
+        </button>
         <nav className="viewnav">
           {VIEWS.map(([key, label]) => (
-            <button key={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}>
+            <button key={key} className={view === key ? 'active' : ''} onClick={() => go(key)}>
               {label}
             </button>
           ))}
         </nav>
+        <button className="gear topgear" title="Settings" onClick={() => setSettingsOpen(true)}>
+          ⚙
+        </button>
       </header>
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       <div className="viewbody">
         <ErrorBoundary key={view}>
-          {view === 'decks' ? (
-            <DeckManager onEdit={() => setView('build')} />
-          ) : view === 'build' ? (
-            <DeckBuilder onManageDecks={() => setView('decks')} />
-          ) : (
-            <PlayArea />
-          )}
+          {view === 'home' ? <Home /> : view === 'decks' ? <DeckManager /> : view === 'build' ? <DeckBuilder /> : <PlayArea />}
         </ErrorBoundary>
       </div>
     </div>

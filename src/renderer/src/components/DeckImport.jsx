@@ -33,7 +33,7 @@ export default function DeckImport({ onDone }) {
   return (
     <div className="import-panel">
       <p className="muted small">
-        Paste a plain-text decklist (Arena export format). Quantities and
+        Paste a plain-text decklist (Arena / MTGO format) to replace the cards in this deck. Quantities and
         <code> (SET) 123</code> suffixes are optional.
       </p>
       <textarea

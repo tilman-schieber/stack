@@ -4,12 +4,12 @@ import CardGrid from '../components/CardGrid.jsx'
 import DeckStats from '../components/DeckStats.jsx'
 import CardSearch from '../components/CardSearch.jsx'
 import DeckImport from '../components/DeckImport.jsx'
-import SettingsModal from '../components/SettingsModal.jsx'
 import { useDeck } from '../store/deck.js'
 
-export default function DeckBuilder({ onManageDecks }) {
-  const [tab, setTab] = useState('import')
-  const [settingsOpen, setSettingsOpen] = useState(false)
+export default function DeckBuilder() {
+  // An empty deck starts on Import (the quickest way to fill it); a loaded deck
+  // starts on Add cards, since importing would replace it.
+  const [tab, setTab] = useState(() => (useDeck.getState().entries.length ? 'search' : 'import'))
   const notFound = useDeck((s) => s.notFound)
   const parseErrors = useDeck((s) => s.parseErrors)
 
@@ -20,8 +20,7 @@ export default function DeckBuilder({ onManageDecks }) {
 
   return (
     <div className="app">
-      <DeckSidebar onOpenSettings={() => setSettingsOpen(true)} onManageDecks={onManageDecks} />
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      <DeckSidebar />
 
       <main className="main">
         {problems.length > 0 && (
@@ -39,11 +38,11 @@ export default function DeckBuilder({ onManageDecks }) {
 
       <section className="rightpanel">
         <div className="tabs">
-          <button className={tab === 'import' ? 'active' : ''} onClick={() => setTab('import')}>
-            Import
-          </button>
           <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>
             Add cards
+          </button>
+          <button className={tab === 'import' ? 'active' : ''} onClick={() => setTab('import')}>
+            Import
           </button>
           <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}>
             Stats

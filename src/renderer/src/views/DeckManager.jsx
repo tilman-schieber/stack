@@ -1,13 +1,66 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useDeck } from '../store/deck.js'
+import { useNav } from '../store/nav.js'
 import { parseDecklist } from '../lib/deckParser.js'
 import { exportDeckText } from '../lib/deckExport.js'
+import { EXAMPLE_DECKS } from '../lib/exampleDecks.js'
 
-// Deck manager: every saved deck in one list — import (paste or file), export
-// (clipboard or file), rename, duplicate, delete, and "Edit" to open a deck in
-// the builder. `onEdit()` switches the app to the Build tab.
-export default function DeckManager({ onEdit }) {
+const deckSize = (d) => d.cards.reduce((s, [qty]) => s + qty, 0)
+
+// A "⋯" button with a small popover of secondary actions.
+function RowMenu({ items }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    const onKey = (e) => e.key === 'Escape' && setOpen(false)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+  return (
+    <span className="row-menu" ref={ref}>
+      <button className="mini" onClick={() => setOpen((v) => !v)} title="More actions" aria-haspopup="menu" aria-expanded={open}>
+        ⋯
+      </button>
+      {open && (
+        <div className="row-menu-pop" role="menu">
+          {items.map(({ label, onClick, danger, title }) => (
+            <button
+              key={label}
+              role="menuitem"
+              className={danger ? 'danger' : ''}
+              title={title}
+              onClick={() => {
+                setOpen(false)
+                onClick()
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  )
+}
+
+// Deck manager: your saved decks and the built-in ones in one place — play or
+// edit any of them; import (paste or file), export (clipboard or file), rename,
+// duplicate and delete your own.
+export default function DeckManager() {
+  const go = useNav((s) => s.go)
+  const play = useNav((s) => s.play)
+  const intent = useNav((s) => s.intent)
+  const consumeIntent = useNav((s) => s.consumeIntent)
   const loadSaved = useDeck((s) => s.loadSaved)
+  const loadExample = useDeck((s) => s.loadExample)
   const importParsed = useDeck((s) => s.importParsed)
   const serialize = useDeck((s) => s.serialize)
   const newDeck = useDeck((s) => s.newDeck)
@@ -16,7 +69,7 @@ export default function DeckManager({ onEdit }) {
   const [status, setStatus] = useState('') // transient feedback line
   const [renaming, setRenaming] = useState(null) // { slug, name }
   const [confirmDelete, setConfirmDelete] = useState(null) // slug
-  const [importing, setImporting] = useState(false)
+  const [importing, setImporting] = useState(intent === 'import')
   const [impName, setImpName] = useState('')
   const [impText, setImpText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -26,7 +79,8 @@ export default function DeckManager({ onEdit }) {
   }
   useEffect(() => {
     refresh()
-  }, [])
+    if (intent) consumeIntent()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const flash = (msg) => {
     setStatus(msg)
@@ -35,12 +89,17 @@ export default function DeckManager({ onEdit }) {
 
   async function edit(slug) {
     await loadSaved(await window.api.loadDeck(slug))
-    onEdit?.()
+    go('build')
+  }
+
+  async function openExample(deck) {
+    await loadExample(deck)
+    go('build')
   }
 
   function createNew() {
     newDeck()
-    onEdit?.()
+    go('build')
   }
 
   async function exportClipboard(d) {
@@ -109,7 +168,7 @@ export default function DeckManager({ onEdit }) {
       setImpName('')
       const problems = notFound.length ? ` ${notFound.length} card(s) not found: ${notFound.join(', ')}.` : ''
       flash(`Imported “${saved.name}” (${entries.reduce((s, e) => s + e.qty, 0)} cards).${problems}`)
-      if (thenEdit) onEdit?.()
+      if (thenEdit) go('build')
     } catch (err) {
       flash(err.message)
     } finally {
@@ -165,80 +224,121 @@ export default function DeckManager({ onEdit }) {
         </div>
       )}
 
+      <h3 className="dm-section">Your decks</h3>
       {decks.length === 0 ? (
-        <p className="muted">No saved decks yet. Import one, or build one in the Build tab and save it.</p>
+        <p className="muted">
+          Nothing saved yet. Import a decklist, build one from scratch, or open a built-in deck below and save your own
+          version.
+        </p>
       ) : (
+        <div className="dm-scroll">
+          <table className="dm-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th className="num">Cards</th>
+                <th>Updated</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {decks.map((d) => (
+                <tr key={d.slug}>
+                  <td className="dm-name">
+                    {renaming?.slug === d.slug ? (
+                      <input
+                        autoFocus
+                        value={renaming.name}
+                        onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRename()
+                          if (e.key === 'Escape') setRenaming(null)
+                        }}
+                        onBlur={commitRename}
+                      />
+                    ) : (
+                      <span className="dm-link" onClick={() => edit(d.slug)} title="Open in the builder">
+                        {d.name}
+                      </span>
+                    )}
+                  </td>
+                  <td className="num">{d.count}</td>
+                  <td className="muted small">{when(d.updatedAt)}</td>
+                  <td className="dm-row-actions">
+                    {confirmDelete === d.slug ? (
+                      <>
+                        <span className="muted small">Delete “{d.name}”?</span>
+                        <button className="mini danger" onClick={() => remove(d.slug)}>
+                          Delete
+                        </button>
+                        <button className="mini" onClick={() => setConfirmDelete(null)}>
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="mini primary" onClick={() => play(`saved:${d.slug}`)} title="Start a game with this deck">
+                          Play
+                        </button>
+                        <button className="mini" onClick={() => edit(d.slug)}>
+                          Edit
+                        </button>
+                        <RowMenu
+                          items={[
+                            { label: 'Rename', onClick: () => setRenaming({ slug: d.slug, name: d.name }) },
+                            { label: 'Duplicate', onClick: () => duplicate(d) },
+                            { label: 'Copy list', onClick: () => exportClipboard(d), title: 'Copy the decklist as text' },
+                            { label: 'Export file…', onClick: () => exportFile(d), title: 'Save the decklist as a .txt file' },
+                            { label: 'Delete', onClick: () => setConfirmDelete(d.slug), danger: true }
+                          ]}
+                        />
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <h3 className="dm-section">Built-in decks</h3>
+      <p className="muted small">
+        Every card in these is fully supported by the rules engine. Open one in the builder and Save to keep your own
+        version; the originals never change.
+      </p>
+      <div className="dm-scroll">
         <table className="dm-table">
           <thead>
             <tr>
               <th>Name</th>
               <th className="num">Cards</th>
-              <th>Updated</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {decks.map((d) => (
+            {EXAMPLE_DECKS.map((d) => (
               <tr key={d.slug}>
                 <td className="dm-name">
-                  {renaming?.slug === d.slug ? (
-                    <input
-                      autoFocus
-                      value={renaming.name}
-                      onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitRename()
-                        if (e.key === 'Escape') setRenaming(null)
-                      }}
-                      onBlur={commitRename}
-                    />
-                  ) : (
-                    <span className="dm-link" onClick={() => edit(d.slug)} title="Open in the builder">
-                      {d.name}
-                    </span>
-                  )}
+                  <span className="dm-link" onClick={() => openExample(d)} title="Open in the builder">
+                    {d.name}
+                  </span>
+                  {d.description && <div className="dm-desc">{d.description}</div>}
                 </td>
-                <td className="num">{d.count}</td>
-                <td className="muted small">{when(d.updatedAt)}</td>
+                <td className="num">{deckSize(d)}</td>
                 <td className="dm-row-actions">
-                  {confirmDelete === d.slug ? (
-                    <>
-                      <span className="muted small">Delete “{d.name}”?</span>
-                      <button className="mini danger" onClick={() => remove(d.slug)}>
-                        Delete
-                      </button>
-                      <button className="mini" onClick={() => setConfirmDelete(null)}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="mini" onClick={() => edit(d.slug)}>
-                        Edit
-                      </button>
-                      <button className="mini" onClick={() => setRenaming({ slug: d.slug, name: d.name })}>
-                        Rename
-                      </button>
-                      <button className="mini" onClick={() => duplicate(d)}>
-                        Duplicate
-                      </button>
-                      <button className="mini" onClick={() => exportClipboard(d)} title="Copy the decklist as text">
-                        Copy
-                      </button>
-                      <button className="mini" onClick={() => exportFile(d)} title="Save the decklist as a .txt file">
-                        Export…
-                      </button>
-                      <button className="mini" onClick={() => setConfirmDelete(d.slug)}>
-                        Delete
-                      </button>
-                    </>
-                  )}
+                  <button className="mini primary" onClick={() => play(`example:${d.slug}`)} title="Start a game with this deck">
+                    Play
+                  </button>
+                  <button className="mini" onClick={() => openExample(d)} title="Open in the builder; Save keeps your own copy">
+                    Open
+                  </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      )}
+      </div>
     </div>
   )
 }

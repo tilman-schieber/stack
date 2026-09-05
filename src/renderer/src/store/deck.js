@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { deckCardNames } from '../lib/exampleDecks.js'
 
 // An entry pairs a resolved Scryfall card with a quantity + section.
 // entries: { id, card, qty, section }[]   section = 'main' | 'sideboard' | 'commander'
@@ -31,11 +32,34 @@ export const useDeck = create((set, get) => ({
   loading: false,
   notFound: [], // names that could not be resolved
   parseErrors: [], // raw lines the parser could not read
+  origin: null, // 'example' while editing a built-in deck (saving stores a copy)
 
   setDeckName: (name) => set({ deckName: name }),
 
   newDeck: () =>
-    set({ deckName: 'Untitled Deck', entries: [], notFound: [], parseErrors: [] }),
+    set({ deckName: 'Untitled Deck', entries: [], notFound: [], parseErrors: [], origin: null }),
+
+  // Open one of the built-in example decks ({ name, cards: [[qty, name]] }).
+  loadExample: async (deck) => {
+    set({ loading: true })
+    try {
+      const { cards, notFound } = await window.api.resolveDeck(deckCardNames(deck))
+      const lookup = buildLookup(cards)
+      const entries = []
+      const unresolved = [...notFound]
+      for (const [qty, name] of deck.cards) {
+        const card = lookup(name)
+        if (!card) {
+          if (!unresolved.includes(name)) unresolved.push(name)
+          continue
+        }
+        mergeEntry(entries, card, qty, 'main')
+      }
+      set({ entries, deckName: deck.name, notFound: unresolved, parseErrors: [], origin: 'example', loading: false })
+    } catch (err) {
+      set({ loading: false, notFound: [`Error: ${err.message}`] })
+    }
+  },
 
   // Import a parsed decklist (from parseDecklist): resolve names -> cards.
   importParsed: async (parsed, deckName) => {
@@ -64,6 +88,7 @@ export const useDeck = create((set, get) => ({
         notFound: unresolved,
         parseErrors: parsed.errors || [],
         deckName: deckName || get().deckName,
+        origin: null,
         loading: false
       })
     } catch (err) {
@@ -146,6 +171,7 @@ export const useDeck = create((set, get) => ({
         deckName: record.name,
         notFound: unresolved,
         parseErrors: [],
+        origin: null,
         loading: false
       })
     } catch (err) {

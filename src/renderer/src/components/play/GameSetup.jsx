@@ -4,6 +4,10 @@ import { EXAMPLE_DECKS } from '../../lib/exampleDecks.js'
 import { resolvePlayableDeck } from '../../lib/resolveDeck.js'
 import DeckPicker from './DeckPicker.jsx'
 import NetworkSetup from './NetworkSetup.jsx'
+import { useNav } from '../../store/nav.js'
+
+const FIRST = `example:${EXAMPLE_DECKS[0].slug}`
+const SECOND = `example:${EXAMPLE_DECKS[1].slug}`
 
 // Choose a play mode and set up a game: local hot-seat, or a serverless online
 // game (host or join) over a peer-to-peer WebRTC connection.
@@ -11,9 +15,11 @@ export default function GameSetup() {
   const startEngineGame = useEngineGame((s) => s.startEngineGame)
   const notice = useEngineGame((s) => s.notice)
   const clearNotice = useEngineGame((s) => s.clearNotice)
+  // A deck chosen elsewhere ("Play" on a deck) arrives as Player 1's deck.
+  const preset = useNav((s) => s.playDeck)
   const [mode, setMode] = useState('local') // 'local' | 'host' | 'join'
-  const [e0, setE0] = useState(`example:${EXAMPLE_DECKS[0].slug}`)
-  const [e1, setE1] = useState(`example:${EXAMPLE_DECKS[1].slug}`)
+  const [e0, setE0] = useState(preset || FIRST)
+  const [e1, setE1] = useState(preset === SECOND ? FIRST : SECOND)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [commander, setCommander] = useState(false) // play the Commander format (903)

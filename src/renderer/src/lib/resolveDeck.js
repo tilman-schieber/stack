@@ -18,7 +18,7 @@ function buildLookup(cards) {
 // Decks a game can be started with: the built-in examples plus every deck saved
 // in the deck builder. Keys are "example:<slug>" / "saved:<slug>".
 export async function listPlayableDecks() {
-  const examples = EXAMPLE_DECKS.map((d) => ({ key: `example:${d.slug}`, name: d.name, group: 'Example decks' }))
+  const examples = EXAMPLE_DECKS.map((d) => ({ key: `example:${d.slug}`, name: d.name, group: 'Built-in decks' }))
   let saved = []
   try {
     saved = (await window.api.listDecks()).map((d) => ({

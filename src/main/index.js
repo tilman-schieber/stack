@@ -20,7 +20,7 @@ function createWindow() {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#14151a',
-    title: 'MTG Deck Builder',
+    title: 'Stack',
     webPreferences: {
       preload: path.join(import.meta.dirname, '../preload/index.js'),
       // The preload only uses contextBridge/ipcRenderer, so the renderer can run

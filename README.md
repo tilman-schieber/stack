@@ -37,29 +37,40 @@ page must be served over HTTPS (or from localhost) for WebRTC and the clipboard.
 `.github/workflows/web.yml` builds it and publishes it to GitHub Pages on every push to
 `main` (enable Pages with "Source: GitHub Actions" once in the repository settings).
 
-## Decks tab (deck manager)
+## Home
 
-Every saved deck in one list. **Import…** a decklist by pasting Arena/MTGO text or opening
-a `.txt` file (it is resolved against Scryfall and saved; *Import & edit* opens it in the
-builder). Per deck: **Edit** (open in Build), **Rename**, **Duplicate**, **Copy** (decklist
-text to the clipboard), **Export…** (to a `.txt` file, with set codes and collector numbers
-so the exact printings round-trip), **Delete**.
+The landing page: what the app does, the three places to go (Play, Decks, Build), your most
+recent decks and the built-in Pauper decks, each with **Play** and **Edit**/**Open** buttons.
+The 🃏 Stack brand in the top bar returns here; **Settings** (⚙, top right) filters which
+printings the art picker shows.
 
-## Build tab (deck builder)
+## Decks (deck manager)
 
-1. **Import** → paste an Arena/MTGO decklist (or *Load sample*) → *Import deck*. Lines like
-   `4 Lightning Bolt`, `4x Lightning Bolt`, `2 Snapcaster Mage (MM2) 42` all work;
-   `Sideboard` / `Commander` headers are honored.
-2. **Add cards** → search with [Scryfall syntax](https://scryfall.com/docs/syntax)
+Two lists. **Your decks**: every deck you saved — **Play** starts a game with it as Player 1,
+**Edit** opens it in Build, and the ⋯ menu has **Rename**, **Duplicate**, **Copy list**
+(decklist text to the clipboard), **Export file…** (a `.txt` with set codes and collector
+numbers so the exact printings round-trip) and **Delete**. **Built-in decks**: the example
+decks that ship with the app, with a short description each — **Play** them as they are, or
+**Open** one in the builder and Save to keep your own version (the originals never change).
+**Import…** a decklist by pasting Arena/MTGO text or opening a `.txt` file; it is resolved
+against Scryfall and saved (*Import & edit* opens it in the builder).
+
+## Build (deck builder)
+
+1. **Add cards** → search with [Scryfall syntax](https://scryfall.com/docs/syntax)
    (e.g. `t:goblin cmc<=2`) and click a result to add it.
+2. **Import** → paste an Arena/MTGO decklist (or *Load sample*) → *Import deck*, replacing the
+   cards in the current deck. Lines like `4 Lightning Bolt`, `4x Lightning Bolt`,
+   `2 Snapcaster Mage (MM2) 42` all work; `Sideboard` / `Commander` headers are honored.
+   An empty deck opens on this tab.
 3. Adjust quantities with `–` / `+`; `✕` removes. Hover a card and click 🖼 to pick a
    printing; ♥ favorites a printing (favorites first, drag to reorder; the first favorite is
    the default for future imports — handy for basic lands).
 4. **Stats** shows totals, mana curve, colors, types, and **rules-engine coverage** — which
    cards the engine fully supports.
 5. Name the deck and **Save** (or **Copy list** for the text). Saved decks reopen offline with
-   their exact printings; **Saved decks →** goes to the Decks tab.
-6. **Settings** (⚙) filters which printings the art picker shows.
+   their exact printings. **Play ▶** saves and starts a game with the deck; **All decks →**
+   goes to the Decks view.
 
 ## Play tab
 
@@ -160,9 +171,10 @@ Tests are plain Node scripts (`node src/shared/engine/<name>.test.mjs`, or `npm 
   `imageCache.js` (`card://<id>` protocol, lazily cached images), `deckStore.js`
   (saved decks as JSON), `settings.js`.
 - **`src/preload/index.js`** — the minimal typed `window.api` (contextIsolation on).
-- **`src/renderer/`** — React UI. `views/DeckBuilder.jsx`, `views/PlayArea.jsx`,
-  `components/play/*` (setup, board, networking UI), `store/engineGame.js` (game modes:
-  local / host / guest), `net/webrtcTransport.js`.
+- **`src/renderer/`** — React UI. `views/Home.jsx`, `views/DeckManager.jsx`,
+  `views/DeckBuilder.jsx`, `views/PlayArea.jsx`, `components/play/*` (setup, board,
+  networking UI), `store/nav.js` (which view is showing and what one view hands the next),
+  `store/engineGame.js` (game modes: local / host / guest), `net/webrtcTransport.js`.
 - **`src/renderer/src/web/`** — the web build's `window.api`: the same surface as the
   preload, backed by Scryfall over CORS and IndexedDB (`api.js`, `idb.js`). Installed by
   `main.jsx` when there is no preload; it also swaps `card://` image URLs for Scryfall ones
