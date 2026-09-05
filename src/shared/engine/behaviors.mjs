@@ -1099,7 +1099,25 @@ export const BEHAVIORS = {
   'Slagwoods Bridge': { mana: ['R', 'G'], entersTapped: true },
   'Silverbluff Bridge': { mana: ['U', 'R'], entersTapped: true },
   'Mistvault Bridge': { mana: ['U', 'B'], entersTapped: true },
-  'Twisted Landscape': { mana: ['C'], entersTapped: true },
+  // Enters untapped; it's the fetched basic that enters tapped. Cycling is derived
+  // from the oracle text.
+  'Twisted Landscape': {
+    mana: ['C'],
+    activated: [
+      {
+        label: 'Sacrifice: search for a basic Swamp, Mountain, or Forest',
+        cost: { tap: true, sacrifice: 'self' },
+        effect: [
+          {
+            op: 'search',
+            filter: { supertype: 'Basic', type: 'Land', subtypes: ['Swamp', 'Mountain', 'Forest'] },
+            to: 'battlefield',
+            tapped: true
+          }
+        ]
+      }
+    ]
+  },
   // Planeswalker: loyalty abilities are activated abilities with a loyalty cost.
   'Chandra Nalaar': {
     activated: [

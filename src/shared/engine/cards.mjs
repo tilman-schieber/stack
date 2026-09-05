@@ -1234,7 +1234,15 @@ export const SAMPLE_CARDS = {
   'Slagwoods Bridge': { name: 'Slagwoods Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Silverbluff Bridge': { name: 'Silverbluff Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
   'Mistvault Bridge': { name: 'Mistvault Bridge', mana_cost: '', type_line: 'Artifact Land', colors: [] },
-  'Twisted Landscape': { name: 'Twisted Landscape', mana_cost: '', type_line: 'Land', colors: [] },
+  'Twisted Landscape': {
+    name: 'Twisted Landscape',
+    mana_cost: '',
+    type_line: 'Land',
+    oracle_text:
+      '{T}: Add {C}.\n{T}, Sacrifice this land: Search your library for a basic Swamp, Mountain, or Forest card, put it onto the battlefield tapped, then shuffle.\nCycling {B}{R}{G} ({B}{R}{G}, Discard this card: Draw a card.)',
+    colors: [],
+    keywords: ['Cycling']
+  },
   // ---- CR gap-analysis test pool (added 2026-08-29; exact Scryfall data) ----
   "Gitaxian Probe": {"name":"Gitaxian Probe","mana_cost":"{U/P}","type_line":"Sorcery","oracle_text":"({U/P} can be paid with either {U} or 2 life.)\nLook at target player's hand.\nDraw a card.","colors":["U"],"keywords":[],"layout":"normal"},
   "Spectral Procession": {"name":"Spectral Procession","mana_cost":"{2/W}{2/W}{2/W}","type_line":"Sorcery","oracle_text":"Create three 1/1 white Spirit creature tokens with flying.","colors":["W"],"keywords":[],"layout":"normal"},

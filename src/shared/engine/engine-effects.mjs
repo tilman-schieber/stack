@@ -1032,6 +1032,7 @@ export const effectsMethods = {
     if (filter.type && !p.types.includes(filter.type)) return false
     if (filter.types && !filter.types.some((t) => p.types.includes(t))) return false
     if (filter.subtype && !p.subtypes.includes(filter.subtype)) return false
+    if (filter.subtypes && !filter.subtypes.some((t) => p.subtypes.includes(t))) return false
     if (filter.maxMV != null && p.manaValue > filter.maxMV) return false
     if (filter.nonland && p.types.includes('Land')) return false
     if (filter.noncreature && p.types.includes('Creature')) return false

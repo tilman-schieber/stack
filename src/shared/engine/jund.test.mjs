@@ -300,5 +300,28 @@ section('Bestow: when the enchanted creature leaves, the Hydra becomes a creatur
   assert(`${hydra.chars.power}/${hydra.chars.toughness}` === '2/3', 'a 2/3 (0/1 base + its two +1/+1 counters)')
 }
 
+section('Twisted Landscape: enters untapped; sacrifice to fetch a basic that enters tapped; cycling')
+{
+  const e = makeEngine('Forest', 20) // library: Forests (a basic Swamp/Mountain/Forest search can find them)
+  const land = put(e, 0, 'Twisted Landscape', 'hand')
+  advanceToPriorityAt(e, 'main1')
+  e.choose({ type: 'playLand', oid: land.oid })
+  assert(inZone(e, 0, 'battlefield', land.oid) && !land.status.tapped, 'Twisted Landscape enters the battlefield untapped')
+  assert(land.behavior.cycling?.cost === '{B}{R}{G}', 'it has Cycling {B}{R}{G} (derived from the oracle text)')
+  const libBefore = zone(e.state, 'library', 0).length
+  const bfBefore = zone(e.state, 'battlefield', 0).length
+  e.choose({ type: 'activate', oid: land.oid, ability: 0 })
+  resolveAll(e)
+  assert(e.pending.kind === 'search' && e.pending.player === 0, 'the sacrifice ability resolves into a library search')
+  assert(e.pending.cards.length === libBefore, 'every Forest in the library is a legal pick')
+  const pick = e.pending.cards[0]
+  e.choose({ pick })
+  const fetched = e.state.objects[pick]
+  assert(inZone(e, 0, 'battlefield', pick) && fetched.status.tapped, 'the fetched Forest is on the battlefield tapped')
+  assert(inZone(e, 0, 'graveyard', land.oid), 'Twisted Landscape was sacrificed')
+  assert(zone(e.state, 'battlefield', 0).length === bfBefore, 'one land left, one arrived')
+  assert(zone(e.state, 'library', 0).length === libBefore - 1, 'the library shrank by one')
+}
+
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
 process.exit(stats.failed ? 1 : 0)
