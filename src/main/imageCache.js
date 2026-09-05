@@ -8,7 +8,7 @@ import path from 'path'
 import * as db from './db.js'
 import { imageUrlFor } from '../shared/scryfall.mjs'
 
-const IMG_HEADERS = { 'User-Agent': 'MtgDeckBuilder/0.1' }
+const IMG_HEADERS = { 'User-Agent': 'Stack/0.2 (github.com/tilman-schieber/stack)' }
 
 let dir
 function cacheDir() {

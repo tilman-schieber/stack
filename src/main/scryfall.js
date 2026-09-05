@@ -3,7 +3,7 @@
 // shared client directly).
 import { createScryfallClient } from '../shared/scryfall.mjs'
 
-const client = createScryfallClient({ headers: { 'User-Agent': 'MtgDeckBuilder/0.1' } })
+const client = createScryfallClient({ headers: { 'User-Agent': 'Stack/0.2 (github.com/tilman-schieber/stack)' } })
 
 export const resolveByNames = client.resolveByNames
 export const resolveByIds = client.resolveByIds

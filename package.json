@@ -1,7 +1,7 @@
 {
   "name": "stack",
   "version": "0.2.0",
-  "description": "MTG deck builder and rules-enforced play (local hot-seat or serverless peer-to-peer), built on Scryfall data",
+  "description": "Stack — Magic: The Gathering deck builder and rules-enforced play (local hot-seat, vs. computer, or serverless peer-to-peer), built on Scryfall data",
   "main": "./out/main/index.js",
   "author": "",
   "license": "MIT",
@@ -33,8 +33,8 @@
     "vite": "^5.4.11"
   },
   "build": {
-    "appId": "com.stack.mtgdeckbuilder",
-    "productName": "MTG Deck Builder",
+    "appId": "de.tschieber.stack",
+    "productName": "Stack",
     "files": ["out/**/*", "resources/**/*"],
     "asarUnpack": ["**/node_modules/better-sqlite3/**"],
     "linux": { "target": ["AppImage"], "category": "Game" },
