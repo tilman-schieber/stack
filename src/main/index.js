@@ -6,36 +6,7 @@ import * as db from './db.js'
 import * as deckStore from './deckStore.js'
 import * as settings from './settings.js'
 import { registerScheme, registerHandler } from './imageCache.js'
-
-// Stable identity for a card across printings (matches db.js oracleKeyOf).
-function oracleKey(card) {
-  return card.oracle_id || card.card_faces?.[0]?.oracle_id || String(card.name || '').toLowerCase()
-}
-
-// Swap each resolved card for the user's chosen default printing, if any.
-async function applyDefaultPrintings(cards) {
-  const targets = new Map() // originalId -> defaultId
-  const needed = []
-  for (const c of cards) {
-    const defaultId = db.getDefaultPrintId(oracleKey(c)) // first favorite = import default
-    if (defaultId && defaultId !== c.id) {
-      targets.set(c.id, defaultId)
-      needed.push(defaultId)
-    }
-  }
-  const missing = db.missingIds(needed)
-  if (missing.length) {
-    const { found } = await scryfall.resolveByIds(missing)
-    db.putCards(found)
-  }
-  const out = []
-  for (const c of cards) {
-    const targetId = targets.get(c.id)
-    const replacement = targetId ? db.getCard(targetId) : null
-    out.push(replacement || c)
-  }
-  return out
-}
+import { applyDefaultPrintings } from '../shared/backend.mjs'
 
 // The custom scheme must be registered before the app is ready.
 registerScheme()
@@ -103,7 +74,7 @@ function registerIpc() {
   ipcMain.handle('deck:resolve', async (_e, names) => {
     const { found, notFound } = await scryfall.resolveByNames(names)
     db.putCards(found)
-    const cards = await applyDefaultPrintings(found)
+    const cards = await applyDefaultPrintings(found, { db, scryfall })
     return { cards, notFound }
   })
 

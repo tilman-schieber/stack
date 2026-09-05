@@ -2,16 +2,7 @@
 import { app } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
-
-const DEFAULTS = {
-  // Hide World Championship gold-bordered printings in the art picker.
-  ignoreGoldBordered: true,
-  // Hide printings that aren't legal in sanctioned paper play (un-sets,
-  // oversized, memorabilia, digital-only, etc.).
-  ignoreNonTournamentLegal: true,
-  // Additional set codes (lowercase) to hide.
-  ignoredSets: []
-}
+import { SETTINGS_DEFAULTS, mergeSettings } from '../shared/backend.mjs'
 
 let filePath
 let settings = null
@@ -25,9 +16,9 @@ async function ensureLoaded() {
   if (settings) return
   try {
     const raw = JSON.parse(await fs.readFile(file(), 'utf8'))
-    settings = { ...DEFAULTS, ...raw }
+    settings = { ...SETTINGS_DEFAULTS, ...raw }
   } catch {
-    settings = { ...DEFAULTS }
+    settings = { ...SETTINGS_DEFAULTS }
   }
 }
 
@@ -38,10 +29,7 @@ export async function get() {
 
 export async function set(patch) {
   await ensureLoaded()
-  settings = { ...settings, ...patch }
-  if (Array.isArray(patch.ignoredSets)) {
-    settings.ignoredSets = patch.ignoredSets.map((s) => String(s).toLowerCase().trim()).filter(Boolean)
-  }
+  settings = mergeSettings(settings, patch)
   const tmp = file() + '.tmp'
   await fs.writeFile(tmp, JSON.stringify(settings, null, 2))
   await fs.rename(tmp, file())

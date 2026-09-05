@@ -38,11 +38,23 @@ export function colorIdentity(card) {
   return Array.isArray(card.color_identity) ? card.color_identity : []
 }
 
+// Card images. In Electron, `card://<id>` (or `card://<id>/back`) is served by
+// the main process, which caches them on disk. The web build has no such
+// protocol and installs a resolver that maps ids to Scryfall image URLs
+// (src/web/api.js).
+let imageResolver = (id, back) => `card://${id}${back ? '/back' : ''}`
+export function setImageResolver(fn) {
+  imageResolver = fn
+}
+export function cardImageUrl(id, back = false) {
+  return id ? imageResolver(id, !!back) : null
+}
 export function imageSrc(card) {
-  return `card://${card.id}`
+  return cardImageUrl(card.id)
 }
 
-// Stable identity for a card across printings — must match the main process.
+// Stable identity for a card across printings — must match the backend
+// (src/shared/backend.mjs oracleKey).
 export function oracleKey(card) {
   return card.oracle_id || String(card.name || '').toLowerCase()
 }

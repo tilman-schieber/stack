@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
+import { cardImageUrl } from '../../../lib/cardUtils.js'
 
 // Modal / floating overlays of the rules-enforced board.
 
@@ -44,7 +45,7 @@ export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose 
                   }}
                   title={fb ? `${castLabel(fb)}: ${c.name}` : c.name}
                 >
-                  {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
+                  {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
                   {fb && <span className="eng-zoneviewer-fb">{castLabel(fb)}</span>}
                 </div>
               )
@@ -75,7 +76,7 @@ export function SearchOverlay({ pending, onPick, onNone }) {
         <div className="eng-scry-cards">
           {unique.map((c) => (
             <div className="eng-scry-card" key={c.oid} onClick={() => onPick(c.oid)} title={c.name}>
-              {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
+              {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
               <div className="eng-scry-dest">{c.name}</div>
             </div>
           ))}
@@ -112,7 +113,7 @@ export function HandRevealOverlay({ pending, targetName, onPick, onDecline, onOk
               onClick={() => choosing && pickable.has(c.oid) && onPick(c.oid)}
               title={c.name}
             >
-              {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
+              {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
               <div className="eng-scry-dest">{c.name}</div>
             </div>
           ))}
@@ -156,7 +157,7 @@ export function ScryOverlay({ pending, bottom, setBottom, onConfirm }) {
                 onClick={() => toggle(c.oid)}
                 title={c.name}
               >
-                {c.cardId ? <img src={`card://${c.cardId}`} alt={c.name} /> : <div className="cardback" />}
+                {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
                 <div className="eng-scry-dest">{toBottom ? dest : 'top'}</div>
               </div>
             )
@@ -205,7 +206,7 @@ export function ZoomOverlay({ card, onClose }) {
       )}
       <div className="eng-zoom-body" onClick={(e) => card.token && e.stopPropagation()}>
         {imgId ? (
-          <img src={`card://${imgId}${back ? '/back' : ''}`} alt={card.name} />
+          <img src={cardImageUrl(imgId, back)} alt={card.name} />
         ) : (
           <div className="eng-zoom-placeholder">
             {card.token ? (entry?.loading ? 'Finding card art…' : 'No art found') : ''}
@@ -262,7 +263,7 @@ export function StackOverlay({ stack, targeting, onItem, onZoom }) {
           title={item.name}
         >
           {item.cardId ? (
-            <img src={`card://${item.cardId}${item.face ? '/back' : ''}`} alt="" draggable={false} />
+            <img src={cardImageUrl(item.cardId, item.face)} alt="" draggable={false} />
           ) : (
             <div className="eng-stack-ability">✦</div>
           )}

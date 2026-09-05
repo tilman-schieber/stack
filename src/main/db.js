@@ -9,6 +9,7 @@ import { app } from 'electron'
 import path from 'path'
 import { existsSync, readFileSync } from 'fs'
 import Database from 'better-sqlite3'
+import { oracleKey as oracleKeyOf } from '../shared/backend.mjs'
 
 const SCHEMA_VERSION = 1
 
@@ -97,9 +98,6 @@ function getMeta(key) {
 }
 
 // ---------- helpers ----------
-function oracleKeyOf(card) {
-  return card.oracle_id || card.card_faces?.[0]?.oracle_id || String(card.name || '').toLowerCase()
-}
 function faceJoin(card, field) {
   if (card[field] != null) return card[field]
   const faces = card.card_faces

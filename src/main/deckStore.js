@@ -2,21 +2,12 @@
 import { app } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
+import { slugify, deckSummary } from '../shared/backend.mjs'
 
 let dir
 function decksDir() {
   if (!dir) dir = path.join(app.getPath('userData'), 'decks')
   return dir
-}
-
-function slugify(name) {
-  return (
-    String(name)
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'deck'
-  )
 }
 
 // deck: { name, entries: [{ scryfallId, name, qty, section }] }
@@ -44,13 +35,7 @@ export async function listDecks() {
       if (!f.endsWith('.json')) continue
       try {
         const raw = await fs.readFile(path.join(decksDir(), f), 'utf8')
-        const rec = JSON.parse(raw)
-        out.push({
-          slug: rec.slug,
-          name: rec.name,
-          updatedAt: rec.updatedAt,
-          count: (rec.entries || []).reduce((s, e) => s + (e.qty || 0), 0)
-        })
+        out.push(deckSummary(JSON.parse(raw)))
       } catch {
         // skip corrupt files
       }

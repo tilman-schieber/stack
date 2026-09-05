@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react'
 import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
+import { cardImageUrl } from '../../../lib/cardUtils.js'
 
 // Card-level building blocks of the rules-enforced board.
 
 // A card's image: the back face of a double-faced card when that face is up.
-export const cardImg = (c) => (c.cardId ? `card://${c.cardId}${c.face ? '/back' : ''}` : null)
+export const cardImg = (c) => cardImageUrl(c.cardId, c.face)
 export const isCreature = (c) => c.types?.includes('Creature')
 export const isLand = (c) => c.types?.includes('Land')
 
@@ -19,7 +20,7 @@ export function EngineCard({ card, className = '', onClick, onZoom, onHover, tit
     if (key) ensure(card.tokenDef)
   }, [key, ensure]) // eslint-disable-line react-hooks/exhaustive-deps
   const imgId = card.token ? artId : card.cardId
-  const img = imgId ? `card://${imgId}${!card.token && card.face ? '/back' : ''}` : null
+  const img = cardImageUrl(imgId, !card.token && card.face)
   const pt = card.power != null ? `${card.power}/${card.toughness}` : null
   return (
     <div
@@ -71,7 +72,7 @@ export function HelperCard({ def, label, sub, info, dungeon, onZoom, onHover }) 
   useEffect(() => {
     ensure(def)
   }, [key, ensure]) // eslint-disable-line react-hooks/exhaustive-deps
-  const img = artId ? `card://${artId}${def.face === 'back' ? '/back' : ''}` : null
+  const img = cardImageUrl(artId, def.face === 'back')
   const card = {
     oid: 'helper:' + key,
     name: label || def.name,

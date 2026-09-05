@@ -1,21 +1,41 @@
 # Stack — MTG deck builder + rules-enforced play
 
-A cross-platform (Linux/macOS/Windows) Electron desktop app for building Magic: The
-Gathering decks and playing them — locally on one screen, or against a friend over
-the internet with no server — with a deterministic rules engine enforcing the game.
-Card data and images come from [Scryfall](https://scryfall.com/docs/api) and are cached
-locally, so everything works offline after the first load.
+A cross-platform (Linux/macOS/Windows) Electron desktop app — also deployable as a static
+web site — for building Magic: The Gathering decks and playing them — locally on one
+screen, or against a friend over the internet with no server — with a deterministic rules
+engine enforcing the game. Card data and images come from
+[Scryfall](https://scryfall.com/docs/api) and are cached locally, so the desktop app works
+offline after the first load.
 
 ## Run
 
 ```bash
 npm install
-npm run dev        # launch with hot reload
+npm run dev        # launch the desktop app with hot reload
 npm test           # run every headless engine suite (src/shared/engine/*.test.mjs)
 npm run build      # production build into out/
 ```
 
 Package installers: `npm run pack:linux` (AppImage), `pack:mac` (dmg), `pack:win` (nsis).
+
+### Web
+
+The same UI runs in a browser with no server of its own:
+
+```bash
+npm run dev:web      # serve with hot reload
+npm run build:web    # static site into dist/web (relative paths: host it anywhere)
+npm run preview:web  # serve dist/web locally
+```
+
+`dist/web` is plain static files. The page talks to Scryfall directly (its API allows
+cross-origin requests) and keeps card data, favorite printings, saved decks and settings in
+the browser's IndexedDB; card images come from Scryfall and are cached by the browser. Deck
+import/export use the browser's file dialogs (the File System Access API where available, a
+download and a file input elsewhere). Online play works the same as in the desktop app — the
+page must be served over HTTPS (or from localhost) for WebRTC and the clipboard.
+`.github/workflows/web.yml` builds it and publishes it to GitHub Pages on every push to
+`main` (enable Pages with "Source: GitHub Actions" once in the repository settings).
 
 ## Decks tab (deck manager)
 
@@ -136,18 +156,26 @@ Tests are plain Node scripts (`node src/shared/engine/<name>.test.mjs`, or `npm 
 ## Architecture
 
 - **`src/main/`** — Electron main process; owns all network + disk access.
-  `scryfall.js` (rate-limited lookups), `db.js` (SQLite card cache + favorites),
+  `scryfall.js` (the shared client plus a User-Agent), `db.js` (SQLite card cache + favorites),
   `imageCache.js` (`card://<id>` protocol, lazily cached images), `deckStore.js`
   (saved decks as JSON), `settings.js`.
 - **`src/preload/index.js`** — the minimal typed `window.api` (contextIsolation on).
 - **`src/renderer/`** — React UI. `views/DeckBuilder.jsx`, `views/PlayArea.jsx`,
   `components/play/*` (setup, board, networking UI), `store/engineGame.js` (game modes:
   local / host / guest), `net/webrtcTransport.js`.
+- **`src/renderer/src/web/`** — the web build's `window.api`: the same surface as the
+  preload, backed by Scryfall over CORS and IndexedDB (`api.js`, `idb.js`). Installed by
+  `main.jsx` when there is no preload; it also swaps `card://` image URLs for Scryfall ones
+  (`lib/cardUtils.js` `cardImageUrl`).
+- **`src/shared/`** — code both backends use: `scryfall.mjs` (the rate-limited API client),
+  `backend.mjs` (default printings, deck slugs, settings defaults).
 - **`src/shared/engine/`** — the rules engine, shared by the renderer and the tests.
   `engine.mjs` holds the driver (turn structure, priority, validation); the subsystems live in
   `engine-{legal,actions,effects,mana,combat,triggers,designations}.mjs` and are mixed into the
   same class. `bot.mjs` is the computer opponent; `dungeons.mjs` the dungeon and helper-card data.
 
 The renderer never touches the network or filesystem directly — everything goes through
-`window.api` IPC. `MagicCompRules20260619.txt` is the comprehensive-rules reference the
+`window.api`, which is IPC in Electron and the web backend in a browser; the page's
+Content-Security-Policy enforces this (`vite.web.config.mjs` rewrites it for the web build to
+allow Scryfall). `MagicCompRules20260619.txt` is the comprehensive-rules reference the
 engine cites.

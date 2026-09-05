@@ -6,6 +6,7 @@ import { promises as fs } from 'fs'
 import { existsSync } from 'fs'
 import path from 'path'
 import * as db from './db.js'
+import { imageUrlFor } from '../shared/scryfall.mjs'
 
 const IMG_HEADERS = { 'User-Agent': 'MtgDeckBuilder/0.1' }
 
@@ -23,18 +24,6 @@ export function registerScheme() {
       privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
     }
   ])
-}
-
-// Pick the best normal-size image url from a card for a given face.
-// face 'back' -> the second card face (transform / MDFC); otherwise the front.
-function imageUrlFor(card, face) {
-  if (!card) return null
-  if (face === 'back') {
-    return card.card_faces?.[1]?.image_uris?.normal || null
-  }
-  if (card.image_uris?.normal) return card.image_uris.normal
-  const front = card.card_faces?.find((f) => f.image_uris?.normal)
-  return front?.image_uris?.normal || null
 }
 
 async function ensureImage(id, face) {

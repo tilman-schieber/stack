@@ -12,6 +12,9 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
+    "dev:web": "vite --config vite.web.config.mjs",
+    "build:web": "vite build --config vite.web.config.mjs",
+    "preview:web": "vite preview --config vite.web.config.mjs",
     "pack:linux": "electron-vite build && electron-builder --linux AppImage",
     "pack:mac": "electron-vite build && electron-builder --mac dmg",
     "pack:win": "electron-vite build && electron-builder --win nsis"
