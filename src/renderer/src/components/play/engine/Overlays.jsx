@@ -7,20 +7,19 @@ import { cardImageUrl, boardImageSize } from '../../../lib/cardUtils.js'
 // Graveyard / exile viewer. Cards with a castable option (flashback from the
 // graveyard, or a plotted card in exile) are highlighted and clickable.
 export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose }) {
-  const castLabel = (a) =>
-    a.type === 'castPlotted'
-      ? 'Plotted'
-      : a.type === 'castEscape'
-        ? 'Escape'
-        : a.type === 'playLand'
-        ? 'Play'
-        : a.type === 'cast'
-          ? 'Cast'
-          : a.type === 'unearth'
-            ? 'Unearth'
-            : a.type === 'castDisturb'
-              ? 'Disturb'
-              : 'Flashback'
+  const LABELS = {
+    castPlotted: 'Plotted',
+    castEscape: 'Escape',
+    playLand: 'Play',
+    cast: 'Cast',
+    unearth: 'Unearth',
+    castDisturb: 'Disturb',
+    embalm: 'Embalm',
+    // An ability the card has while it is in the graveyard, such as Cauldron
+    // Familiar's "Sacrifice a Food: return this card from your graveyard".
+    activate: 'Activate'
+  }
+  const castLabel = (a) => LABELS[a?.type] || 'Flashback'
   return (
     <div className="eng-zoneviewer" onClick={onClose}>
       <div className="eng-zoneviewer-panel" onClick={(e) => e.stopPropagation()}>
@@ -45,7 +44,7 @@ export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose 
                     e.preventDefault()
                     if (c.cardId) onZoom(c)
                   }}
-                  title={fb ? `${castLabel(fb)}: ${c.name}` : c.name}
+                  title={fb ? fb.label || `${castLabel(fb)}: ${c.name}` : c.name}
                 >
                   {c.cardId ? <img src={cardImageUrl(c.cardId, false, boardImageSize())} alt={c.name} /> : <div className="cardback" />}
                   {fb && <span className="eng-zoneviewer-fb">{castLabel(fb)}</span>}

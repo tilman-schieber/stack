@@ -124,11 +124,11 @@ export function HelperCard({ def, label, sub, info, dungeon, onZoom, onHover }) 
 // A zone as a physical pile: the top card (or a card back) with the edges of the
 // cards underneath showing behind it, so a full library looks thick and a nearly
 // empty one looks thin. Depth saturates around 40 cards.
-export function Pile({ label, count, topCard, faceDown, onOpen, zone, player }) {
+export function Pile({ label, count, topCard, faceDown, onOpen, zone, player, ready = 0 }) {
   const depth = count === 0 ? 0 : Math.min(1, 0.3 + count / 45)
   const openable = !!onOpen && count > 0
   return (
-    <div className="rail-pile">
+    <div className={'rail-pile' + (ready > 0 ? ' ready' : '')}>
       <div
         className={'rail-pile-card' + (count === 0 ? ' empty' : '') + (openable ? ' openable' : '')}
         // The motion layer flies cards to and from these: the top of a face-up
@@ -149,6 +149,13 @@ export function Pile({ label, count, topCard, faceDown, onOpen, zone, player }) 
           <img src={cardImg(topCard)} alt="" draggable={false} />
         )}
         {count > 0 && <span className="pile-count">{count}</span>}
+        {/* Something in here can be played or used right now — otherwise you
+            would have to open every pile to find out. */}
+        {ready > 0 && (
+          <span className="pile-ready" title={`${ready} card${ready === 1 ? '' : 's'} in here you can play or use now`}>
+            {ready}
+          </span>
+        )}
       </div>
       <div className="rail-pile-label">{label}</div>
     </div>

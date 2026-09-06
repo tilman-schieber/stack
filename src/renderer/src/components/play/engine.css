@@ -1404,3 +1404,29 @@
     transition: none;
   }
 }
+
+/* A pile holding something you can play or use right now. */
+.pile-ready {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 9px;
+  padding: 0 5px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+.rail-pile.ready .rail-pile-card {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.rail-pile.ready .rail-pile-label {
+  color: var(--accent);
+}

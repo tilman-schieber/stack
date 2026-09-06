@@ -6,6 +6,7 @@ import MotionLayer from './engine/Motion.jsx'
 import { useBoardMotion } from '../../lib/boardMotion.js'
 import { play as playSound, setSoundEnabled } from '../../lib/sound.js'
 import { loadScale, saveScale, scaleBy, cardWidth } from '../../lib/cardScale.js'
+import { zoneCardAction, readyCount } from '../../lib/zoneActions.js'
 import { useSettings } from '../../store/settings.js'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
 import { ZoneViewer, SearchOverlay, ScryOverlay, LookTopOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
@@ -645,6 +646,13 @@ export default function EnginePlayArea() {
   const bottom = view.players[mySeat]
   const top = view.players[mySeat === 0 ? 1 : 0]
 
+  // How many cards in one of a player's hidden-ish zones can be played or used
+  // right now. A card with an ability it only has in the graveyard — Cauldron
+  // Familiar's "Sacrifice a Food: return this from your graveyard" — is
+  // otherwise invisible until you think to open the pile and look.
+  const readyIn = (p, zoneName) =>
+    kind === 'priority' && p.id === pending.player ? readyCount(pending.actions, zoneName, p[zoneName]) : 0
+
   // A player's own end of the table: who they are, their life, their unspent
   // mana and their three piles, in a rail down the outer edge of their half.
   const seatRail = (p) => {
@@ -694,6 +702,7 @@ export default function EnginePlayArea() {
           topCard={p.graveyard[p.graveyard.length - 1]}
           zone="graveyard"
           player={p.id}
+          ready={readyIn(p, 'graveyard')}
           onOpen={() => setZoneView({ pid: p.id, zone: 'graveyard' })}
         />
         <Pile
@@ -702,6 +711,7 @@ export default function EnginePlayArea() {
           topCard={p.exile[p.exile.length - 1]}
           zone="exile"
           player={p.id}
+          ready={readyIn(p, 'exile')}
           onOpen={() => setZoneView({ pid: p.id, zone: 'exile' })}
         />
       </div>
@@ -1012,17 +1022,7 @@ export default function EnginePlayArea() {
           cards={view.players[zoneView.pid][zoneView.zone]}
           castableFor={(oid) =>
             kind === 'priority' && zoneView.pid === pending.player
-              ? pending.actions?.find(
-                  (a) =>
-                    (a.type === 'castFlashback' ||
-                      a.type === 'castEscape' ||
-                      a.type === 'castPlotted' ||
-                      a.type === 'castDisturb' ||
-                      a.type === 'unearth' ||
-                      (a.type === 'cast' && zoneView.zone === 'command') ||
-                      ((a.type === 'cast' || a.type === 'playLand') && a.fromExile)) &&
-                    a.oid === oid
-                )
+              ? zoneCardAction(pending.actions, zoneView.zone, oid)
               : null
           }
           onCast={(a) => {
