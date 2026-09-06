@@ -25,16 +25,46 @@ const SUPPORTED_KEYWORDS = new Set(
     'hexproof',
     'shroud',
     'daybound',
-    'nightbound'
+    'nightbound',
+    // evasion and combat keywords enforced in combat
+    'fear',
+    'intimidate',
+    'skulk',
+    'shadow',
+    'horsemanship',
+    'banding',
+    'phasing',
+    'infect',
+    'wither',
+    'exalted',
+    'undying',
+    'persist',
+    'changeling',
+    'split second',
+    'cascade',
+    'storm',
+    'extort'
   ]
 )
 
-// Keyword lines with a parameter the engine parses from oracle text (see
-// behaviors.mjs / cards.mjs): ward costs, protection from a color, morph costs.
+// Keyword lines with a parameter, and plain-text statics, that the engine parses
+// from oracle text (see loadBehavior in behaviors.mjs): ward, protection, morph,
+// cycling, echo, unearth, toxic, dredge, landwalk, "can't be countered",
+// "can't be blocked", "can't block", "attacks each combat if able".
+const COLOR = '(white|blue|black|red|green)'
 const SUPPORTED_PATTERNS = [
   /^ward\s*[—-]?\s*((\{[^}]+\})+|pay \d+ life)$/i,
-  /^protection from (white|blue|black|red|green)$/i,
-  /^morph\s*[—-]?\s*(\{[^}]+\})+$/i
+  new RegExp(`^protection from ${COLOR}( and from ${COLOR})*$`, 'i'),
+  /^protection from (creatures|artifacts|enchantments|instants|sorceries|everything|all colors|monocolored|multicolored)$/i,
+  /^morph\s*[—-]?\s*(\{[^}]+\})+$/i,
+  /^cycling\s*[—-]?\s*((\{[^}]+\})+|pay \d+ life)$/i,
+  /^(echo|unearth)\s*(\{[^}]+\})+$/i,
+  /^(toxic|dredge) \d+$/i,
+  /^(plains|island|swamp|mountain|forest|nonbasic land|desert)walk$/i,
+  /^(?:this creature|[a-z][^.]*?) can't be countered\.?$/i,
+  /^(?:this creature|[a-z][^.]*?) can't be blocked\.?$/i,
+  /^(?:this creature|[a-z][^.]*?) can't block(?: and can't be blocked)?\.?$/i,
+  /^(?:this creature|[a-z][^.]*?) attacks each combat if able\.?$/i
 ]
 const supportedToken = (t) => SUPPORTED_KEYWORDS.has(t) || SUPPORTED_PATTERNS.some((re) => re.test(t))
 
