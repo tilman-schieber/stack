@@ -72,6 +72,9 @@ export const SETTINGS_DEFAULTS = {
   ignoredSets: [],
   // Set once the default decks have been saved into the deck store.
   seededDecks: false,
+  // Set once every deck with an automatic cover has been re-picked under the
+  // rule that prefers a card the deck is named after.
+  coverRule2: false,
   // Table sounds during a game (a card landing, a permanent tapping, damage).
   // Synthesised, and off unless asked for.
   sounds: false

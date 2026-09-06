@@ -77,15 +77,70 @@ export function cardImageUrl(id, face = false) {
 // The cropped illustration of a card, for deck banners.
 export const cardArtUrl = (id) => cardImageUrl(id, 'art')
 
-// A deck's signature card — the one whose art represents it. The most expensive
-// nonland card, since that is what a deck is built around; ties go to the card
-// with more copies. Falls back to whatever the deck's first card is.
-export function signatureCard(cards) {
+// Words in a deck's name that describe the deck rather than name a card in it:
+// the format, the colours, the guild and wedge names, and the shape of the deck.
+// Everything else is a word a card might share.
+const DECK_NAME_NOISE = new Set([
+  'pauper', 'modern', 'legacy', 'standard', 'vintage', 'pioneer', 'commander', 'brawl', 'historic',
+  'alchemy', 'premodern', 'oathbreaker', 'cube', 'draft', 'deck', 'list', 'budget',
+  'mono', 'white', 'blue', 'black', 'red', 'green', 'colorless', 'colourless',
+  'azorius', 'dimir', 'rakdos', 'gruul', 'selesnya', 'orzhov', 'izzet', 'golgari', 'boros', 'simic',
+  'bant', 'esper', 'grixis', 'jund', 'naya', 'abzan', 'jeskai', 'sultai', 'mardu', 'temur',
+  'aggro', 'control', 'combo', 'midrange', 'tempo', 'ramp', 'tribal', 'the'
+])
+
+// A word reduced to the form a name shares: lowercase, and a trailing plural "s"
+// dropped so "Familiars" finds Sunscape Familiar and "Bogles" finds Slippery
+// Bogle. Irregular plurals ("Elves" against "Elf") are left to fall through.
+const stem = (w) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w)
+
+// Raw words, before stemming: the noise list has to be checked against these,
+// or Boros stems to "boro" and slips past it into Boros Garrison.
+function words(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ') // the "(Pauper)" a deck's name usually carries
+    .split(/[^a-z0-9']+/)
+    .filter((w) => w.length >= 3)
+}
+
+// The words in a deck's name that a card could be named after.
+export function deckNameWords(deckName) {
+  return [...new Set(words(deckName).filter((w) => !DECK_NAME_NOISE.has(w)).map(stem))]
+}
+
+// Whether a card's name shares a whole word with the deck's name.
+export function namesakeOf(card, deckWords) {
+  if (!deckWords?.length) return false
+  const set = new Set(deckWords)
+  return words(card?.name).map(stem).some((w) => set.has(w))
+}
+
+// A deck's signature card — the one whose art represents it.
+//
+// A deck named after one of its cards should wear that card: Jund Wildfire gets
+// Cleansing Wildfire, 4-Land Spy gets Balustrade Spy. Failing that, the most
+// expensive nonland card, since that is what a deck is built around, with
+// copies breaking the remaining ties.
+//
+// The two preferences are ranked rather than filtered, which matters for a deck
+// named after its lands: Naya Gates has no namesake spell but four namesake
+// gates, and a gate is a better cover for it than the biggest creature. A
+// namesake land still loses to a namesake spell, and with no namesake at all
+// this is exactly the old rule.
+export function signatureCard(cards, deckName = '') {
   const list = (cards || []).filter(Boolean)
   if (!list.length) return null
-  const spells = list.filter((e) => !isLand(e.card))
-  const pool = spells.length ? spells : list
-  return [...pool].sort((a, b) => manaValue(b.card) - manaValue(a.card) || (b.qty || 0) - (a.qty || 0))[0].card
+  const deckWords = deckNameWords(deckName)
+  const named = (e) => (namesakeOf(e.card, deckWords) ? 1 : 0)
+  const spell = (e) => (isLand(e.card) ? 0 : 1)
+  return [...list].sort(
+    (a, b) =>
+      named(b) - named(a) ||
+      spell(b) - spell(a) ||
+      manaValue(b.card) - manaValue(a.card) ||
+      (b.qty || 0) - (a.qty || 0)
+  )[0].card
 }
 
 // The colours a deck actually plays, in WUBRG order — the colours of the spells

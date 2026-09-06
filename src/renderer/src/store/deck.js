@@ -173,7 +173,7 @@ export const useDeck = create((set, get) => ({
     // A pinned cover wins; if that card has left the deck, fall back to picking
     // one rather than saving art the deck no longer contains.
     const pinned = coverKey ? main.find((e) => oracleKey(e.card) === coverKey) : null
-    const art = pinned ? pinned.card : signatureCard(main)
+    const art = pinned ? pinned.card : signatureCard(main, deckName)
     return {
       name: deckName,
       description,

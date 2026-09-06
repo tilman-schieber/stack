@@ -24,7 +24,7 @@ async function buildDefaultDeck(d) {
   add(d.cards, 'main')
   add(d.sideboard || [], 'sideboard')
   const mainCards = entries.filter((e) => e.section === 'main').map((e) => ({ card: lookup(e.name), qty: e.qty }))
-  const art = signatureCard(mainCards)
+  const art = signatureCard(mainCards, d.name)
   return { name: d.name, description: d.description || '', artId: art?.id || null, colors: deckColors(mainCards), entries }
 }
 
@@ -46,14 +46,21 @@ export const useDecks = create((set, get) => ({
     await get().refresh()
     const settings = await window.api.getSettings()
     if (!settings.seededDecks) await get().restoreDefaults()
-    await get().backfillIdentity()
+    // A deck whose cover was never chosen by hand should be wearing whatever the
+    // current rule picks. Re-picking every start would mean a Scryfall round
+    // trip per deck, so it happens once per rule change.
+    const recut = !settings.coverRule2
+    await get().backfillIdentity(recut)
+    if (recut) await window.api.setSettings({ ...settings, coverRule2: true })
   },
 
   // A deck records the card whose art represents it and the colours it plays.
   // Decks saved before that existed get it filled in once, from cards already
   // cached, so this needs no network and never touches a deck's contents.
-  backfillIdentity: async () => {
-    const stale = get().decks.filter((d) => !d.artId || !Array.isArray(d.colors) || !d.colors.length)
+  backfillIdentity: async (recut = false) => {
+    const stale = get().decks.filter(
+      (d) => recut || !d.artId || !Array.isArray(d.colors) || !d.colors.length
+    )
     if (!stale.length) return
     let changed = 0
     for (const summary of stale) {
@@ -65,7 +72,10 @@ export const useDecks = create((set, get) => ({
         const byId = new Map(cards.map((c) => [c.id, c]))
         const pairs = main.map((e) => ({ card: byId.get(e.scryfallId), qty: e.qty })).filter((p) => p.card)
         if (!pairs.length) continue
-        const art = signatureCard(pairs)
+        // A cover the user pinned is theirs; only automatic ones are re-picked.
+        if (recut && rec.coverKey) continue
+        const art = signatureCard(pairs, rec.name)
+        if (art?.id === rec.artId && rec.colors?.length) continue
         await window.api.saveDeck({ ...rec, artId: art?.id || null, colors: deckColors(pairs) })
         changed++
       } catch {
