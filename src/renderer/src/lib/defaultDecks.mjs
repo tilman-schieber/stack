@@ -335,6 +335,223 @@ export const DEFAULT_DECKS = [
       [3, 'Pyroblast'],
       [2, 'Temple Acolyte']
     ]
+  },
+  {
+    slug: 'pauper-elves',
+    name: 'Elves (Pauper)',
+    description:
+      'Paupergeddon Summer 2026 Top 16 (Andrea Mattei). Mana elves into a wide board: Priest of Titania and Timberwatch Elf scale with the tribe, Quirion Ranger untaps them again, and Lead the Stampede refills.',
+    cards: [
+      [4, 'Avenging Hunter'],
+      [4, 'Fyndhorn Elves'],
+      [4, 'Generous Ent'],
+      [4, 'Masked Vandal'],
+      [4, 'Nyxborn Hydra'],
+      [4, 'Priest of Titania'],
+      [4, 'Quirion Ranger'],
+      [2, 'Llanowar Elves'],
+      [2, 'Elvish Mystic'],
+      [4, 'Timberwatch Elf'],
+      [3, 'Sagu Wildling'],
+      [1, 'Land Grant'],
+      [4, 'Winding Way'],
+      [4, 'Lead the Stampede'],
+      [1, 'Gingerbread Cabin'],
+      [11, 'Forest']
+    ],
+    sideboard: [
+      [2, 'Lignify'],
+      [4, 'Faerie Macabre'],
+      [4, 'Monstrous Emergence'],
+      [3, 'Primordial Pachyderm'],
+      [2, 'Rooftop Percher']
+    ]
+  },
+  {
+    slug: 'pauper-gruul-monsters',
+    name: 'Gruul Monsters (Pauper)',
+    description:
+      'Paupergeddon Summer 2026 Top 64 (Francesco Zibella). Wild Growth and Utopia Sprawl on turn one power out fat green threats a turn early, with Molten Gatekeeper and Eldrazi Spawn for reach.',
+    cards: [
+      [2, 'Annoyed Altisaur'],
+      [4, 'Arbor Elf'],
+      [4, 'Avenging Hunter'],
+      [4, 'Boarding Party'],
+      [4, 'Eldrazi Repurposer'],
+      [4, 'Jewel Thief'],
+      [2, 'Molten Gatekeeper'],
+      [4, 'Writhing Chrysalis'],
+      [2, 'Sagu Wildling'],
+      [4, 'Utopia Sprawl'],
+      [4, 'Wild Growth'],
+      [4, 'Malevolent Rumble'],
+      [2, 'You Meet in a Tavern'],
+      [14, 'Forest'],
+      [2, 'Mountain']
+    ],
+    sideboard: [
+      [3, 'Breath Weapon'],
+      [4, 'Deglamer'],
+      [4, 'Weather the Storm'],
+      [2, 'Relic of Progenitus'],
+      [2, 'Faerie Macabre']
+    ]
+  },
+  {
+    slug: 'pauper-dimir-affinity',
+    name: 'Dimir Affinity (Pauper)',
+    description:
+      'Paupergeddon Summer 2026 Top 64 (Scott Emery). The affinity shell in blue-black: artifact lands power out Myr Enforcer and Utrom Monitor, Cryogen Relic and Blood Fountain turn the spare artifacts into cards.',
+    cards: [
+      [2, 'Gearseeker Serpent'],
+      [4, 'Myr Enforcer'],
+      [4, 'Refurbished Familiar'],
+      [4, 'Utrom Monitor'],
+      [4, 'Blood Fountain'],
+      [4, 'Cryogen Relic'],
+      [2, "Executioner's Capsule"],
+      [3, 'Nihil Spellbomb'],
+      [1, 'Agony Warp'],
+      [4, 'Cast Down'],
+      [1, "Eviscerator's Insight"],
+      [4, "Reckoner's Bargain"],
+      [4, 'Thoughtcast'],
+      [1, 'Bojuka Bog'],
+      [2, 'Island'],
+      [4, 'Mistvault Bridge'],
+      [4, 'Seat of the Synod'],
+      [2, "Serpent's Pass"],
+      [2, 'Swamp'],
+      [4, 'Vault of Whispers']
+    ],
+    sideboard: [
+      [2, 'Blue Elemental Blast'],
+      [2, 'Dispel'],
+      [3, 'Drown in Sorrow'],
+      [2, 'Extract a Confession'],
+      [2, 'Hydroblast'],
+      [1, 'Nihil Spellbomb'],
+      [2, 'Steel Sabotage'],
+      [1, 'Unexpected Fangs']
+    ]
+  },
+  {
+    slug: 'pauper-bogles',
+    name: 'Bogles (Pauper)',
+    description:
+      'Paupergeddon Summer 2026 Top 16 (Michele Signoracci). One hexproof creature, then pile Auras on it: Ethereal Armor and Ancestral Mask grow with every enchantment, Armadillo Cloak makes the race unloseable.',
+    cards: [
+      [4, 'Gladecover Scout'],
+      [2, 'Silhana Ledgewalker'],
+      [4, 'Slippery Bogle'],
+      [4, 'Abundant Growth'],
+      [4, 'Ancestral Mask'],
+      [4, 'Armadillo Cloak'],
+      [1, 'Cartouche of Solidarity'],
+      [4, 'Ethereal Armor'],
+      [1, 'Lifelink'],
+      [4, 'Rancor'],
+      [2, "Sentinel's Eyes"],
+      [1, 'Spirit Link'],
+      [2, 'Utopia Sprawl'],
+      [2, 'Commune with Spirits'],
+      [4, 'Malevolent Rumble'],
+      [9, 'Forest'],
+      [2, 'Khalni Garden'],
+      [4, 'Plains'],
+      [2, 'Shattered Landscape']
+    ],
+    sideboard: [
+      [1, 'Faerie Macabre'],
+      [2, 'Flaring Pain'],
+      [2, 'Fling'],
+      [1, 'Hyena Umbra'],
+      [1, 'Lifelink'],
+      [2, 'Mask of Law and Grace'],
+      [2, 'Standard Bearer'],
+      [2, "Tamiyo's Safekeeping"],
+      [2, 'Thraben Charm']
+    ]
+  },
+  {
+    slug: 'pauper-black-turbofog',
+    name: 'Black Turbofog (Pauper)',
+    description:
+      'Paupergeddon Summer 2026 Top 64 (Daniel Pellitteri). Mono-black attrition: Pestilence sweeps the board, Cauldron Familiar and Food drain and gain, and the removal suite answers whatever survives.',
+    cards: [
+      [3, 'Cauldron Familiar'],
+      [3, 'Troll of Khazad-dûm'],
+      [4, 'Nutrient Block'],
+      [4, 'Lembas'],
+      [2, 'Ichor Wellspring'],
+      [1, "Bonder's Ornament"],
+      [3, 'Campfire'],
+      [2, 'Nihil Spellbomb'],
+      [2, 'Tithing Blade'],
+      [3, 'Pestilence'],
+      [4, 'Cast Down'],
+      [1, 'Tragic Slip'],
+      [1, 'Snuff Out'],
+      [4, 'Fanatical Offering'],
+      [3, "Eviscerator's Insight"],
+      [1, 'Heritage Reclamation'],
+      [1, 'Grapple with Death'],
+      [9, 'Swamp'],
+      [2, 'Golgari Rot Farm'],
+      [2, 'Bojuka Bog'],
+      [1, 'Haunted Mire'],
+      [4, 'Khalni Garden']
+    ],
+    sideboard: [
+      [4, 'Weather the Storm'],
+      [1, 'Diabolic Edict'],
+      [1, 'Snuff Out'],
+      [1, 'Tragic Slip'],
+      [1, "Moment's Peace"],
+      [2, 'Drown in Sorrow'],
+      [1, 'Suffocating Fumes'],
+      [2, 'Faerie Macabre'],
+      [2, 'Troublemaker Ouphe']
+    ]
+  },
+  {
+    slug: 'pauper-azorius-familiars',
+    name: 'Azorius Familiars (Pauper)',
+    description:
+      'Paupergeddon Summer 2026 Top 32 (Tommaso Loss). Sunscape Familiar makes everything cheap, then Ghostly Flicker and Ephemerate blink Mulldrifter and Archaeomancer for value until the opponent runs out.',
+    cards: [
+      [3, 'Archaeomancer'],
+      [4, "God-Pharaoh's Faithful"],
+      [4, 'Mulldrifter'],
+      [1, 'Murmuring Mystic'],
+      [4, 'Sunscape Familiar'],
+      [3, 'Abandon Attachments'],
+      [2, 'Ephemerate'],
+      [1, 'Ghostly Flicker'],
+      [2, 'Negate'],
+      [2, 'Prismatic Strands'],
+      [2, 'Prohibit'],
+      [4, 'Snap'],
+      [1, 'Deep Analysis'],
+      [4, 'Preordain'],
+      [4, 'Lórien Revealed'],
+      [4, 'Azorius Chancery'],
+      [3, 'Contaminated Landscape'],
+      [1, 'Idyllic Beachfront'],
+      [8, 'Island'],
+      [1, 'Mortuary Mire'],
+      [2, 'Plains']
+    ],
+    sideboard: [
+      [1, 'Deep Analysis'],
+      [2, 'Dust to Dust'],
+      [2, 'Glorious Gale'],
+      [4, 'Hydroblast'],
+      [2, 'Last Breath'],
+      [1, 'Murmuring Mystic'],
+      [2, 'Stonehorn Dignitary'],
+      [1, 'Thraben Charm']
+    ]
   }
 ]
 

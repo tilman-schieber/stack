@@ -1642,6 +1642,19 @@ export const BEHAVIORS = {
   Annul: { spell: { targets: [{ type: 'spell', spellTypes: ['Artifact', 'Enchantment'] }], effect: [{ op: 'counter', to: 'target0' }] } },
   'Gut Shot': { spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', to: 'target0', amount: 1 }] } },
 
+  // "Exile two target artifacts, creatures, and/or lands you control, then return
+  // those cards to the battlefield under your control." — `blink` with `each: true`
+  // exiles and returns every chosen target, so their enters triggers fire again.
+  'Ghostly Flicker': {
+    spell: {
+      targets: [
+        { type: 'permanent', types: ['Artifact', 'Creature', 'Land'], controller: 'you' },
+        { type: 'permanent', types: ['Artifact', 'Creature', 'Land'], controller: 'you' }
+      ],
+      effect: [{ op: 'blink', each: true }]
+    }
+  },
+
   // ---- Dimir Terror / Naya Gates / Boros Synth (Top 64) ----
   'Gurmag Angler': {}, // Delve is a keyword the payment planner already handles
   'Abandon Attachments': { spell: { effect: [{ op: 'discard', amount: 1, optional: true, draw: 2 }] } },
@@ -1744,6 +1757,457 @@ export const BEHAVIORS = {
         effect: [{ op: 'draw', amount: 1 }]
       }
     ]
+  },
+  'Fyndhorn Elves': { activated: [{ manaAbility: true, cost: { tap: true }, effect: [{ op: 'addMana', mana: 'G' }] }] },
+  'Elvish Mystic': { activated: [{ manaAbility: true, cost: { tap: true }, effect: [{ op: 'addMana', mana: 'G' }] }] },
+  'Priest of Titania': { manaOptions: [{ colors: ['G'], amountCount: { subtype: 'Elf', controller: 'any' } }] },
+  'Quirion Ranger': {
+    activated: [
+      {
+        oncePerTurn: true,
+        cost: { bounceOwn: { subtype: 'Forest' } },
+        label: 'Return a Forest: untap target creature',
+        targets: [{ type: 'creature' }],
+        effect: [{ op: 'untap', to: 'target0' }]
+      }
+    ]
+  },
+  'Timberwatch Elf': {
+    activated: [
+      {
+        cost: { tap: true },
+        label: 'Target creature gets +X/+X, X = Elves on the battlefield',
+        targets: [{ type: 'creature' }],
+        effect: [
+          {
+            op: 'pump',
+            to: 'target0',
+            power: { count: { subtype: 'Elf', controller: 'any' } },
+            toughness: { count: { subtype: 'Elf', controller: 'any' } },
+            duration: 'eot'
+          }
+        ]
+      }
+    ]
+  },
+  'Masked Vandal': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        optional: true,
+        targets: [{ type: 'permanent', types: ['Artifact', 'Enchantment'], controller: 'opponent' }],
+        effect: [{ op: 'exile', to: 'target0', if: { graveyard: { min: 1 } } }, { op: 'graveyardChoose', to: 'controller' }]
+      }
+    ]
+  },
+  'Land Grant': {
+    spell: {
+      alternativeCost: { if: { noLandsInHand: true }, label: 'reveal your hand' },
+      effect: [{ op: 'search', filter: { subtype: 'Forest' }, to: 'hand', reveal: true, optional: false }]
+    }
+  },
+  Lignify: {
+    enchant: { type: 'creature' },
+    static: [
+      {
+        affects: { scope: 'attached' },
+        setSubtypes: ['Treefolk'],
+        setPT: { power: 0, toughness: 4 },
+        removeAbilities: true
+      }
+    ]
+  },
+  'Monstrous Emergence': {
+    spell: {
+      additionalCost: { revealOrChooseCreature: true },
+      targets: [{ type: 'creature' }],
+      effect: [{ op: 'dealDamage', to: 'target0', amount: 'revealedPower' }]
+    }
+  },
+  'Primordial Pachyderm': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'gainLife', amount: 2 }] }] },
+  'Rooftop Percher': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        targets: [{ type: 'graveyardCard', optional: true }, { type: 'graveyardCard', optional: true }],
+        effect: [{ op: 'exile', to: 'target0' }, { op: 'exile', to: 'target1' }, { op: 'gainLife', amount: 3 }]
+      }
+    ]
+  },
+  'Eldrazi Repurposer': {
+    triggered: [
+      {
+        trigger: { event: 'castSpell', self: true },
+        effect: [
+          {
+            op: 'createToken',
+            token: {
+              name: 'Eldrazi Spawn',
+              types: ['Creature'],
+              subtypes: ['Eldrazi', 'Spawn'],
+              colors: [],
+              power: 0,
+              toughness: 1
+            }
+          }
+        ]
+      },
+      {
+        trigger: { event: 'dies', self: true },
+        effect: [
+          {
+            op: 'createToken',
+            token: {
+              name: 'Eldrazi Spawn',
+              types: ['Creature'],
+              subtypes: ['Eldrazi', 'Spawn'],
+              colors: [],
+              power: 0,
+              toughness: 1
+            }
+          }
+        ]
+      }
+    ]
+  },
+  'Jewel Thief': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        effect: [{ op: 'createToken', token: { name: 'Treasure', types: ['Artifact'], subtypes: ['Treasure'], colors: [] } }]
+      }
+    ]
+  },
+  'Molten Gatekeeper': {
+    triggered: [
+      {
+        trigger: { event: 'etb', filter: { type: 'Creature', another: true, controller: 'you' } },
+        effect: [{ op: 'dealDamageEachOpponent', amount: 1 }]
+      }
+    ]
+  },
+  'You Meet in a Tavern': {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        {
+          label: 'Form a Party — look at the top five cards; reveal any number of creature cards and put them into your hand',
+          effect: [{ op: 'lookAtTop', amount: 5, pick: { max: 5, filter: { type: 'Creature' } }, rest: 'bottom' }]
+        },
+        {
+          label: 'Start a Brawl — creatures you control get +2/+2 until end of turn',
+          effect: [{ op: 'pumpEach', filter: { type: 'Creature', controller: 'you' }, power: 2, toughness: 2 }]
+        }
+      ]
+    }
+  },
+  Deglamer: {
+    spell: {
+      targets: [{ type: 'permanent', types: ['Artifact', 'Enchantment'] }],
+      effect: [{ op: 'shuffleIntoLibrary', to: 'target0' }]
+    }
+  },
+  'Gearseeker Serpent': {
+    activated: [
+      {
+        cost: { mana: '{5}{U}' },
+        label: 'This creature can\'t be blocked this turn',
+        effect: [{ op: 'grantKeyword', to: 'self', keyword: 'Unblockable', duration: 'eot' }]
+      }
+    ]
+  },
+  'Executioner\'s Capsule': {
+    activated: [
+      {
+        cost: { mana: '{1}{B}', tap: true, sacrifice: 'self' },
+        label: 'Destroy target nonblack creature',
+        targets: [{ type: 'creature', excludeColor: 'B' }],
+        effect: [{ op: 'destroy', to: 'target0' }]
+      }
+    ]
+  },
+  'Agony Warp': {
+    spell: {
+      targets: [{ type: 'creature' }, { type: 'creature' }],
+      effect: [
+        { op: 'pump', to: 'target0', power: -3, toughness: 0 },
+        { op: 'pump', to: 'target1', power: 0, toughness: -3 }
+      ]
+    }
+  },
+  'Drown in Sorrow': {
+    spell: {
+      effect: [{ op: 'pumpEach', filter: { type: 'Creature' }, power: -2, toughness: -2 }, { op: 'scry', amount: 1 }]
+    }
+  },
+  'Abundant Growth': {
+    enchant: { type: 'land' },
+    attachedManaAny: true,
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'draw', amount: 1 }] }]
+  },
+  'Ancestral Mask': {
+    enchant: { type: 'creature' },
+    static: [
+      {
+        affects: { scope: 'attached' },
+        modifyPT: {
+          power: { count: { type: 'Enchantment', controller: 'any', another: true }, times: 2 },
+          toughness: { count: { type: 'Enchantment', controller: 'any', another: true }, times: 2 }
+        }
+      }
+    ]
+  },
+  'Armadillo Cloak': {
+    enchant: { type: 'creature' },
+    static: [
+      {
+        affects: { scope: 'attached' },
+        modifyPT: { power: 2, toughness: 2 },
+        grantKeywords: ['Trample', 'Lifelink']
+      }
+    ]
+  },
+  'Cartouche of Solidarity': {
+    enchant: { type: 'creature', controller: 'you' },
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        effect: [
+          {
+            op: 'createToken',
+            count: 1,
+            token: {
+              name: 'Warrior',
+              types: ['Creature'],
+              subtypes: ['Warrior'],
+              colors: ['W'],
+              power: 1,
+              toughness: 1,
+              keywords: ['Vigilance']
+            }
+          }
+        ]
+      }
+    ],
+    static: [{ affects: { scope: 'attached' }, modifyPT: { power: 1, toughness: 1 }, grantKeywords: ['First strike'] }]
+  },
+  'Commune with Spirits': {
+    spell: {
+      effect: [
+        {
+          op: 'lookAtTop',
+          amount: 4,
+          reveal: true,
+          pick: { max: 1, filter: { types: ['Enchantment', 'Land'] } },
+          rest: 'bottom'
+        }
+      ]
+    }
+  },
+  'Ethereal Armor': {
+    enchant: { type: 'creature' },
+    static: [
+      {
+        affects: { scope: 'attached' },
+        modifyPT: { power: { count: { type: 'Enchantment' } }, toughness: { count: { type: 'Enchantment' } } },
+        grantKeywords: ['First strike']
+      }
+    ]
+  },
+  Fling: {
+    spell: {
+      additionalCost: { sacrifice: { types: ['Creature'] } },
+      targets: [{ type: 'any' }],
+      effect: [{ op: 'dealDamage', to: 'target0', amount: 'sacrificedPower' }]
+    }
+  },
+  'Hyena Umbra': {
+    enchant: { type: 'creature' },
+    umbraArmor: true,
+    static: [{ affects: { scope: 'attached' }, modifyPT: { power: 1, toughness: 1 }, grantKeywords: ['First strike'] }]
+  },
+  Lifelink: { enchant: { type: 'creature' }, static: [{ affects: { scope: 'attached' }, grantKeywords: ['Lifelink'] }] },
+  'Mask of Law and Grace': { enchant: { type: 'creature' }, static: [{ affects: { scope: 'attached' }, grantProtections: ['B', 'R'] }] },
+  'Sentinel\'s Eyes': {
+    enchant: { type: 'creature' },
+    static: [{ affects: { scope: 'attached' }, modifyPT: { power: 1, toughness: 1 }, grantKeywords: ['Vigilance'] }]
+  },
+  'Silhana Ledgewalker': {},
+  'Spirit Link': { enchant: { type: 'creature' }, static: [{ affects: { scope: 'attached' }, grantKeywords: ['Lifelink'] }] },
+  Archaeomancer: {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        targets: [{ type: 'graveyardCard', types: ['Instant', 'Sorcery'], controller: 'you' }],
+        effect: [{ op: 'returnGraveyardTarget', to: 'target0' }]
+      }
+    ]
+  },
+  Ephemerate: { spell: { targets: [{ type: 'creature', controller: 'you' }], effect: [{ op: 'blink', to: 'target0' }] } },
+  'Glorious Gale': {
+    spell: { targets: [{ type: 'spell', spellType: 'Creature' }], effect: [{ op: 'counter', to: 'target0' }] }
+  },
+  'Last Breath': {
+    spell: {
+      targets: [{ type: 'creature', maxPower: 2 }],
+      effect: [{ op: 'exile', to: 'target0' }, { op: 'gainLife', amount: 4, to: 'target0' }]
+    }
+  },
+  'Stonehorn Dignitary': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        targets: [{ type: 'player', controller: 'opponent' }],
+        effect: [{ op: 'skipNextCombat', to: 'target0' }]
+      }
+    ]
+  },
+  'Mortuary Mire': {
+    entersTapped: true,
+    mana: ['B'],
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        optional: true,
+        targets: [{ type: 'graveyardCard', types: ['Creature'], controller: 'you' }],
+        effect: [{ op: 'graveyardToTop' }]
+      }
+    ]
+  },
+  'God-Pharaoh\'s Faithful': {
+    triggered: [
+      {
+        trigger: { event: 'castSpell', filter: { controller: 'you', colorsAny: ['U', 'B', 'R'] } },
+        effect: [{ op: 'gainLife', amount: 1 }]
+      }
+    ]
+  },
+  'Cauldron Familiar': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        effect: [{ op: 'eachOpponentLosesLife', amount: 1 }, { op: 'gainLife', amount: 1 }]
+      }
+    ],
+    activated: [
+      {
+        fromGraveyard: true,
+        cost: { sacrificeOther: { subtype: 'Food' } },
+        label: 'Sacrifice a Food: return this card from your graveyard to the battlefield',
+        effect: [{ op: 'returnSelfToBattlefield' }]
+      }
+    ]
+  },
+  'Nutrient Block': {
+    activated: [
+      {
+        cost: { mana: '{2}', tap: true, sacrifice: 'self' },
+        label: 'Sacrifice: you gain 3 life',
+        effect: [{ op: 'gainLife', amount: 3 }]
+      }
+    ],
+    triggered: [{ trigger: { event: 'toGraveyard', self: true }, effect: [{ op: 'draw', amount: 1 }] }]
+  },
+  'Bonder\'s Ornament': {
+    manaOptions: [{ colors: ['W', 'U', 'B', 'R', 'G'], amount: 1 }],
+    activated: [{ cost: { mana: '{4}', tap: true }, label: '{4}, {T}: draw a card', effect: [{ op: 'draw', amount: 1 }] }]
+  },
+  Campfire: {
+    activated: [
+      {
+        cost: { mana: '{1}', tap: true },
+        label: '{1}, {T}: you gain 2 life',
+        effect: [{ op: 'gainLife', amount: 2 }]
+      }
+    ]
+  },
+  Pestilence: {
+    triggered: [
+      {
+        trigger: { event: 'endStep', if: { controls: { type: 'Creature', controller: 'any', max: 0 } } },
+        effect: [{ op: 'sacrificeSelf' }]
+      }
+    ],
+    activated: [
+      {
+        cost: { mana: '{B}' },
+        label: '{B}: 1 damage to each creature and each player',
+        effect: [{ op: 'dealDamageEach', filter: 'creature', players: 'all', amount: 1 }]
+      }
+    ]
+  },
+  'Tragic Slip': {
+    spell: {
+      targets: [{ type: 'creature' }],
+      effect: [
+        {
+          op: 'pump',
+          to: 'target0',
+          power: { if: { morbid: true }, then: -13, else: -1 },
+          toughness: { if: { morbid: true }, then: -13, else: -1 },
+          duration: 'eot'
+        }
+      ]
+    }
+  },
+  'Heritage Reclamation': {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        {
+          label: 'Destroy target artifact',
+          targets: [{ type: 'artifact' }],
+          effect: [{ op: 'destroy', to: 'target0' }]
+        },
+        {
+          label: 'Destroy target enchantment',
+          targets: [{ type: 'enchantment' }],
+          effect: [{ op: 'destroy', to: 'target0' }]
+        },
+        {
+          label: 'Exile up to one target card from a graveyard. Draw a card',
+          targets: [{ type: 'graveyardCard', optional: true }],
+          effect: [{ op: 'exile', to: 'target0' }, { op: 'draw', amount: 1 }]
+        }
+      ]
+    }
+  },
+  'Grapple with Death': {
+    spell: {
+      targets: [{ type: 'permanent', types: ['Artifact', 'Creature'] }],
+      effect: [{ op: 'destroy', to: 'target0' }, { op: 'gainLife', amount: 1 }]
+    }
+  },
+  'Diabolic Edict': {
+    spell: {
+      targets: [{ type: 'player' }],
+      effect: [{ op: 'targetPlayerSacrifices', to: 'target0', filter: { types: ['Creature'] } }]
+    }
+  },
+  'Moment\'s Peace': { spell: { effect: [{ op: 'preventAllCombat', duration: 'eot' }] }, flashback: { cost: '{2}{G}' } },
+  'Tithing Blade': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        effect: [{ op: 'eachOpponentSacrifices', filter: { types: ['Creature'] } }]
+      }
+    ],
+    activated: [
+      {
+        sorcerySpeed: true,
+        cost: { mana: '{4}{B}', exileSelf: true, exileCreature: true },
+        label: 'Craft with creature {4}{B}',
+        effect: [{ op: 'returnSelfTransformed' }]
+      }
+    ]
+  },
+  'Consuming Sepulcher': {
+    triggered: [
+      {
+        trigger: { event: 'upkeep', yourTurn: true },
+        effect: [{ op: 'eachOpponentLosesLife', amount: 1 }, { op: 'gainLife', amount: 1 }]
+      }
+    ]
   }
 }
 
@@ -1805,6 +2269,10 @@ export function loadBehavior(printed) {
     : null
   const cycling = authored.cycling || (cycMana ? { cost: cycMana[1] } : cycLife ? { life: Number(cycLife[1]) } : typeCyc ? { cost: typeCyc[2], search: typeCycFilter } : null)
   // "Can't be blocked except by two or more creatures" (Troll of Khazad-dûm: three).
+  // "Can't be blocked except by creatures with flying" (Silhana Ledgewalker).
+  const onlyByMatch = /can't be blocked except by creatures with (flying|reach|first strike|defender)/i.exec(text)
+  const KW = { flying: 'Flying', reach: 'Reach', 'first strike': 'First strike', defender: 'Defender' }
+  const blockableOnlyBy = authored.blockableOnlyBy || (onlyByMatch ? { keyword: KW[onlyByMatch[1].toLowerCase()] } : null)
   const minBlkMatch = /can't be blocked except by (two|three|four|five) or more creatures/i.exec(text)
   const minBlockers = authored.minBlockers ?? (minBlkMatch ? { two: 2, three: 3, four: 4, five: 5 }[minBlkMatch[1].toLowerCase()] : null)
   const evokeMatch = /^Evoke ((?:\{[^}]+\})+)/m.exec(text)
@@ -1864,6 +2332,9 @@ export function loadBehavior(printed) {
     mutate,
     manaOptions: authored.manaOptions || null, // [{ colors, amount, only, pips, if }] — multi-mana / restricted / fixed-pip / conditional mana (106.6)
     attachedManaBonus: authored.attachedManaBonus || null, // Aura: { color | 'chosen' } — the enchanted permanent taps for one extra (Wild Growth)
+    attachedManaAny: authored.attachedManaAny || false, // Aura: the enchanted land taps for any colour (Abundant Growth)
+    umbraArmor: authored.umbraArmor || false, // Aura destroyed instead of the enchanted creature (Hyena Umbra)
+    blockableOnlyBy, // { keyword } — "can't be blocked except by creatures with flying"
     costReduction: authored.costReduction || null, // { per: countFilter } — "costs {1} less for each …" (Tolarian Terror)
     minBlockers,
     embalm, // { cost } — exile from the graveyard for a token copy (702.87)

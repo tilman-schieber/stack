@@ -168,6 +168,19 @@ export const actionsMethods = {
               this._sacrifice(so)
             }
           }
+          // "Choose a creature you control or reveal a creature card from your hand":
+          // neither leaves its zone; the biggest power is what the spell uses.
+          if (addl?.revealOrChooseCreature) {
+            const onBoard = objectsIn(s, 'battlefield').filter((x) => x.controller === pid && x.chars.types.includes('Creature'))
+            const inHand = zone(s, 'hand', pid)
+              .map((h) => s.objects[h])
+              .filter((x) => x.oid !== o.oid && x.printed.types.includes('Creature'))
+            const best = [...onBoard, ...inHand].sort((a, b) => (b.chars?.power ?? b.printed.power ?? 0) - (a.chars?.power ?? a.printed.power ?? 0))[0]
+            if (best) {
+              o._revealedPower = best.chars?.power ?? best.printed.power ?? 0
+              this._log(`${this._nameOf(pid)} ${onBoard.includes(best) ? 'chooses' : 'reveals'} ${this._objName(best)} (power ${o._revealedPower})`)
+            }
+          }
           // Collect evidence N (702.167): exile graveyard cards totalling N+ mana value.
           if (action.evidence && addl?.evidence) {
             const picked = this._evidenceCards(pid, addl.evidence)
@@ -485,6 +498,20 @@ export const actionsMethods = {
   },
 
   // Can `pid` currently pay ability `ab`'s activation cost with source `o`?
+  // Can `pid` pay an ability's costs? Used for abilities whose source is not on
+  // the battlefield (hand / graveyard), where the battlefield checks don't apply.
+  _canPayAbilityCost(pid, o, ab) {
+    const s = this.state
+    const cost = ab.cost || {}
+    if (cost.mana && !this._canPay(pid, parseManaCost(cost.mana))) return false
+    if (cost.payLife != null && s.players[pid].life <= cost.payLife) return false
+    if (cost.discard && zone(s, 'hand', pid).filter((h) => h !== o.oid).length < cost.discard) return false
+    if (cost.sacrificeOther && !objectsIn(s, 'battlefield').some((x) => x.controller === pid && x.oid !== o.oid && this._sacMatches(x, cost.sacrificeOther))) return false
+    if (cost.bounceOwn && !objectsIn(s, 'battlefield').some((x) => x.controller === pid && x.oid !== o.oid && this._sacMatches(x, cost.bounceOwn))) return false
+    if (cost.tapOther && !objectsIn(s, 'battlefield').some((x) => x.controller === pid && x.oid !== o.oid && !x.status.tapped && this._sacMatches(x, cost.tapOther))) return false
+    return true
+  },
+
   _canActivate(pid, o, ab) {
     const s = this.state
     if (ab.fromGraveyard || ab.fromHand) return true // legality checked where they're offered

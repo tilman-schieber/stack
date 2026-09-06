@@ -193,6 +193,9 @@ export const combatMethods = {
     // The Ring (701.54c): your Ring-bearer can't be blocked by creatures with greater power.
     if (attacker.ringBearer && (blocker.chars.power ?? 0) > (attacker.chars.power ?? 0)) return false
     if (kw(attacker, 'Unblockable')) return false // granted "can't be blocked this turn"
+    // "Can't be blocked except by creatures with flying" (Silhana Ledgewalker).
+    const onlyBy = this._ability(attacker, 'blockableOnlyBy')
+    if (onlyBy?.keyword && !kw(blocker, onlyBy.keyword)) return false
     if (kw(attacker, 'Flying') && !kw(blocker, 'Flying') && !kw(blocker, 'Reach')) return false
     const bColors = blocker.chars.colors || []
     const bArtifact = blocker.chars.types.includes('Artifact')

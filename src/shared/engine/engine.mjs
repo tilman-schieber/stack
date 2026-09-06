@@ -721,8 +721,16 @@ export class GameEngine {
     if (ref.kind === 'object') {
       if (spec.type === 'player' || spec.type === 'spell') return false
       const o = s.objects[ref.oid]
-      // "Target card in a graveyard" (Faerie Macabre).
-      if (spec.type === 'graveyardCard') return !!o && o.zoneName === 'graveyard'
+      // "Target card in a graveyard" (Faerie Macabre) — filtered by the spec's
+      // card criteria (types, owner) like any other target.
+      if (spec.type === 'graveyardCard') {
+        if (!o || o.zoneName !== 'graveyard') return false
+        if (spec.types && !spec.types.some((t) => o.printed.types.includes(t))) return false
+        if (spec.cardType && !o.printed.types.includes(spec.cardType)) return false
+        if (spec.controller === 'you' && o.owner !== ctx.byPid) return false
+        if (spec.controller === 'opponent' && o.owner === ctx.byPid) return false
+        return true
+      }
       if (!o || o.zoneName !== 'battlefield') return false
       if (spec.type === 'any' && !o.chars.types.includes('Creature') && !o.chars.types.includes('Planeswalker'))
         return false
@@ -1405,7 +1413,18 @@ export class GameEngine {
     if (spec.type === 'player' || spec.type === 'any') return true
     if (spec.type === 'spell') return zone(s, 'stack').some((oid) => this._spellSpecOk(spec, s.objects[oid]))
     if (spec.optional) return true // "up to one" — the spell is castable without it
-    if (spec.type === 'graveyardCard') return s.players.some((p) => zone(s, 'graveyard', p.id).length > 0)
+    if (spec.type === 'graveyardCard')
+      return s.players.some(
+        (p) =>
+          (spec.controller !== 'you' || p.id === ctx?.byPid) &&
+          (spec.controller !== 'opponent' || p.id !== ctx?.byPid) &&
+          zone(s, 'graveyard', p.id).some((oid) => {
+            const o = s.objects[oid]
+            if (spec.types && !spec.types.some((t) => o.printed.types.includes(t))) return false
+            if (spec.cardType && !o.printed.types.includes(spec.cardType)) return false
+            return true
+          })
+      )
     if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact' || spec.type === 'enchantment' || spec.type === 'permanent') {
       // A variadic slot ("N target creatures", "up to N…") needs at least `min`
       // legal targets to be cast (601.2c); a normal slot needs one.

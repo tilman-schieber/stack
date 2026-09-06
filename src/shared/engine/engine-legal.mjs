@@ -49,6 +49,7 @@ export const legalMethods = {
       // Abilities that work from hand ("Discard this card: …" — Faerie Macabre).
       ;(o.behavior?.activated || []).forEach((ab, i) => {
         if (!ab.fromHand) return
+        if (!this._canPayAbilityCost(pid, o, ab)) return
         const targets = ab.targets || []
         const actx = { byPid: pid, sourceColors: tags(p) }
         if (targets.some((t) => !this._legalTargetsExist(t, actx))) return
@@ -250,8 +251,11 @@ export const legalMethods = {
       ;(o.behavior?.activated || []).forEach((ab, i) => {
         if (!ab.fromGraveyard) return
         if (ab.sorcerySpeed && !sorcerySpeed) return
-        if (ab.cost?.mana && !this._canPay(pid, parseManaCost(ab.cost.mana))) return
-        actions.push({ type: 'activate', oid, ability: i, targets: [], needsTargets: 0, label: ab.label || this._describeAbility(ab), fromGraveyard: true })
+        if (!this._canPayAbilityCost(pid, o, ab)) return
+        const targets = ab.targets || []
+        const gctx = { byPid: pid, sourceColors: tags(o.printed) }
+        if (targets.some((t) => !this._legalTargetsExist(t, gctx))) return
+        actions.push({ type: 'activate', oid, ability: i, targets, needsTargets: targets.filter((t) => !t.optional).length, label: ab.label || this._describeAbility(ab), fromGraveyard: true })
       })
     }
     // Escape (702.138): cast from your graveyard, exiling N other cards from it.
@@ -390,8 +394,14 @@ export const legalMethods = {
     // A discard additional cost (Grab the Prize) needs that many *other* cards
     // in hand to pay — you can't discard the spell you're casting.
     const addlDiscOk = !addl?.discard || zone(s, 'hand', pid).filter((h) => h !== oid).length >= addl.discard
+    // "Choose a creature you control or reveal a creature card from your hand"
+    // (Monstrous Emergence): either source will do.
+    const addlRevealOk =
+      !addl?.revealOrChooseCreature ||
+      objectsIn(s, 'battlefield').some((x) => x.controller === pid && x.chars.types.includes('Creature')) ||
+      zone(s, 'hand', pid).some((h) => h !== oid && s.objects[h].printed.types.includes('Creature'))
     if (!targetsOk) return why('no legal target')
-    if (!(addlSacOk && addlDiscOk)) return why("can't pay the additional cost")
+    if (!(addlSacOk && addlDiscOk && addlRevealOk)) return why("can't pay the additional cost")
     const xCost = p.manaCost.X || 0
     // A variadic spell ("N damage divided among one or two targets", "up to
     // N target…") has a single slot carrying min/max (and maybe divide).
@@ -586,7 +596,7 @@ export const legalMethods = {
   _spellTargets(o, behavior = o.behavior) {
     if (behavior.spell?.targets) return behavior.spell.targets
     // An Aura targets the permanent it will be attached to as it is cast.
-    if (behavior.enchant) return [{ type: behavior.enchant.type }]
+    if (behavior.enchant) return [{ ...behavior.enchant }] // keeps `controller` / `subtype` restrictions
     return []
   },
 

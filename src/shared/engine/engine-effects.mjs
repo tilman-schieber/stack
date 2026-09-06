@@ -537,7 +537,8 @@ export const effectsMethods = {
           this.draw(source.controller, e.amount || 1)
           break
         case 'gainLife':
-          this._gainLife(source.controller, this._amount(source, e.amount))
+          // `to` names who gains ("its controller gains 4 life"); default is you.
+          this._gainLife(e.to ? this._resolvePlayerRef(source, e.to) : source.controller, this._amount(source, e.amount))
           break
         case 'preventNextDamage': {
           // Create a floating shield: "prevent the next N damage that would be dealt
@@ -554,6 +555,8 @@ export const effectsMethods = {
           // Damage to each permanent matching a filter (e.g. every creature) — and,
           // with `players: 'opponents'`, to each opponent too (End the Festivities).
           if (e.players === 'opponents') for (const pid of this._opponentsOf(source.controller)) this._dealDamage(source, { player: pid }, this._amount(source, e.amount))
+          // "…to each creature and each player" (Pestilence): one event, everyone.
+          if (e.players === 'all') for (const p of s.players) if (!p.hasLost) this._dealDamage(source, { player: p.id }, this._amount(source, e.amount))
           for (const oid of [...zone(s, 'battlefield')]) {
             const t = s.objects[oid]
             if (!t) continue
@@ -1083,8 +1086,16 @@ export const effectsMethods = {
           break
         }
         case 'shuffleIntoLibrary': {
-          const o = e.of === 'self' ? s.objects[source.sourceOid] : null
+          // `of: 'self'` — the source shuffles itself away; otherwise a target
+          // permanent's owner shuffles it into their library (Deglamer).
+          let o = null
+          if (e.of === 'self') o = s.objects[source.sourceOid]
+          else {
+            const t = this._resolveTargetRef(source, e.to || 'target0')
+            if (t?.kind === 'object') o = t.obj
+          }
           if (o) {
+            this._log(`${this._objName(o)} is shuffled into its owner's library`)
             moveObject(s, o.oid, 'library')
             const lk = zoneKey('library', o.owner)
             s.zones[lk] = s.rng.shuffle(s.zones[lk])
@@ -1120,6 +1131,29 @@ export const effectsMethods = {
             moveObject(s, o.oid, 'battlefield')
             this._enterBattlefield(o, owner)
             this._log(`${this._objName(o)} is exiled and returns`)
+          }
+          break
+        }
+        case 'returnSelfToBattlefield': {
+          // "Return this card from your graveyard to the battlefield" (Cauldron
+          // Familiar) — untapped, unlike returnSelfTapped.
+          const o = s.objects[source.sourceOid]
+          if (o && o.zoneName === 'graveyard') {
+            moveObject(s, o.oid, 'battlefield')
+            this._enterBattlefield(o, o.owner)
+            this._log(`${this._objName(o)} returns to the battlefield`)
+          }
+          break
+        }
+        case 'returnGraveyardTarget': {
+          // "Return target instant or sorcery card from your graveyard to your
+          // hand" (Archaeomancer): a real target, chosen when the ability goes on
+          // the stack, so it can fizzle if the card leaves in response.
+          const t = source.targets?.[Number((e.to || 'target0').slice(6))]
+          const o = t?.oid ? s.objects[t.oid] : null
+          if (o && o.zoneName === 'graveyard') {
+            this._log(`${this._objName(o)} returns to its owner's hand`)
+            this._relocate(o, 'hand')
           }
           break
         }

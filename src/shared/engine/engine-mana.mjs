@@ -368,6 +368,7 @@ export const manaMethods = {
     if (v === 'X') return source?.xValue || 0
     if (v === 'sacrificedMV') return source?._sacrificedMV || 0
     if (v === 'sacrificedPower') return source?._sacrificedPower || 0
+    if (v === 'revealedPower') return source?._revealedPower || 0
     if (v && typeof v === 'object' && v.x) return (source?.xValue || 0) * v.x // "three times X" (Martyr of Sands)
     if (v && typeof v === 'object' && v.if) {
       // "N, or M instead if [condition]" (Searing Blaze's landfall).
@@ -439,7 +440,7 @@ export const manaMethods = {
       const f = cond.controls
       const n = objectsIn(s, 'battlefield').filter(
         (o) =>
-          o.controller === pid &&
+          (f.controller === 'any' || o.controller === pid) &&
           (!f.another || o.oid !== w?.oid) &&
           (!f.type || o.chars.types.includes(f.type)) &&
           (!f.subtype || hasSub(o.chars, f.subtype))

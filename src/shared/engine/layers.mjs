@@ -170,7 +170,7 @@ export function recompute(state) {
       if (ab.setSubtypes) layer3.push(e)
       if (ab.addTypes || ab.addSubtypes || ab.addSupertypes) layer4.push(e)
       if (ab.setColors) layer5.push(e)
-      if (ab.grantKeywords || ab.removeAbilities) layer6.push(e)
+      if (ab.grantKeywords || ab.grantProtections || ab.removeAbilities) layer6.push(e)
       if (ab.setPT) layer7b.push(e)
       if (ab.modifyPT || ab.modifyPTPerCounter) layer7d.push(e)
     }
@@ -180,7 +180,7 @@ export function recompute(state) {
     if (f.setSubtypes) layer3.push(e)
     if (f.addTypes || f.addSubtypes || f.addSupertypes) layer4.push(e)
     if (f.setColors) layer5.push(e)
-    if (f.grantKeywords || f.removeAbilities) layer6.push(e)
+    if (f.grantKeywords || f.grantProtections || f.removeAbilities) layer6.push(e)
     if (f.setPT) layer7b.push(e)
     if (f.modifyPT) layer7d.push(e)
   }
@@ -222,6 +222,8 @@ export function recompute(state) {
         o.chars.lostAbilities = true
       }
       for (const kw of d.grantKeywords || []) if (!o.chars.keywords.includes(kw)) o.chars.keywords.push(kw)
+      // "Enchanted creature has protection from black and from red" (Mask of Law and Grace).
+      for (const p of d.grantProtections || []) if (!o.chars.protections.includes(p)) o.chars.protections.push(p)
     }
   })
   // Keyword counters (122.1f): a "lifelink counter" grants lifelink (Unexpected Fangs).

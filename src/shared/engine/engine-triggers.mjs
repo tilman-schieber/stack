@@ -617,6 +617,7 @@ export const triggersMethods = {
     if (filter.subtype && !hasSub(subject.chars, filter.subtype)) return false
     if (filter.controller === 'you' && subject.controller !== watcher.controller) return false
     if (filter.controller === 'opponent' && subject.controller === watcher.controller) return false
+    if (filter.colorsAny && !filter.colorsAny.some((c) => (subject.chars?.colors || subject.printed?.colors || []).includes(c))) return false
     if (filter.ringBearer && !subject.ringBearer) return false // "your Ring-bearer"
     if (filter.alone && (this.state.combat?.attackers?.length || 0) !== 1) return false // "attacks alone"
     return true
