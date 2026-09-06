@@ -58,6 +58,40 @@ const isRemoval = (effects) => ops(effects).some((op) => op === 'destroy' || op 
 const isCounter = (effects) => ops(effects).includes('counter')
 const isFog = (effects) => ops(effects).includes('preventAllCombat')
 const spellEffects = (o) => o?.behavior?.spell?.effect || []
+
+// What an Aura does to the thing it is attached to.
+//
+// An Aura carries no `spell.effect` — what it does lives in statics scoped to
+// what it enchants — so asking the ordinary question returned nothing and fell
+// through to the default of "harm". That is how a computer playing Bogles came
+// to hang every one of its pump Auras on its opponent's creature.
+//
+// Returns 'help', 'harm', or null when this is not an Aura to judge.
+function auraIntent(o) {
+  if (!o?.behavior?.enchant) return null
+  const attached = (o.behavior.static || []).filter((st) => st.affects?.scope === 'attached')
+  const triggers = o.behavior.triggered || []
+  let score = 0
+  for (const st of attached) {
+    for (const v of [st.modifyPT?.power, st.modifyPT?.toughness]) {
+      // A number is a flat change; anything else counts something, and an Aura
+      // that counts is one of the ones that make a creature enormous.
+      if (typeof v === 'number') score += v
+      else if (v) score += 2
+    }
+    if (st.grantKeywords?.length) score += st.grantKeywords.length
+    if (st.loseAbilities || st.cantAttack || st.cantBlock || st.cantActivate) score -= 4
+    if (st.setPT) score -= 2 // "becomes a 0/1" and the like
+  }
+  // An Aura with no statics at all but an enter trigger (Cartouche of
+  // Solidarity makes a token) is doing something for its caster.
+  if (!attached.length && triggers.length) return 'help'
+  if (!attached.length) return null
+  return score >= 0 ? 'help' : 'harm'
+}
+
+// What a spell means to do to its target, Auras included.
+const castIntent = (o) => auraIntent(o) ?? intent(spellEffects(o))
 const spellTargets = (o) => o?.behavior?.spell?.targets || []
 
 export function botChoose(engine, pid) {
@@ -220,7 +254,7 @@ export function botChoose(engine, pid) {
     case 'chooseTargets': {
       const src = s.objects[p.sourceOid]
       const eff = p._trigger?.effect || src?.spell?.effect || []
-      const how = p._retarget ? 'harm' : intent(eff)
+      const how = p._retarget ? 'harm' : (auraIntent(src) ?? intent(eff))
       const t = pickTargets(p.targets, how, colorsOf(src), damageOf(eff))
       if (!t) return p.optional ? { decline: true } : { targets: fallbackTargets(p.targets, colorsOf(src)) }
       return { targets: t }
@@ -272,7 +306,7 @@ export function botChoose(engine, pid) {
       if (!p.canPay) return { cast: false }
       const o = s.objects[p.oid]
       if (p.targets?.length) {
-        const t = pickTargets(p.targets, intent(spellEffects(o)), colorsOf(o), damageOf(spellEffects(o)))
+        const t = pickTargets(p.targets, castIntent(o), colorsOf(o), damageOf(spellEffects(o)))
         return t ? { cast: true, targets: t } : { cast: false }
       }
       return { cast: true }
@@ -314,7 +348,7 @@ export function botChoose(engine, pid) {
     case 'chooseFromHand': {
       const cards = p.cards.map((oid) => s.objects[oid])
       if (p.then === 'castFree') {
-        const best = cards.filter((o) => !spellTargets(o).length || pickTargets(spellTargets(o), intent(spellEffects(o)), colorsOf(o), damageOf(spellEffects(o)))).sort((a, b) => mv(b) - mv(a))[0]
+        const best = cards.filter((o) => !spellTargets(o).length || pickTargets(spellTargets(o), castIntent(o), colorsOf(o), damageOf(spellEffects(o)))).sort((a, b) => mv(b) - mv(a))[0]
         return best ? { oid: best.oid } : { decline: true }
       }
       const best = cards.sort((a, b) => mv(b) - mv(a))[0]
@@ -579,9 +613,12 @@ export function botChoose(engine, pid) {
       }
       if (isCounter(eff) || pumpOf(eff) || isFog(eff)) continue // instants for later
       if (a.needsTargets > 0) {
-        const targets = pickTargets(a.targets, intent(eff), colorsOf(o), damageOf(eff))
+        const how = castIntent(o)
+        const targets = pickTargets(a.targets, how, colorsOf(o), damageOf(eff))
         if (!targets) continue
-        if (intent(eff) === 'harm' && targets.some((t) => t.kind === 'object' && s.objects[t.oid]?.controller === pid)) continue
+        if (how === 'harm' && targets.some((t) => t.kind === 'object' && s.objects[t.oid]?.controller === pid)) continue
+        // And the mirror: never hand a boost to the other side.
+        if (how === 'help' && targets.some((t) => t.kind === 'object' && s.objects[t.oid]?.controller !== pid)) continue
         consider(a, 2 + mv(o), targets)
       } else consider(a, 2 + mv(o) + (ops(eff).includes('createToken') ? 3 : 0) + (ops(eff).includes('draw') ? 2 : 0), [])
     }
