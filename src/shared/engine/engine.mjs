@@ -46,6 +46,16 @@ export class GameEngine {
     const chooser = Number.isInteger(this._playDrawChooser) ? this._playDrawChooser : null
     const explicit = chooser == null && Number.isInteger(this._startingPlayer)
     s.startingPlayer = chooser ?? (explicit ? this._startingPlayer : s.rng.int(n))
+    // Say who won. The winner is only *asked* whether to play or draw, and a
+    // computer or online opponent answers that instantly — so without this the
+    // roll is invisible whenever you lose it, and looks like you always win.
+    if (!explicit) {
+      this._log(
+        chooser != null
+          ? `${s.players[s.startingPlayer].name} lost the last game and chooses who plays first`
+          : `${s.players[s.startingPlayer].name} wins the die roll`
+      )
+    }
     for (const p of s.players) this.draw(p.id, handSize)
     s.step = 'mulligan'
     if (explicit) return this._beginMulligans()
