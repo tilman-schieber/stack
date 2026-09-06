@@ -314,10 +314,18 @@
   z-index: 3;
   /* Clip at the bottom edge only: the lower part of each card stays out of sight
      (and off the prompt bar) while a hovered card may rise above the row. */
-  clip-path: inset(-1000px 0 0 0);
+  /* Only the bottom is clipped — that is the edge the cards are tucked behind.
+     Clipping the sides too cut a card off as it grew whenever it sat near
+     either end of the fan. */
+  clip-path: inset(-1000px -1000px 0 -1000px);
 }
 .eng-hand.hidden {
   display: none;
+}
+/* A card you are looking at belongs in front of the whole table — the stack
+   sits at z 900, and a hand row left at 3 slid underneath it. */
+.eng-hand:has(.eng-hand-slot:hover) {
+  z-index: 1000;
 }
 .eng-hand-slot {
   flex: 0 1 calc(var(--card-w) * 1.22);
@@ -368,7 +376,7 @@
 .eng-seat.top .eng-hand {
   padding: 0 130px 6px 12px;
   align-items: flex-end;
-  clip-path: inset(0 0 -400px 0);
+  clip-path: inset(0 -1000px -1000px -1000px);
 }
 .eng-seat.top .eng-hand .eng-hand-card {
   top: auto;
