@@ -219,6 +219,12 @@ export function projectGame(engine, viewerPid = null) {
     pending,
     priorityPlayer: pending?.kind === 'priority' ? pending.player : null,
     stack: zone(state, 'stack').map((oid) => stackView(state, oid)),
+    // Flagbearers in play (Standard Bearer). While one of these is an
+    // opponent's, that opponent must target it when they choose targets, so the
+    // board needs to be able to point at it rather than refusing a click.
+    flagbearers: zone(state, 'battlefield')
+      .filter((oid) => state.objects[oid]?.chars?.subtypes?.includes('Flagbearer') || state.objects[oid]?.chars?.keywords?.includes('Changeling'))
+      .map((oid) => ({ oid, controller: state.objects[oid].controller })),
     players,
     // The public game log (never contains hidden information), most recent last.
     log: state.log.slice(-200)

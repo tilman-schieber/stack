@@ -39,7 +39,7 @@ export const actionsMethods = {
         const ch = land.behavior?.chooseOnEnter
         if (ch && ch.kind !== 'cardName' && land.chosen == null) {
           this._castPaused = true
-          s.pending = { kind: 'chooseValue', player: pid, oid: land.oid, options: this._chooseOptions(ch), label: ch.label || `${this._objName(land)} — choose a ${ch.kind === 'color' ? 'color' : 'value'}` }
+          s.pending = { kind: 'chooseValue', player: pid, oid: land.oid, options: this._chooseOptions(ch), label: ch.label || this._chooseValueLabel(land, ch) }
           break
         }
         moveObject(s, action.oid, 'battlefield')
@@ -773,7 +773,7 @@ export const actionsMethods = {
           player: o.controller ?? o.owner,
           kindOfChoice: ch.kind,
           options: this._chooseOptions(ch),
-          label: ch.label || 'Choose a creature type'
+          label: ch.label || this._chooseValueLabel(o, ch)
         }
         return
       }
@@ -859,6 +859,15 @@ export const actionsMethods = {
   },
 
   // The options for an "as this enters, choose…" decision. For a creature type,
+  // What an "as this enters, choose a…" prompt should say. The default used to
+  // be "Choose a creature type" whatever the choice actually was, so Utopia
+  // Sprawl — which chooses a colour — asked for a creature type while offering
+  // the five colours.
+  _chooseValueLabel(o, ch) {
+    const what = ch.kind === 'color' ? 'color' : ch.kind === 'creatureType' ? 'creature type' : 'value'
+    return `${this._objName(o)} — choose a ${what}`
+  },
+
   // a common list plus every subtype already present in the game.
   _chooseOptions(ch) {
     if (ch.options) return [...ch.options]

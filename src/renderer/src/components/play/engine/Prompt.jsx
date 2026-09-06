@@ -173,6 +173,11 @@ export default function Prompt({ view, pending, myTurn, match, openSideboard, ta
             ? `${targeting.chosen.length}/${v.max} chosen (pick ${v.min}–${v.max})`
             : `${targeting.chosen.length + 1}/${targeting.targets.length} (${slot.type})`}
         </span>
+        {targeting.forced && (
+          <span className="eng-forced" title="Standard Bearer: while an opponent has a Flagbearer in play, you must choose at least one of them if you can">
+            must target {targeting.forced}
+          </span>
+        )}
         {targeting.confirm && (
           <button className="primary" onClick={targeting.confirm}>
             Confirm
