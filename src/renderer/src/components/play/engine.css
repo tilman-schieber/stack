@@ -330,11 +330,28 @@
   width: 118px;
   height: 165px;
   cursor: default;
-  transition: transform 0.12s ease-out;
+  /* Grows from its bottom edge, so a card you look at rises into the empty
+     table rather than down through the control bar. */
+  transform-origin: 50% 100%;
+  transition: transform 0.19s cubic-bezier(0.2, 0.75, 0.3, 1), box-shadow 0.19s ease-out;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
 }
+/* Looking at a card in hand: it clears the fan and doubles, which is big enough
+   to read without opening the zoom. The lift keeps its lower edge inside the
+   hand row, so it reads as one card pulled up out of the others. */
 .eng-hand-slot:hover .eng-hand-card {
-  transform: translateY(-88px);
+  transform: translateY(-88px) scale(2);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.72);
+  z-index: 6;
+}
+/* The card also matches .board-card:hover, whose small lift would fight this. */
+.play-area.engine .eng-hand .eng-hand-card:hover {
+  translate: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .play-area.engine .eng-hand .eng-hand-card {
+    transition: none;
+  }
 }
 /* The top seat (hot-seat play) mirrors this: card bottoms show, hover drops down. */
 .eng-seat.top .eng-hand {
@@ -345,9 +362,10 @@
 .eng-seat.top .eng-hand .eng-hand-card {
   top: auto;
   bottom: 0;
+  transform-origin: 50% 0;
 }
 .eng-seat.top .eng-hand-slot:hover .eng-hand-card {
-  transform: translateY(88px);
+  transform: translateY(88px) scale(2);
 }
 .eng-hand-card.playable {
   cursor: pointer;
