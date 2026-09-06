@@ -1,6 +1,6 @@
 // Headless verification of which card's art a deck wears.
 // Run: node src/renderer/src/lib/deckIdentity.test.mjs
-import { signatureCard, deckNameWords, namesakeOf } from './cardUtils.js'
+import { signatureCard, deckNameWords, namesakeOf, deckSize } from './cardUtils.js'
 import { makeAsserter } from '../../../shared/engine/_testutil.mjs'
 
 const { assert, stats } = makeAsserter()
@@ -80,6 +80,19 @@ section('Nothing to pick from')
   assert(deckNameWords('').length === 0, 'an empty name has no words')
   assert(deckNameWords('(Pauper)').length === 0, 'nor a name that is only a format')
   assert(!namesakeOf({ name: 'Anything' }, []), 'and with no words nothing is a namesake')
+}
+
+section('How big a deck is said to be')
+{
+  // A decklist is 60 + 15, never 75: the two numbers mean different things and
+  // adding them together answers a question nobody asked.
+  assert(deckSize({ mainCount: 60, sideCount: 15, count: 75 }) === '60 + 15', 'a tournament deck')
+  assert(deckSize({ mainCount: 60, sideCount: 0, count: 60 }) === '60 cards', 'no sideboard, no plus')
+  assert(deckSize({ mainCount: 99, sideCount: 0, count: 99 }) === '99 cards', 'a commander deck')
+  assert(deckSize({ mainCount: 0, sideCount: 0, count: 0 }) === '0 cards', 'an empty deck')
+  // Only a record saved before the split existed falls back to the total.
+  assert(deckSize({ count: 75 }) === '75 cards', 'an old record with only a total')
+  assert(deckSize(null) === '', 'and no deck at all says nothing')
 }
 
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)

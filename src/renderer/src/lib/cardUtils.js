@@ -171,6 +171,14 @@ export function signatureCard(cards, deckName = '') {
   )[0].card
 }
 
+// How big a deck is, the way a decklist is read: "60 + 15", never 75. Falls
+// back to a plain total only for a record saved before the split was stored.
+export function deckSize(deck) {
+  if (!deck) return ''
+  if (deck.mainCount == null) return `${deck.count} cards`
+  return deck.sideCount ? `${deck.mainCount} + ${deck.sideCount}` : `${deck.mainCount} cards`
+}
+
 // The colours a deck actually plays, in WUBRG order — the colours of the spells
 // you cast, not colour identity, which also counts mana symbols in rules text and
 // would paint a two-colour deck five colours because of its lands.

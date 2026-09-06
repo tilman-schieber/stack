@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useDecks } from '../../store/decks.js'
 import { resolveSavedDeck } from '../../lib/resolveDeck.js'
+import { deckSize } from '../../lib/cardUtils.js'
 
 // A <select> over the saved decks, with a rules-engine coverage note for the
 // chosen one. `value` is a deck slug; `onChange(slug)`.
@@ -28,7 +29,7 @@ export default function DeckPicker({ label, value, onChange, disabled }) {
         {decks.length === 0 && <option value="">No decks yet</option>}
         {decks.map((d) => (
           <option key={d.slug} value={d.slug}>
-            {d.name} ({d.count})
+            {d.name} ({deckSize(d)})
           </option>
         ))}
       </select>

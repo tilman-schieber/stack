@@ -1,5 +1,5 @@
 import React from 'react'
-import { cardArtUrl } from '../lib/cardUtils.js'
+import { cardArtUrl, deckSize } from '../lib/cardUtils.js'
 
 // A deck's colour identity as pips, in WUBRG order. Colourless decks show one
 // grey pip so the row never looks unfinished.
@@ -17,12 +17,6 @@ export function ColorPips({ colors }) {
 }
 
 const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' }
-
-// "60 + 15" is how a decklist is read; fall back to a plain total for older decks.
-export function deckSize(deck) {
-  if (deck.mainCount == null) return `${deck.count} cards`
-  return deck.sideCount ? `${deck.mainCount} + ${deck.sideCount}` : `${deck.mainCount} cards`
-}
 
 // A deck as a plate: its signature card's illustration behind the name, its
 // colours, its size, and the actions you take on it. `actions` is rendered over
