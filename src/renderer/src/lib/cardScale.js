@@ -26,6 +26,19 @@ export const scaleBy = (current, direction) => clampScale(direction > 0 ? curren
 
 export const cardWidth = (scale) => Math.round(BASE_CARD_WIDTH * clampScale(scale))
 
+// How much a hand card grows when you look at it.
+//
+// Not a constant multiple: the point of the gesture is to see the card, and at
+// a fixed 2x a card on an already-large board would fill the screen while one
+// on a small board would still be unreadable. This aims at a roughly constant
+// result — about 235px wide, which is where the rules text becomes legible —
+// so looking at a card shows you the same thing whatever size the board is at.
+const HAND_CARD_RATIO = 1.18 // a hand card against a board card
+export const handHoverScale = (scale) => {
+  const w = BASE_CARD_WIDTH * clampScale(scale) * HAND_CARD_RATIO
+  return Math.round(Math.min(2.6, Math.max(1.1, 278 / w)) * 100) / 100
+}
+
 export function loadScale() {
   let s = 1
   try {

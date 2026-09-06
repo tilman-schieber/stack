@@ -5,7 +5,7 @@ import Prompt from './engine/Prompt.jsx'
 import MotionLayer from './engine/Motion.jsx'
 import { useBoardMotion } from '../../lib/boardMotion.js'
 import { play as playSound, setSoundEnabled } from '../../lib/sound.js'
-import { loadScale, saveScale, scaleBy, cardWidth } from '../../lib/cardScale.js'
+import { loadScale, saveScale, scaleBy, cardWidth, handHoverScale } from '../../lib/cardScale.js'
 import { zoneCardAction, readyCount } from '../../lib/zoneActions.js'
 import { useSettings } from '../../store/settings.js'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
@@ -273,8 +273,27 @@ export default function EnginePlayArea() {
   const matchesPermanent = (c, controllerPid) =>
     wantsPermanent && controllerOk(controllerPid) && !untargetable(c, controllerPid)
   // Any battlefield card that fits the current target slot.
-  const matchesTarget = (c, controllerPid) =>
+  const fitsSlot = (c, controllerPid) =>
     matchesCreature(c, controllerPid) || matchesLand(c, controllerPid) || matchesArtifact(c, controllerPid) || matchesPermanent(c, controllerPid)
+
+  // Standard Bearer: while an opponent has a Flagbearer in play, you must
+  // target it if you can. The engine enforces that either way; without this the
+  // board lights up every creature and then refuses the click, which reads as a
+  // requirement to target something that is not there.
+  const forcedTargets = (() => {
+    if (!targeting || !(wantsCreature || wantsPermanent)) return null
+    const mine = pending.player
+    const bearers = (view.flagbearers || []).filter((b) => b.controller !== mine)
+    if (!bearers.length) return null
+    const usable = bearers.filter((b) => {
+      const card = cardByOid(b.oid)
+      return card && fitsSlot(card, b.controller)
+    })
+    return usable.length ? new Set(usable.map((b) => b.oid)) : null
+  })()
+
+  const matchesTarget = (c, controllerPid) =>
+    forcedTargets ? forcedTargets.has(c.oid) : fitsSlot(c, controllerPid)
 
   // Fire the assembled cast/activate (with its chosen targets and sacrifice).
   function finalizeCast(c, chosen) {
@@ -911,7 +930,7 @@ export default function EnginePlayArea() {
   const inSetup = kind === 'mulligan' || kind === 'bottom' || kind === 'playOrDraw'
 
   return (
-    <div className="play-area engine" style={{ '--card-w': cardWidth(cardScale) + 'px' }}>
+    <div className="play-area engine" style={{ '--card-w': cardWidth(cardScale) + 'px', '--hand-hover': handHoverScale(cardScale) }}>
       <div className="eng-table">
         <div className="eng-center" ref={tableWheel} title="Scroll to resize the cards · hold Shift to scroll the board instead">
           {scaleHint && <div className="eng-scale-hint">Cards {scaleHint}</div>}
@@ -1088,6 +1107,11 @@ export default function EnginePlayArea() {
                 targets: targeting.targets,
                 chosen: targeting.chosen,
                 name: cast ? null : pending.name,
+                // Named so the requirement reads as a card on the board rather
+                // than a rule refusing the click.
+                forced: forcedTargets
+                  ? [...forcedTargets].map((oid) => cardByOid(oid)?.name).filter(Boolean).join(' or ')
+                  : null,
                 cancelable: !!cast,
                 // A "you may" trigger's target choice can be declined.
                 decline: !cast && engineTargeting && pending.optional ? () => choose({ decline: true }) : null,

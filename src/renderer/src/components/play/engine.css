@@ -302,8 +302,11 @@
 .eng-hand {
   display: flex;
   gap: 4px;
-  padding: 6px 130px 0 12px;
-  height: 84px;
+  /* Sized off --card-w with the board, so the wheel resizes the hand too — a
+     bigger card in a row that stayed 84px tall would only show the same sliver
+     of itself. The right reserve keeps the last card from being cut off. */
+  padding: 6px calc(var(--card-w) * 1.3) 0 12px;
+  height: calc(var(--card-w) * 0.84);
   background: var(--panel);
   align-items: flex-start;
   flex: 0 0 auto;
@@ -311,15 +314,15 @@
   z-index: 3;
   /* Clip at the bottom edge only: the lower part of each card stays out of sight
      (and off the prompt bar) while a hovered card may rise above the row. */
-  clip-path: inset(-400px 0 0 0);
+  clip-path: inset(-1000px 0 0 0);
 }
 .eng-hand.hidden {
   display: none;
 }
 .eng-hand-slot {
-  flex: 0 1 122px;
-  min-width: 34px;
-  height: 78px;
+  flex: 0 1 calc(var(--card-w) * 1.22);
+  min-width: calc(var(--card-w) * 0.34);
+  height: calc(var(--card-w) * 0.78);
   position: relative;
 }
 .eng-hand-slot:hover {
@@ -331,8 +334,8 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 118px;
-  height: 165px;
+  width: calc(var(--card-w) * 1.18);
+  height: calc(var(--card-w) * 1.65);
   cursor: default;
   /* Grows from its bottom edge, so a card you look at rises into the empty
      table rather than down through the control bar. */
@@ -343,8 +346,12 @@
 /* Looking at a card in hand: it clears the fan and doubles, which is big enough
    to read without opening the zoom. The lift keeps its lower edge inside the
    hand row, so it reads as one card pulled up out of the others. */
+/* The lift brings the card's lower edge up to the row's, whatever the size:
+   the card is 1.65 of --card-w tall in a row 0.84 of it, plus the row's 6px of
+   padding. Scaling from the bottom edge leaves that edge where it is, so this
+   holds at any hover scale. */
 .eng-hand-slot:hover .eng-hand-card {
-  transform: translateY(-88px) scale(2);
+  transform: translateY(calc(var(--card-w) * -0.81 - 6px)) scale(var(--hand-hover, 2));
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.72);
   z-index: 6;
 }
@@ -369,7 +376,7 @@
   transform-origin: 50% 0;
 }
 .eng-seat.top .eng-hand-slot:hover .eng-hand-card {
-  transform: translateY(88px) scale(2);
+  transform: translateY(calc(var(--card-w) * 0.81 + 6px)) scale(var(--hand-hover, 2));
 }
 .eng-hand-card.playable {
   cursor: pointer;
@@ -1429,4 +1436,15 @@
 }
 .rail-pile.ready .rail-pile-label {
   color: var(--accent);
+}
+
+/* A target the rules are forcing on you (Standard Bearer). */
+.eng-forced {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 1px 10px;
+  white-space: nowrap;
 }
