@@ -25,37 +25,42 @@ function hasImage(card) {
   return !!(card.image_uris?.normal || card.card_faces?.some((f) => f.image_uris?.normal))
 }
 
-// Pick an image url from a card.
-//   face 'back' -> the second card face (transform / MDFC)
-//   face 'art'  -> the cropped illustration, for deck banners
-//   otherwise   -> the whole front card
-export function imageUrlFor(card, face) {
+// Pick an image url from a card, by variant:
+//   ''/'front'/'normal' -> the whole front card at 488px
+//   'small' / 'large'    -> the same at 146px / 672px
+//   'back' / 'back-small'-> the second face (transform / MDFC)
+//   'art'                -> the cropped illustration, for deck banners
+// Size matters: `normal` is 81kB and `small` is 12kB, and a card drawn 100px
+// wide on a board does not need the larger one.
+export function imageUrlFor(card, variant = 'normal') {
   if (!card) return null
-  if (face === 'back') {
-    return card.card_faces?.[1]?.image_uris?.normal || null
-  }
-  if (face === 'art') {
+  if (variant === 'art') {
     return card.image_uris?.art_crop || card.card_faces?.find((f) => f.image_uris?.art_crop)?.image_uris?.art_crop || null
   }
-  if (card.image_uris?.normal) return card.image_uris.normal
-  const front = card.card_faces?.find((f) => f.image_uris?.normal)
-  return front?.image_uris?.normal || null
+  const size = variant === 'small' || variant === 'back-small' ? 'small' : variant === 'large' ? 'large' : 'normal'
+  if (variant === 'back' || variant === 'back-small') {
+    return card.card_faces?.[1]?.image_uris?.[size] || null
+  }
+  if (card.image_uris?.[size]) return card.image_uris[size]
+  return card.card_faces?.find((f) => f.image_uris?.[size])?.image_uris?.[size] || null
 }
 
 export function createScryfallClient({ headers: extraHeaders = {} } = {}) {
   const HEADERS = { Accept: 'application/json', ...extraHeaders }
   const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
-  // --- simple sequential rate limiter (>=100ms between requests) ---
-  let chain = Promise.resolve()
+  // --- rate limiter: requests start >=100ms apart (Scryfall asks for 50-100ms) ---
+  //
+  // This gates when a request may *start*, not when the one before it finished.
+  // Waiting for each response before counting the gap meant four batched
+  // lookups cost four round trips end to end — five seconds of mostly waiting —
+  // when the limit itself allows them to overlap.
+  const MIN_GAP = 100
+  let nextSlot = Promise.resolve()
   function throttled(fn) {
-    const run = chain.then(fn)
-    // advance the chain regardless of success/failure, after a 100ms gap
-    chain = run.then(
-      () => delay(100),
-      () => delay(100)
-    )
-    return run
+    const slot = nextSlot
+    nextSlot = slot.then(() => delay(MIN_GAP), () => delay(MIN_GAP))
+    return slot.then(fn)
   }
 
   async function apiFetch(url, options = {}) {
@@ -76,15 +81,22 @@ export function createScryfallClient({ headers: extraHeaders = {} } = {}) {
 
   // POST /cards/collection with a list of identifiers (max 75 per request).
   // notFoundKey names the identifier field to report for misses.
+  // The batches are asked for together rather than one after the other: the
+  // limiter still spaces their starts, so a 228-card lookup costs one round trip
+  // plus 300ms instead of four round trips.
   async function collection(identifiers, notFoundKey) {
     const found = []
     const notFound = []
-    for (const group of chunk(identifiers, 75)) {
-      const data = await apiFetch(`${SCRYFALL_BASE}/cards/collection`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifiers: group })
-      })
+    const pages = await Promise.all(
+      chunk(identifiers, 75).map((group) =>
+        apiFetch(`${SCRYFALL_BASE}/cards/collection`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifiers: group })
+        })
+      )
+    )
+    for (const data of pages) {
       if (Array.isArray(data.data)) found.push(...data.data)
       if (Array.isArray(data.not_found)) {
         for (const nf of data.not_found) notFound.push(nf[notFoundKey])

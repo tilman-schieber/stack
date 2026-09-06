@@ -40,7 +40,15 @@ export async function createWebApi() {
   let flushTimer = null
   function remember(cards) {
     for (const c of cards) {
-      if (c?.id) images.set(c.id, { front: imageUrlFor(c, 'front'), back: imageUrlFor(c, 'back'), art: imageUrlFor(c, 'art') })
+      if (!c?.id) continue
+      images.set(c.id, {
+        '': imageUrlFor(c, 'normal'),
+        small: imageUrlFor(c, 'small'),
+        large: imageUrlFor(c, 'large'),
+        back: imageUrlFor(c, 'back'),
+        'back-small': imageUrlFor(c, 'back-small'),
+        art: imageUrlFor(c, 'art')
+      })
     }
   }
   function noteUnknown(id) {
@@ -59,12 +67,15 @@ export async function createWebApi() {
       for (const id of ids) if (images.has(id)) unknown.delete(id)
     }, 50)
   }
-  setImageResolver((id, face) => {
+  setImageResolver((id, variant = '') => {
     const known = images.get(id)
-    if (known) return face === 'art' ? known.art || known.front : face ? known.back : known.front
+    // A card whose back or crop Scryfall does not have falls back to its front.
+    if (known) return known[variant] || known[''] || null
     noteUnknown(id)
-    const version = face === 'art' ? 'art_crop' : 'normal'
-    return `${SCRYFALL_BASE}/cards/${encodeURIComponent(id)}?format=image&version=${version}${face === true ? '&face=back' : ''}`
+    const version =
+      variant === 'art' ? 'art_crop' : variant === 'small' || variant === 'back-small' ? 'small' : variant === 'large' ? 'large' : 'normal'
+    const back = variant === 'back' || variant === 'back-small' ? '&face=back' : ''
+    return `${SCRYFALL_BASE}/cards/${encodeURIComponent(id)}?format=image&version=${version}${back}`
   })
 
   // ---------- card store (mirrors src/main/db.js) ----------

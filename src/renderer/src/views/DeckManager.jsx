@@ -268,7 +268,7 @@ export default function DeckManager() {
         </div>
       )}
 
-      {decks.length === 0 ? (
+      {decks.length === 0 && !Array.isArray(seeding) ? (
         <p className="muted">
           {seeding
             ? 'Setting up the default decks — fetching their cards from Scryfall…'
@@ -330,6 +330,9 @@ export default function DeckManager() {
               />
             )
           })}
+          {(Array.isArray(seeding) ? seeding : []).map((d) => (
+            <DeckPlate key={d.slug} deck={d} pending />
+          ))}
         </div>
       )}
     </div>

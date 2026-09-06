@@ -7,10 +7,10 @@ import { slugify } from '../../../shared/backend.mjs'
 // The list of saved decks, shared by every view that shows or picks decks, plus
 // the first-start seeding of the default decks into that list.
 
-// Resolve one default deck into a saveable record.
-async function buildDefaultDeck(d) {
-  const { cards } = await window.api.resolveDeck(deckCardNames(d))
-  const lookup = buildLookup(cards)
+// Turn one default deck into a saveable record, given a lookup that already
+// holds its cards. Resolving is the caller's job, so that seeding fifteen decks
+// costs one round trip to Scryfall rather than fifteen.
+function buildDefaultDeck(d, lookup) {
   const entries = []
   const add = (list, section) => {
     for (const [qty, name] of list) {
@@ -31,6 +31,9 @@ async function buildDefaultDeck(d) {
 export const useDecks = create((set, get) => ({
   decks: [], // summaries: { slug, name, description, updatedAt, count }
   loaded: false,
+  // While the default decks are being fetched: the ones still to arrive, as
+  // { slug, name, description }, so they can be drawn as placeholders. False
+  // when nothing is being seeded.
   seeding: false,
   seedError: null,
 
@@ -88,13 +91,25 @@ export const useDecks = create((set, get) => ({
   // Save every default deck that isn't in the list (matched by name).
   restoreDefaults: async () => {
     if (get().seeding) return
-    set({ seeding: true, seedError: null })
+    const existing = new Set(get().decks.map((d) => d.slug))
+    const missing = DEFAULT_DECKS.filter((d) => !existing.has(slugify(d.name)))
+    if (!missing.length) return
+    // Name the decks that are coming so the page has something to draw while
+    // their cards are on the way.
+    set({ seeding: missing.map((d) => ({ slug: slugify(d.name), name: d.name, description: d.description || '' })), seedError: null })
     try {
-      const existing = new Set((await get().refresh()).map((d) => d.slug))
+      // Every card every missing deck needs, resolved together: fifteen decks
+      // share 228 distinct cards, which is four requests rather than fifteen.
+      const names = [...new Set(missing.flatMap((d) => deckCardNames(d)))]
+      const { cards } = await window.api.resolveDeck(names)
+      const lookup = buildLookup(cards)
       // Lists sort by last update, so save in reverse to keep the file's order on top.
-      for (const d of [...DEFAULT_DECKS].reverse()) {
-        if (existing.has(slugify(d.name))) continue
-        await window.api.saveDeck(await buildDefaultDeck(d))
+      for (const d of [...missing].reverse()) {
+        await window.api.saveDeck(buildDefaultDeck(d, lookup))
+        // Refresh as each lands, so decks appear one by one instead of all at
+        // the end. Saving is local and cheap; this is not another round trip.
+        const saved = new Set([...(await get().refresh()).map((x) => x.slug)])
+        set({ seeding: get().seeding.filter((p) => !saved.has(p.slug)) })
       }
       await window.api.setSettings({ seededDecks: true })
       await get().refresh()

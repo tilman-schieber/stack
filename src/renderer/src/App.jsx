@@ -1,14 +1,19 @@
-import React, { useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import Home from './views/Home.jsx'
 import DeckManager from './views/DeckManager.jsx'
 import DeckBuilder from './views/DeckBuilder.jsx'
-import PlayArea from './views/PlayArea.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
+
 import { useSettings } from './store/settings.js'
 import { useNav } from './store/nav.js'
 import { useDecks } from './store/decks.js'
-import { useEngineGame } from './store/engineGame.js'
+import { useUi } from './store/ui.js'
 import logoUrl from './assets/logo.png'
+
+// The rules engine, every card's behaviour and the board are only needed once
+// you actually play, and they are most of the bundle. Loaded on the way in.
+const PlayArea = lazy(() => import('./views/PlayArea.jsx'))
+
 
 // Keeps a render error in one view from white-screening the whole app.
 class ErrorBoundary extends React.Component {
@@ -47,11 +52,9 @@ export default function App() {
   const loadSettings = useSettings((s) => s.load)
   const initDecks = useDecks((s) => s.init)
   // A game in progress gets the whole window: the nav bar lifts out of the way
-  // and comes back when the pointer reaches the top edge. Both stores are read
-  // unconditionally — `&&` between two hook calls would skip one of them and
-  // change the hook count from render to render.
-  const gameStarted = useEngineGame((s) => s.started)
-  const playing = view === 'play' && gameStarted
+  // and comes back when the pointer reaches the top edge.
+  const inGame = useUi((s) => s.inGame)
+  const playing = view === 'play' && inGame
 
   useEffect(() => {
     loadSettings()
@@ -81,7 +84,9 @@ export default function App() {
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       <div className="viewbody">
         <ErrorBoundary key={view}>
-          {view === 'home' ? <Home /> : view === 'decks' ? <DeckManager /> : view === 'build' ? <DeckBuilder /> : <PlayArea />}
+          <Suspense fallback={<div className="view-loading">Loading the table…</div>}>
+            {view === 'home' ? <Home /> : view === 'decks' ? <DeckManager /> : view === 'build' ? <DeckBuilder /> : <PlayArea />}
+          </Suspense>
         </ErrorBoundary>
       </div>
     </div>

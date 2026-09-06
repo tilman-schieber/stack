@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
-import { cardImageUrl } from '../../lib/cardUtils.js'
+import { cardImageUrl, boardImageSize } from '../../lib/cardUtils.js'
 
 // Group a list of card objects (one entry per copy) into [{ card, qty }], by name.
 function grouped(cards) {
@@ -40,7 +40,7 @@ function DeckColumns({ deck, onChange, readOnly }) {
             title={readOnly ? card.name : `${card.name} — click to move one copy`}
           >
             <span className="sb-qty">{qty}</span>
-            {card.id ? <img src={cardImageUrl(card.id)} alt="" className="sb-thumb" /> : null}
+            {card.id ? <img src={cardImageUrl(card.id, false, boardImageSize())} alt="" className="sb-thumb" /> : null}
             <span className="sb-name">{card.name}</span>
           </div>
         ))}

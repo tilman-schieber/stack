@@ -1426,3 +1426,31 @@ button.danger-btn:hover {
   height: 46px;
   display: block;
 }
+
+/* A deck whose cards are still on their way: the name is known, the art is not. */
+.deck-plate.pending {
+  opacity: 0.72;
+}
+.deck-plate.pending .deck-art {
+  background: linear-gradient(100deg, var(--panel) 30%, var(--panel-2) 50%, var(--panel) 70%);
+  background-size: 300% 100%;
+  animation: deck-plate-wait 1.4s linear infinite;
+}
+@keyframes deck-plate-wait {
+  to {
+    background-position: -300% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .deck-plate.pending .deck-art {
+    animation: none;
+  }
+}
+
+.view-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--muted);
+}

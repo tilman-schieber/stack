@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
-import { cardImageUrl } from '../../../lib/cardUtils.js'
+import { cardImageUrl, boardImageSize } from '../../../lib/cardUtils.js'
 
 // Modal / floating overlays of the rules-enforced board.
 
@@ -47,7 +47,7 @@ export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose 
                   }}
                   title={fb ? `${castLabel(fb)}: ${c.name}` : c.name}
                 >
-                  {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
+                  {c.cardId ? <img src={cardImageUrl(c.cardId, false, boardImageSize())} alt={c.name} /> : <div className="cardback" />}
                   {fb && <span className="eng-zoneviewer-fb">{castLabel(fb)}</span>}
                 </div>
               )
@@ -263,7 +263,7 @@ export function ZoomOverlay({ card, onClose }) {
       )}
       <div className="eng-zoom-body" onClick={(e) => card.token && e.stopPropagation()}>
         {imgId ? (
-          <img src={cardImageUrl(imgId, back)} alt={card.name} />
+          <img src={cardImageUrl(imgId, back, 'large')} alt={card.name} />
         ) : (
           <div className="eng-zoom-placeholder">
             {card.token ? (entry?.loading ? 'Finding card art…' : 'No art found') : ''}
@@ -329,7 +329,7 @@ export function StackOverlay({ stack, targeting, onItem, onZoom }) {
             title={item.name}
           >
             {item.cardId ? (
-              <img src={cardImageUrl(item.cardId, item.face)} alt="" draggable={false} />
+              <img src={cardImageUrl(item.cardId, item.face, boardImageSize())} alt="" draggable={false} />
             ) : (
               <div className="eng-stack-ability">✦</div>
             )}

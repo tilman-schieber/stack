@@ -67,12 +67,33 @@ export function colorIdentity(card) {
 // (src/web/api.js).
 // `face`: false/undefined = the whole front card, true/'back' = the second face,
 // 'art' = the cropped illustration (deck banners).
-let imageResolver = (id, face) => `card://${id}${face === 'art' ? '/art' : face ? '/back' : ''}`
+let imageResolver = (id, variant) => `card://${id}${variant ? '/' + variant : ''}`
 export function setImageResolver(fn) {
   imageResolver = fn
 }
-export function cardImageUrl(id, face = false) {
-  return id ? imageResolver(id, face === 'art' ? 'art' : !!face) : null
+
+// Scryfall serves a card at 146px (12kB), 488px (81kB) and 672px (122kB). A
+// board draws cards about 100px wide and a hand about 118px, so the smallest
+// one is the right fetch — until the screen has the pixels to show the
+// difference, where the soft upscale would be obvious.
+export const boardImageSize = () =>
+  typeof window !== 'undefined' && window.devicePixelRatio > 1.5 ? 'normal' : 'small'
+
+// `face`: false = the front, true/'back' = the second face, 'art' = the crop.
+// `size`: 'small' | 'normal' | 'large'.
+export function cardImageUrl(id, face = false, size = 'normal') {
+  if (!id) return null
+  const variant =
+    face === 'art'
+      ? 'art'
+      : face
+        ? size === 'small'
+          ? 'back-small'
+          : 'back'
+        : size === 'normal'
+          ? '' // the plain front keeps its bare URL, so caches stay warm
+          : size
+  return imageResolver(id, variant)
 }
 // The cropped illustration of a card, for deck banners.
 export const cardArtUrl = (id) => cardImageUrl(id, 'art')

@@ -28,7 +28,11 @@ export default function Home() {
     go('build')
   }
 
+  // On a first run the decks are still arriving; draw the ones still to come as
+  // placeholders so the page is never an empty box with a status line.
+  const pending = Array.isArray(seeding) ? seeding : []
   const shown = decks.slice(0, SHOWN)
+  const shownPending = pending.slice(0, Math.max(0, SHOWN - shown.length))
 
   return (
     <div className="home">
@@ -92,11 +96,14 @@ export default function Home() {
         {loaded && !seeding && decks.length === 0 && (
           <p className="muted small">No decks yet. Import a list, build one, or restore the default decks in Decks.</p>
         )}
-        {shown.length > 0 && (
+        {(shown.length > 0 || shownPending.length > 0) && (
           <>
             <div className="deck-grid">
               {shown.map((d) => (
                 <DeckPlate key={d.slug} deck={d} onPlay={() => play(d.slug)} onEdit={() => edit(d.slug)} />
+              ))}
+              {shownPending.map((d) => (
+                <DeckPlate key={d.slug} deck={d} pending />
               ))}
             </div>
             {decks.length > SHOWN && (
