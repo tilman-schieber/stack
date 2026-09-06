@@ -840,124 +840,15 @@ export default function EnginePlayArea() {
     </div>
   )
 
+  // Whose stops the phase ladder shows: in a two-human hot-seat game, the player
+  // who is deciding; otherwise the local seat.
+  const stopSeat = mode === 'local' && !botSeats.length ? (pending.player ?? view.activePlayer) : mySeat
+  const activeYield = yields[stopSeat]?.turn === view.turnNumber ? yields[stopSeat].kind : null
+  const canYield = gameOn && !botSeats.includes(stopSeat)
+  const inSetup = kind === 'mulligan' || kind === 'bottom' || kind === 'playOrDraw'
+
   return (
     <div className="play-area engine">
-      <div className="turnbar eng-turnbar">
-        {kind === 'mulligan' || kind === 'bottom' || kind === 'playOrDraw' ? (
-          <span className="phase-pill on">{kind === 'playOrDraw' ? 'Play or draw' : 'Mulligan'}</span>
-        ) : (
-          <>
-            <span className="eng-turn" title={`Active player: ${view.players[view.activePlayer].name}`}>
-              Turn {view.turnNumber}
-            </span>
-            {match && (
-              <span className="eng-match" title={`Best of ${match.bestOf}`}>
-                Game {match.game} · {match.wins.join('–')}
-              </span>
-            )}
-            {(() => {
-              // Whose stops the bar shows: in a two-human hot-seat game, the player
-              // who is deciding; otherwise the local seat.
-              const seat = mode === 'local' && !botSeats.length ? (pending.player ?? view.activePlayer) : mySeat
-              const oppTurn = view.activePlayer !== seat
-              const y = yields[seat]?.turn === view.turnNumber ? yields[seat].kind : null
-              const canYield = gameOn && !botSeats.includes(seat)
-              return (
-                <>
-                  <PhaseBar
-                    step={view.step}
-                    oppTurn={oppTurn}
-                    seat={seat}
-                    stops={stops}
-                    toggleStop={toggleStop}
-                    canToggle={(mode === 'local' && !botSeats.includes(seat)) || seat === mySeat}
-                  />
-                  <span className="eng-yield">
-                    <button
-                      className={'mini' + (holds[seat] ? ' on' : '')}
-                      disabled={!canYield}
-                      onClick={() => setHold(!holds[seat])}
-                      title="Keep priority after your next spell or ability so you can respond to it yourself (or shift-click a card to cast). Used once."
-                    >
-                      {holds[seat] ? 'Holding priority ✕' : 'Hold priority'}
-                    </button>
-                    {y ? (
-                      <button className="mini on" onClick={() => setYield(null)} title="Cancel the yield (F3)">
-                        {y === 'all' ? 'Yielding everything this turn' : 'Passing this turn'} ✕
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          className="mini"
-                          disabled={!canYield}
-                          onClick={() => setYield('turn')}
-                          title="Pass the rest of this turn, but stop if the opponent does something you can respond to (F4)"
-                        >
-                          Pass turn
-                        </button>
-                        <button
-                          className="mini"
-                          disabled={!canYield}
-                          onClick={() => setYield('all')}
-                          title="Pass everything for the rest of this turn, responses included (F6)"
-                        >
-                          Yield all
-                        </button>
-                      </>
-                    )}
-                  </span>
-                </>
-              )
-            })()}
-            {view.daytime && (
-              <span className="eng-daynight" title={view.daytime === 'day' ? 'It is day: if the active player casts no spells this turn, it becomes night next turn.' : 'It is night: if the active player casts two or more spells this turn, it becomes day next turn.'}>
-                <HelperCard def={view.helperCards[view.daytime]} label={view.daytime === 'day' ? 'Day' : 'Night'} onZoom={setZoom} onHover={setHover} />
-              </span>
-            )}
-          </>
-        )}
-        {!myTurn && kind !== 'gameOver' && (
-          <span className="eng-waiting">{botSeats.length ? 'The computer is thinking…' : 'Waiting for opponent…'}</span>
-        )}
-        <div className="turn-active">
-          <button className="mini" onClick={() => setShowStops((s) => !s)} title="Every stop, for your turn and the opponent's">
-            All stops…
-          </button>
-          {confirmExit ? (
-            <span className="eng-confirm">
-              {mode === 'local' && !botSeats.length ? 'Exit this game?' : 'Concede the game?'}
-              <button
-                className="mini danger"
-                onClick={() => {
-                  setConfirmExit(false)
-                  if ((mode === 'local' && !botSeats.length) || kind === 'gameOver') endGame()
-                  else concede()
-                }}
-              >
-                Yes, concede
-              </button>
-              <button className="mini" onClick={() => setConfirmExit(false)}>
-                No
-              </button>
-            </span>
-          ) : (
-            <button className="mini" onClick={() => setConfirmExit(true)}>
-              Concede / exit
-            </button>
-          )}
-        </div>
-        {showStops && (
-          <StopsPanel
-            stops={stops}
-            toggleStop={toggleStop}
-            players={view.players}
-            canToggle={(pid) => (mode === 'local' && !botSeats.includes(pid)) || pid === mySeat}
-            currentStep={view.step}
-            onClose={() => setShowStops(false)}
-          />
-        )}
-      </div>
-
       <div className="eng-table">
         <div className="eng-center">
           {seat(top, 'top')}
@@ -970,7 +861,48 @@ export default function EnginePlayArea() {
             onZoom={setZoom}
           />
         </div>
+        {/* The reference column: the turn's steps as a ladder, the card you are
+            hovering, and the log. The ladder lives here rather than in a strip
+            across the board, where it would cost every row of cards its height. */}
         <div className="eng-side">
+          <div className="eng-side-turn">
+            <span className="eng-turn" title={`Active player: ${view.players[view.activePlayer].name}`}>
+              {inSetup ? (kind === 'playOrDraw' ? 'Play or draw' : 'Mulligan') : `Turn ${view.turnNumber}`}
+            </span>
+            {match && (
+              <span className="eng-match" title={`Best of ${match.bestOf}`}>
+                G{match.game} · {match.wins.join('–')}
+              </span>
+            )}
+            {view.daytime && (
+              <span
+                className="eng-daynight"
+                title={
+                  view.daytime === 'day'
+                    ? 'It is day: if the active player casts no spells this turn, it becomes night next turn.'
+                    : 'It is night: if the active player casts two or more spells this turn, it becomes day next turn.'
+                }
+              >
+                <HelperCard
+                  def={view.helperCards[view.daytime]}
+                  label={view.daytime === 'day' ? 'Day' : 'Night'}
+                  onZoom={setZoom}
+                  onHover={setHover}
+                />
+              </span>
+            )}
+          </div>
+          {!inSetup && (
+            <PhaseBar
+              vertical
+              step={view.step}
+              oppTurn={view.activePlayer !== stopSeat}
+              seat={stopSeat}
+              stops={stops}
+              toggleStop={toggleStop}
+              canToggle={(mode === 'local' && !botSeats.includes(stopSeat)) || stopSeat === mySeat}
+            />
+          )}
           <Inspector card={hover || zoom} />
           <GameLog log={view.log || []} />
         </div>
@@ -1084,6 +1016,10 @@ export default function EnginePlayArea() {
       )}
 
 
+      {/* One strip at your end of the table: what the game is asking, and every
+          control for answering it. It replaces the old turn bar and prompt bar,
+          which cost the board two rows of height between them. */}
+      <div className="eng-controls">
       <Prompt
         view={view}
         pending={pending}
@@ -1165,6 +1101,84 @@ export default function EnginePlayArea() {
         onMadnessCast={onMadnessCast}
         cancelCast={() => setCast(null)}
       />
+
+        <div className="eng-controls-acts">
+          {!myTurn && kind !== 'gameOver' && (
+            <span className="eng-waiting">{botSeats.length ? 'Computer thinking…' : 'Waiting…'}</span>
+          )}
+          {!inSetup && (
+            <span className="eng-yield">
+              <button
+                className={'mini' + (holds[stopSeat] ? ' on' : '')}
+                disabled={!canYield}
+                onClick={() => setHold(!holds[stopSeat])}
+                title="Keep priority after your next spell or ability so you can respond to it yourself (or shift-click a card to cast). Used once."
+              >
+                {holds[stopSeat] ? 'Holding ✕' : 'Hold'}
+              </button>
+              {activeYield ? (
+                <button className="mini on" onClick={() => setYield(null)} title="Cancel the yield (F3)">
+                  {activeYield === 'all' ? 'Yielding all' : 'Passing turn'} ✕
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="mini"
+                    disabled={!canYield}
+                    onClick={() => setYield('turn')}
+                    title="Pass the rest of this turn, but stop if the opponent does something you can respond to (F4)"
+                  >
+                    Pass turn
+                  </button>
+                  <button
+                    className="mini"
+                    disabled={!canYield}
+                    onClick={() => setYield('all')}
+                    title="Pass everything for the rest of this turn, responses included (F6)"
+                  >
+                    Yield all
+                  </button>
+                </>
+              )}
+            </span>
+          )}
+          <button className="mini" onClick={() => setShowStops((s) => !s)} title="Every stop, for your turn and the opponent's">
+            Stops…
+          </button>
+          {confirmExit ? (
+            <span className="eng-confirm">
+              {mode === 'local' && !botSeats.length ? 'Exit this game?' : 'Concede?'}
+              <button
+                className="mini danger"
+                onClick={() => {
+                  setConfirmExit(false)
+                  if ((mode === 'local' && !botSeats.length) || kind === 'gameOver') endGame()
+                  else concede()
+                }}
+              >
+                Yes
+              </button>
+              <button className="mini" onClick={() => setConfirmExit(false)}>
+                No
+              </button>
+            </span>
+          ) : (
+            <button className="mini" onClick={() => setConfirmExit(true)} title="Concede the game and go back to deck selection">
+              Concede
+            </button>
+          )}
+          {showStops && (
+            <StopsPanel
+              stops={stops}
+              toggleStop={toggleStop}
+              players={view.players}
+              canToggle={(pid) => (mode === 'local' && !botSeats.includes(pid)) || pid === mySeat}
+              currentStep={view.step}
+              onClose={() => setShowStops(false)}
+            />
+          )}
+        </div>
+      </div>
     </div>
   )
 }

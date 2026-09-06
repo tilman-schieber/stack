@@ -9,36 +9,6 @@
   overflow: hidden;
 }
 
-/* Turn bar */
-.turnbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 6px 12px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-}
-.phase-pill {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: var(--panel-2);
-  color: var(--muted);
-}
-.phase-pill.on {
-  background: var(--accent);
-  color: #1a1206;
-  font-weight: 700;
-}
-.turn-active {
-  margin-left: auto;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 /* Battlefields */
 .battlefield {
   position: relative;

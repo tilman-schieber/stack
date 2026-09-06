@@ -7,6 +7,7 @@ import SettingsModal from './components/SettingsModal.jsx'
 import { useSettings } from './store/settings.js'
 import { useNav } from './store/nav.js'
 import { useDecks } from './store/decks.js'
+import { useEngineGame } from './store/engineGame.js'
 
 // Keeps a render error in one view from white-screening the whole app.
 class ErrorBoundary extends React.Component {
@@ -44,6 +45,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const loadSettings = useSettings((s) => s.load)
   const initDecks = useDecks((s) => s.init)
+  // A game in progress gets the whole window: the nav bar lifts out of the way
+  // and comes back when the pointer reaches the top edge. Both stores are read
+  // unconditionally — `&&` between two hook calls would skip one of them and
+  // change the hook count from render to render.
+  const gameStarted = useEngineGame((s) => s.started)
+  const playing = view === 'play' && gameStarted
 
   useEffect(() => {
     loadSettings()
@@ -52,7 +59,8 @@ export default function App() {
   }, [loadSettings, initDecks])
 
   return (
-    <div className="root">
+    <div className={'root' + (playing ? ' immersive' : '')}>
+      {playing && <div className="topbar-hot" aria-hidden="true" title="Menu — move the pointer to the top edge" />}
       <header className="topbar">
         <button className="topbrand" onClick={() => go('home')} title="Home">
           🃏 Stack

@@ -186,6 +186,7 @@ code {
 
 /* ---- Shell ---- */
 .root {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -215,6 +216,54 @@ code {
 }
 .topgear {
   margin-left: auto;
+}
+
+/* During a game the nav bar gives its 44px to the board. It slides back down
+   while the pointer is at the top edge of the window, or while anything in it
+   has keyboard focus, so it is never out of reach. */
+.root.immersive .topbar {
+  position: absolute;
+  top: -44px;
+  left: 0;
+  right: 0;
+  z-index: 1400;
+  transition: top 0.16s ease-out;
+}
+.root.immersive .topbar-hot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  z-index: 1399;
+}
+/* A handle at the top edge, so the hidden nav bar is something you can see is
+   there rather than something you have to know about. */
+.root.immersive .topbar-hot::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 58px;
+  height: 4px;
+  margin-left: -29px;
+  border-radius: 0 0 5px 5px;
+  background: var(--border-bright);
+  transition: background 0.16s ease-out, height 0.16s ease-out;
+}
+.root.immersive .topbar-hot:hover::after {
+  height: 7px;
+  background: var(--accent);
+}
+.root.immersive .topbar-hot:hover ~ .topbar,
+.root.immersive .topbar:hover,
+.root.immersive .topbar:focus-within {
+  top: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .root.immersive .topbar {
+    transition: none;
+  }
 }
 .viewnav {
   display: flex;

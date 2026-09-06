@@ -1,21 +1,56 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { PRIORITY_STEPS, stopKey } from '../../../store/engineGame.js'
 
+const LOG_HIDDEN = 'stack.gamelog.hidden'
+const readHidden = () => {
+  try {
+    return localStorage.getItem(LOG_HIDDEN) === '1'
+  } catch {
+    return false
+  }
+}
+
 // The public game log, newest at the bottom, kept scrolled to the latest entry.
+// It folds away to its header — everything it records is also on the board —
+// and stays folded for the next game.
 export function GameLog({ log }) {
   const ref = useRef(null)
+  const [hidden, setHidden] = useState(readHidden)
   useEffect(() => {
     const el = ref.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [log.length])
+  }, [log.length, hidden])
+  const toggle = () => {
+    setHidden((v) => {
+      try {
+        localStorage.setItem(LOG_HIDDEN, v ? '0' : '1')
+      } catch {
+        /* private mode: the choice just doesn't outlive the session */
+      }
+      return !v
+    })
+  }
   return (
-    <div className="eng-log" ref={ref}>
-      {log.length === 0 && <div className="eng-log-line muted">Game log</div>}
-      {log.map((l) => (
-        <div key={l.n} className={'eng-log-line' + (l.marker ? ' marker' : '')}>
-          {l.text}
+    <div className={'eng-logbox' + (hidden ? ' hidden' : '')}>
+      <button
+        className="eng-log-head"
+        onClick={toggle}
+        title={hidden ? 'Show the game log' : 'Hide the game log'}
+        aria-expanded={!hidden}
+      >
+        <span>Game log</span>
+        <span className="eng-log-caret">{hidden ? '▴' : '▾'}</span>
+      </button>
+      {!hidden && (
+        <div className="eng-log" ref={ref}>
+          {log.length === 0 && <div className="eng-log-line muted">Nothing has happened yet.</div>}
+          {log.map((l) => (
+            <div key={l.n} className={'eng-log-line' + (l.marker ? ' marker' : '')}>
+              {l.text}
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   )
 }
@@ -100,11 +135,14 @@ const SHORT_STEP_LABEL = {
 // one lit. Each step shows whether `seat` has a stop there for this kind of turn
 // (own or opponent's); clicking toggles it. Steps without a stop pass by; an
 // opponent's spell or ability always gives a chance to respond.
-export function PhaseBar({ step, oppTurn, seat, stops, toggleStop, canToggle }) {
+export function PhaseBar({ step, oppTurn, seat, stops, toggleStop, canToggle, vertical = false }) {
   const set = stops[seat] || new Set()
   return (
-    <div className="eng-phasebar" title={oppTurn ? "Opponent's turn — click a step to stop there on opponents' turns" : 'Your turn — click a step to stop there on your turns'}>
-      <span className="eng-phasebar-who">{oppTurn ? 'Opp. turn' : 'Your turn'}</span>
+    <div
+      className={'eng-phasebar' + (vertical ? ' vertical' : '')}
+      title={oppTurn ? "Opponent's turn — click a step to stop there on opponents' turns" : 'Your turn — click a step to stop there on your turns'}
+    >
+      <span className="eng-phasebar-who">{oppTurn ? 'Opponent’s turn' : 'Your turn'}</span>
       {PRIORITY_STEPS.map((st) => {
         const on = set.has(stopKey(st, oppTurn))
         const now = st === step
