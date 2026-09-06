@@ -412,6 +412,21 @@ export default function Prompt({ view, pending, myTurn, match, openSideboard, ta
         </button>
       </>
     )
+  } else if (kind === 'chooseTopType') {
+    // Winding Way: the type is named before anything is looked at, so this is a
+    // plain question with nothing on screen to read off.
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — {pending.label}:
+        </span>
+        {pending.options.map((t) => (
+          <button key={t} className="primary" onClick={() => choose({ type: t })}>
+            {t}
+          </button>
+        ))}
+      </>
+    )
   } else if (kind === 'chooseValue') {
     body =
       pending.kindOfChoice === 'color' ? (

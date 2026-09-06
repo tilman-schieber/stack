@@ -55,6 +55,22 @@ export const effectsMethods = {
         // your graveyard / on the bottom" (Lead the Stampede, Malevolent Rumble,
         // Winding Way — which first chooses creature or land: `chooseType`).
         const pid = source.controller
+        // Winding Way names its type *before* anything is revealed — choosing
+        // after seeing the four cards is a different, much better card. The
+        // choice is its own step, and the reveal happens once it is made.
+        if (e.chooseType) {
+          if (zone(s, 'library', pid).length === 0) return false
+          s.pending = {
+            kind: 'chooseTopType',
+            player: pid,
+            options: [...e.chooseType],
+            amount: e.amount,
+            reveal: !!e.reveal,
+            rest: e.rest || 'graveyard',
+            label: `Choose ${e.chooseType.map((t) => t.toLowerCase()).join(' or ')} — before looking`
+          }
+          return true
+        }
         const top = zone(s, 'library', pid).slice(0, e.amount)
         if (top.length === 0) return false
         if (e.reveal) this._log(`${this._nameOf(pid)} reveals ${top.map((c) => this._objName(s.objects[c])).join(', ')}`)
@@ -63,7 +79,7 @@ export const effectsMethods = {
           player: pid,
           cards: [...top],
           revealed: !!e.reveal,
-          chooseType: e.chooseType || null, // ['Creature', 'Land']: pick a type, all of it goes to hand
+          chooseType: null,
           max: e.pick ? e.pick.max ?? top.length : 0, // how many may be taken
           filter: e.pick?.filter || null,
           to: e.pick?.to || 'hand',
@@ -1509,6 +1525,38 @@ export const effectsMethods = {
     this._resumeResolution()
   },
 
+  // The type named before the top cards are looked at (Winding Way). Once it is
+  // chosen the reveal happens and the ordinary look-at-the-top step follows,
+  // with the type already fixed so it cannot be changed after seeing them.
+  _applyChooseTopType(pending, answer) {
+    const s = this.state
+    const pid = pending.player
+    const type = pending.options.includes(answer?.type) ? answer.type : pending.options[0]
+    this._log(`${this._nameOf(pid)} chooses ${type.toLowerCase()}`)
+    const top = zone(s, 'library', pid).slice(0, pending.amount)
+    if (!top.length) {
+      s.pending = null
+      return this._resumeResolution()
+    }
+    if (pending.reveal) this._log(`${this._nameOf(pid)} reveals ${top.map((c) => this._objName(s.objects[c])).join(', ')}`)
+    // With the type already named there is nothing left to decide, so the
+    // look-at-the-top step runs straight through rather than stopping to ask.
+    const step = {
+      kind: 'lookTop',
+      player: pid,
+      cards: [...top],
+      revealed: pending.reveal,
+      chooseType: null,
+      chosenType: type,
+      max: 0,
+      filter: null,
+      to: 'hand',
+      rest: pending.rest
+    }
+    s.pending = step
+    this._applyLookTop(step, {})
+  },
+
   // Look-at-the-top-N: `picks` (up to `max`, matching the filter — or, with
   // `chooseType`, every card of the chosen type) go to `to`; the rest go to the
   // graveyard, the bottom, or back on top in their current order.
@@ -1517,7 +1565,10 @@ export const effectsMethods = {
     const pid = pending.player
     const lib = s.zones[zoneKey('library', pid)]
     let picks
-    if (pending.chooseType) {
+    if (pending.chosenType) {
+      // Named before the reveal; nothing left to decide here.
+      picks = pending.cards.filter((oid) => s.objects[oid].printed.types.includes(pending.chosenType))
+    } else if (pending.chooseType) {
       const type = pending.chooseType.includes(answer?.type) ? answer.type : pending.chooseType[0]
       this._log(`${this._nameOf(pid)} chooses ${type.toLowerCase()}`)
       picks = pending.cards.filter((oid) => s.objects[oid].printed.types.includes(type))

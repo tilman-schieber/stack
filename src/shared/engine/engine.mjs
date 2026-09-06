@@ -405,6 +405,9 @@ export class GameEngine {
         case 'search':
           this._applySearch(pending, answer)
           break
+        case 'chooseTopType':
+          this._applyChooseTopType(pending, answer)
+          break
         case 'lookTop':
           this._applyLookTop(pending, answer)
           break
@@ -570,6 +573,9 @@ export class GameEngine {
         return this._assertFromHand(pending, a.bottom)
       case 'putBack':
         return this._assertFromHand({ hand: pending.hand }, a.cards)
+      case 'chooseTopType':
+        if (!pending.options.includes(a.type)) throw new Error(`choose ${pending.options.join(' or ')}`)
+        return
       case 'lookTop': {
         if (pending.chooseType) {
           if (!pending.chooseType.includes(a.type)) throw new Error(`choose ${pending.chooseType.join(' or ')}`)

@@ -103,7 +103,7 @@ section('Lead the Stampede: look at five, take the creatures, rest on the bottom
   assert(l0.length === libBefore - 2, 'the library shrank by the two taken')
 }
 
-section('Winding Way: choose creature or land, take every card of that type, rest to graveyard')
+section('Winding Way: name creature or land BEFORE looking, take every card of that type')
 {
   const e = makeEngine('Forest', 20)
   put(e, 0, 'Forest', 'battlefield')
@@ -116,7 +116,10 @@ section('Winding Way: choose creature or land, take every card of that type, res
   advanceToPriorityAt(e, 'main1')
   e.choose({ type: 'cast', oid: way.oid })
   bothPass(e)
-  assert(e.pending.kind === 'lookTop' && e.pending.chooseType?.length === 2, 'a creature-or-land choice')
+  // The type is named first (701.19), as its own step with no cards attached —
+  // choosing after seeing the four would be a different and much better card.
+  assert(e.pending.kind === 'chooseTopType' && e.pending.options?.length === 2, 'a creature-or-land choice, before the reveal')
+  assert(!e.pending.cards, 'and nothing has been revealed to choose from')
   const gyBefore = zone(e.state, 'graveyard', 0).length
   const forestsBefore = zone(e.state, 'hand', 0).filter((oid) => named(e, oid) === 'Forest').length
   e.choose({ type: 'Land' })

@@ -272,6 +272,13 @@ export function botChoose(engine, pid) {
       const pick = (cards.find((o) => isCreature(o)) || cards.find((o) => isLand(o)) || cards[0])?.oid || null
       return { pick }
     }
+    case 'chooseTopType': {
+      // Named before anything is revealed, so this is a judgement about the
+      // board and the deck rather than about the cards — which is the point.
+      const wantLand = landsInPlay + hand.filter(isLand).length < 4
+      if (wantLand && p.options.includes('Land')) return { type: 'Land' }
+      return { type: p.options.includes('Creature') ? 'Creature' : p.options[0] }
+    }
     case 'lookTop': {
       const cards = p.cards.map((oid) => s.objects[oid])
       if (p.chooseType) {
@@ -763,6 +770,8 @@ export function botFallback(engine, pid) {
       return { toBottom: [], toTop: p.cards }
     case 'search':
       return { pick: p.optional ? null : p.cards[0] }
+    case 'chooseTopType':
+      return { type: p.options[0] }
     case 'lookTop':
       return p.chooseType ? { type: p.chooseType[0] } : { picks: [] }
     case 'putBack':
