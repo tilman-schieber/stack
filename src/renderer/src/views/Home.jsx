@@ -32,7 +32,7 @@ export default function Home() {
   return (
     <div className="home">
       <section className="home-hero">
-        <h1>🃏 Stack</h1>
+        <h1>Stack</h1>
         <p>
           Build Magic: The Gathering decks and play them with the rules enforced for you — against the computer, a
           friend at the same screen, or a friend online with no server in between. Card data and art come from Scryfall.

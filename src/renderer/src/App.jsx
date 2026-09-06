@@ -63,7 +63,7 @@ export default function App() {
       {playing && <div className="topbar-hot" aria-hidden="true" title="Menu — move the pointer to the top edge" />}
       <header className="topbar">
         <button className="topbrand" onClick={() => go('home')} title="Home">
-          🃏 Stack
+          Stack
         </button>
         <nav className="viewnav">
           {VIEWS.map(([key, label]) => (
