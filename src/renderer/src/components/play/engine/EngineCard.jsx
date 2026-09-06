@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
 import { cardImageUrl } from '../../../lib/cardUtils.js'
 
@@ -109,14 +109,19 @@ export function HelperCard({ def, label, sub, info, dungeon, onZoom, onHover }) 
   )
 }
 
+// A zone as a physical pile: the top card (or a card back) with the edges of the
+// cards underneath showing behind it, so a full library looks thick and a nearly
+// empty one looks thin. Depth saturates around 40 cards.
 export function Pile({ label, count, topCard, faceDown, onOpen }) {
+  const depth = count === 0 ? 0 : Math.min(1, 0.3 + count / 45)
+  const openable = !!onOpen && count > 0
   return (
     <div className="rail-pile">
       <div
-        className="rail-pile-card"
-        title={`${label} (${count})`}
-        onClick={onOpen}
-        style={onOpen ? { cursor: 'pointer' } : undefined}
+        className={'rail-pile-card' + (count === 0 ? ' empty' : '') + (openable ? ' openable' : '')}
+        title={count === 0 ? `${label} — empty` : `${label} (${count})${openable ? ' — click to look through it' : ''}`}
+        onClick={openable ? onOpen : undefined}
+        style={{ '--depth': depth }}
       >
         {count === 0 ? (
           <div className="pile-empty" />
@@ -125,30 +130,75 @@ export function Pile({ label, count, topCard, faceDown, onOpen }) {
         ) : (
           <img src={cardImg(topCard)} alt="" draggable={false} />
         )}
-        <span className="pile-count">{count}</span>
+        {count > 0 && <span className="pile-count">{count}</span>}
       </div>
       <div className="rail-pile-label">{label}</div>
     </div>
   )
 }
 
+const MANA_ORDER = ['W', 'U', 'B', 'R', 'G', 'C']
+const MANA_NAME = { W: 'white', U: 'blue', B: 'black', R: 'red', G: 'green', C: 'colorless' }
+const PIP_LIMIT = 12
+
+// Floating mana as one pip per mana, in its own colour, WUBRG then colourless.
+// Restricted mana (106.6: spendable only on certain spells) carries a star.
 export function ManaPool({ pool, restricted = [] }) {
-  const COLORS = { W: '#f6f3e0', U: '#b3d5f2', B: '#c9c1cf', R: '#f0b0a0', G: '#a8d6ab', C: '#cfc9c1' }
-  const active = Object.entries(pool || {}).filter(([, n]) => n > 0)
-  // Restricted mana (106.6: spendable only on certain spells) is shown with a star.
-  const byColor = {}
-  for (const c of restricted || []) byColor[c] = (byColor[c] || 0) + 1
-  for (const [c, n] of Object.entries(byColor)) active.push([c + '*', n])
-  if (active.length === 0) return null
+  const pips = []
+  const rest = {}
+  for (const c of restricted || []) rest[c] = (rest[c] || 0) + 1
+  for (const c of MANA_ORDER) {
+    for (let i = 0; i < (pool?.[c] || 0); i++) pips.push({ c, restricted: false })
+    for (let i = 0; i < (rest[c] || 0); i++) pips.push({ c, restricted: true })
+  }
+  if (!pips.length) return null
+  const shown = pips.slice(0, PIP_LIMIT)
+  const summary = MANA_ORDER.filter((c) => pips.some((p) => p.c === c))
+    .map((c) => `${pips.filter((p) => p.c === c).length} ${MANA_NAME[c]}`)
+    .join(', ')
   return (
-    <span className="eng-mana">
-      {active.map(([c, n]) => (
-        <span key={c} className="eng-mana-pip" style={{ background: COLORS[c.replace('*', '')] }} title={c.endsWith('*') ? 'Restricted mana' : undefined}>
-          {n}
-          {c}
+    <span className="eng-mana" title={`Unspent mana: ${summary}`}>
+      {shown.map((p, i) => (
+        <span
+          key={i}
+          className={'mana-pip mana-' + p.c.toLowerCase() + (p.restricted ? ' restricted' : '')}
+          title={p.restricted ? `Restricted ${MANA_NAME[p.c]} mana` : undefined}
+        >
+          {p.c}
         </span>
       ))}
+      {pips.length > shown.length && <span className="mana-more">+{pips.length - shown.length}</span>}
     </span>
+  )
+}
+
+// Life as a plate you read across the table. The last change floats off it, so a
+// bolt to the face registers without reading the log.
+export function LifePlate({ life, onClick, targetable, title }) {
+  const [delta, setDelta] = useState(null)
+  const prev = useRef(life)
+  useEffect(() => {
+    if (life === prev.current) return
+    const change = life - prev.current
+    prev.current = life
+    setDelta({ change, at: Date.now() })
+    const t = setTimeout(() => setDelta(null), 1200)
+    return () => clearTimeout(t)
+  }, [life])
+  return (
+    <div
+      className={'eng-life' + (targetable ? ' targetable' : '') + (life <= 5 ? ' low' : '')}
+      onClick={onClick}
+      title={title}
+    >
+      <span className="eng-life-n">{life}</span>
+      {delta && (
+        <span key={delta.at} className={'eng-life-delta ' + (delta.change > 0 ? 'up' : 'down')}>
+          {delta.change > 0 ? '+' : ''}
+          {delta.change}
+        </span>
+      )}
+    </div>
   )
 }
 

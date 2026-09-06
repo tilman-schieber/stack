@@ -2,7 +2,7 @@
 .play-area.engine {
   display: flex;
   flex-direction: column;
-  position: relative; /* anchor for the floating stack overlay */
+  position: relative;
 }
 
 .eng-turnbar {
@@ -16,106 +16,263 @@
   font-size: 13px;
 }
 
-/* The table: a fixed-width status sidebar on the left, the play field on the
-   right. Most of the width is reserved for cards in play + hands. */
+/* The table: the two seats fill the width; a reference column on the right holds
+   the things you consult rather than act on (card text, game log). */
 .eng-table {
   display: flex;
   flex: 1 1 0;
   min-height: 0;
 }
 
-/* ---- Left sidebar: per-player status + zones ---- */
-.eng-sidebar {
+/* ---- A seat's rail: that player's own end of the table ---- */
+.eng-rail {
+  flex: 0 0 auto;
+  width: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #131b17 0%, #0d1310 100%);
+  border-right: 1px solid var(--border);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+/* Each player's own things sit at their own end of the table. */
+.eng-seat.top .eng-rail {
+  justify-content: flex-start;
+}
+.eng-seat.bottom .eng-rail {
+  justify-content: flex-end;
+}
+/* Whose turn it is, shown as light falling on their side of the table: a brass
+   edge along the side the board is on. */
+.eng-rail.active {
+  background: linear-gradient(180deg, #1d2822 0%, #121a15 100%);
+  border-right-color: var(--accent);
+  box-shadow: inset -3px 0 0 rgba(201, 162, 83, 0.5);
+}
+.eng-rail-placard {
+  min-width: 0;
+}
+.eng-rail-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.eng-rail.active .eng-rail-name {
+  color: var(--text);
+}
+.eng-rail-who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.eng-rail-deck {
+  margin-top: 1px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pp-active-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.eng-prio-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6fbf73;
+  box-shadow: 0 0 7px rgba(111, 191, 115, 0.8);
+}
+
+/* Life as a brass plate, big enough to read across the table. */
+.eng-life {
+  position: relative;
+  align-self: flex-start;
+  min-width: 66px;
+  padding: 2px 14px 4px;
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  background: radial-gradient(120% 130% at 50% 0%, #232e27 0%, #151d19 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 3px 8px rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+.eng-life-n {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.eng-rail.active .eng-life {
+  border-color: var(--accent);
+}
+/* Five or less: the plate goes to embers. */
+.eng-life.low {
+  border-color: var(--danger);
+  background: radial-gradient(120% 130% at 50% 0%, #33201c 0%, #1a1210 100%);
+}
+.eng-life.low .eng-life-n {
+  color: #eba48f;
+}
+.eng-life.targetable {
+  cursor: crosshair;
+  outline: 2px solid #e05a5a;
+  outline-offset: 2px;
+}
+/* The last change floats off the plate and fades. */
+.eng-life-delta {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  pointer-events: none;
+  animation: eng-life-float 1.2s ease-out forwards;
+}
+.eng-life-delta.up {
+  color: #7fce85;
+}
+.eng-life-delta.down {
+  color: #ef8f76;
+}
+@keyframes eng-life-float {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  22% {
+    opacity: 1;
+    transform: translate(-50%, -6px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -34px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eng-life-delta {
+    animation: none;
+    opacity: 1;
+    transform: translate(-50%, -26px);
+  }
+}
+
+.eng-rail-counts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 15px;
+}
+.eng-count {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Unspent mana: one pip per mana, in its own colour. */
+.eng-mana {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-height: 17px;
+}
+.mana-pip {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.62);
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.mana-w {
+  background: var(--mtg-w);
+}
+.mana-u {
+  background: var(--mtg-u);
+}
+.mana-b {
+  background: var(--mtg-b);
+}
+.mana-r {
+  background: var(--mtg-r);
+}
+.mana-g {
+  background: var(--mtg-g);
+}
+.mana-c {
+  background: var(--mtg-c);
+}
+.mana-pip.restricted {
+  outline: 1px dashed var(--accent);
+  outline-offset: 1px;
+}
+.mana-more {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  align-self: center;
+}
+
+/* Library / graveyard / exile side by side, each as a pile of real thickness. */
+.eng-zones {
+  display: flex;
+  gap: 10px;
+}
+.eng-zones .rail-pile-card {
+  width: 40px;
+  height: 56px;
+  /* Shallower edges than a full-size pile, so 40px of card still reads. */
+  box-shadow: calc(var(--depth, 0) * 1.5px) calc(var(--depth, 0) * 1.5px) 0 -0.5px #1b2620,
+    calc(var(--depth, 0) * 3px) calc(var(--depth, 0) * 3px) 0 -1px #131c17,
+    calc(var(--depth, 0) * 4.5px) calc(var(--depth, 0) * 4.5px) 0 -1.5px #0c110e,
+    0 3px 7px rgba(0, 0, 0, 0.45);
+}
+.eng-zones .pile-count {
+  min-width: 15px;
+  font-size: 9px;
+  line-height: 13px;
+}
+.eng-zones .rail-pile-label {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ---- Reference column: card text and the log ---- */
+.eng-side {
   flex: 0 0 auto;
   width: 214px;
   display: flex;
   flex-direction: column;
   background: var(--bg-deep);
-  border-right: 1px solid var(--border);
-  overflow-y: auto;
-}
-.eng-status {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.eng-status + .eng-status {
-  border-top: 1px solid var(--border);
-}
-.eng-status.active {
-  background: rgba(224, 165, 46, 0.06);
-}
-.eng-status-name {
-  display: flex;
-  align-items: center;
-  font-weight: 700;
-  font-size: 14px;
-}
-.pp-active-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  margin-left: 6px;
-}
-.eng-prio-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #4caf50;
-  margin-left: 6px;
-}
-.eng-status-stats {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.eng-life {
-  font-weight: 700;
-  font-size: 17px;
-  padding: 2px 8px;
-  border-radius: 6px;
-}
-.eng-life.targetable {
-  cursor: crosshair;
-  outline: 2px solid #e05a5a;
-}
-.eng-count {
-  color: var(--muted);
-  font-size: 13px;
-}
-.eng-mana {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  min-height: 18px;
-}
-.eng-mana-pip {
-  color: var(--on-accent);
-  font-weight: 700;
-  font-size: 12px;
-  border-radius: 8px;
-  padding: 0 6px;
+  border-left: 1px solid var(--border);
+  min-height: 0;
 }
 
-/* Library / graveyard / exile side by side. */
-.eng-zones {
-  display: flex;
-  gap: 8px;
-}
-.eng-zones .rail-pile-card {
-  width: 56px;
-  height: 78px;
-}
-.eng-zones .rail-pile-label {
-  font-size: 10px;
-}
-
-/* ---- Centre: hands + battlefields ---- */
+/* ---- Centre: the two seats, meeting at the table's centre line ---- */
 .eng-center {
+  position: relative; /* anchors the stack */
   flex: 1 1 0;
   min-width: 0;
   display: flex;
@@ -123,13 +280,33 @@
 }
 .eng-seat {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   min-height: 0;
   flex: 1 1 0;
 }
+.eng-seat-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 /* Bottom player's battlefield sits above their hand (hand at the outer edge). */
-.eng-seat.bottom {
+.eng-seat.bottom .eng-seat-stack {
   justify-content: flex-end;
+}
+
+/* Where the two halves meet. */
+.eng-seam {
+  flex: 0 0 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(201, 162, 83, 0.16) 12%,
+    rgba(201, 162, 83, 0.42) 50%,
+    rgba(201, 162, 83, 0.16) 88%,
+    transparent 100%
+  );
 }
 
 /* A hand is a compact fan along the seat's outer edge: only the top of each card
@@ -203,12 +380,9 @@
   flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 10px 14px;
   overflow: auto;
-}
-.eng-seat.top .eng-battlefield {
-  border-bottom: 1px solid var(--border);
 }
 .eng-lands,
 .eng-creatures,
@@ -218,8 +392,20 @@
   gap: 10px;
   align-content: flex-start;
 }
+/* Creatures take the room that is going spare, which keeps them fronting the
+   centre line and holds the lands against the player's own edge. The top seat's
+   creatures settle at the bottom of that room, which is where the centre line
+   is for them. */
 .eng-creatures {
   flex: 1 1 auto;
+}
+.eng-seat.top .eng-creatures {
+  align-content: flex-end;
+}
+/* Lands are the back row: still readable, but not competing with the creatures
+   for attention or for width. */
+.eng-lands {
+  gap: 7px;
 }
 
 /* Board card sizing in engine mode */
@@ -228,8 +414,15 @@
   height: 140px;
   cursor: default;
 }
+.play-area.engine .eng-lands .board-card {
+  width: 84px;
+  height: 117px;
+}
 .play-area.engine .board-card.tapped {
   margin: 0 20px; /* room for the rotation */
+}
+.play-area.engine .eng-lands .board-card.tapped {
+  margin: 0 16px;
 }
 .board-card.atk {
   outline: 3px solid #e0a52e;
@@ -304,71 +497,109 @@
   color: var(--muted);
 }
 
-/* Floating stack overlay (right-centre of the table) */
-.eng-stack-overlay {
+/* ---- The stack: a pile of objects lying on the centre line ----
+   The object that resolves next is on top; the rest peek out below it in the
+   order they will resolve. Only the cards take the mouse, so the board behind
+   the pile stays clickable. */
+.eng-stack {
   position: absolute;
   top: 50%;
-  right: 150px;
+  right: 22px;
   transform: translateY(-50%);
   z-index: 900;
-  width: 210px;
-  max-height: 80%;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px;
-  background: rgba(10, 11, 14, 0.94);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  width: 226px;
+  pointer-events: none;
 }
 .eng-stack-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-.eng-stack-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: var(--panel-2);
+  gap: 7px;
+  margin-bottom: 7px;
+  padding-left: 2px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow: 0 1px 4px #000;
+}
+.eng-stack-n {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--on-accent);
+  background: var(--accent);
   border-radius: 8px;
-  padding: 4px;
+  padding: 0 6px;
+}
+/* Each card is pulled up over the one before it, leaving a readable sliver. */
+.eng-stack-fan {
+  display: flex;
+  flex-direction: column;
+}
+.eng-stack-card {
+  position: relative;
+  pointer-events: auto;
+  display: flex;
+  /* Names sit along the bottom edge, which is the part of a buried card that
+     still shows once the one above it covers the rest. */
+  align-items: flex-end;
+  gap: 9px;
+  padding: 5px;
+  border: 1px solid var(--border-bright);
+  border-radius: 9px;
+  background: linear-gradient(180deg, #1f2a24 0%, #141d18 100%);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+  transition: translate 0.12s ease-out;
+}
+.eng-stack-card + .eng-stack-card {
+  margin-top: -32px;
+}
+.eng-stack-card:hover {
+  translate: -8px 0;
 }
 .eng-stack-card.top {
-  outline: 2px solid var(--accent);
+  border-color: var(--accent);
 }
 .eng-stack-card.targetable {
   cursor: crosshair;
-  outline: 2px solid #e05a5a;
+  border-color: #e05a5a;
+  box-shadow: 0 0 0 1px #e05a5a, 0 8px 20px rgba(0, 0, 0, 0.6);
 }
-.eng-stack-card img {
-  width: 40px;
-  height: 56px;
-  border-radius: 4px;
+.eng-stack-card img,
+.eng-stack-ability {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 59px;
+  border-radius: 5px;
   object-fit: cover;
+  object-position: 50% 14%;
 }
 .eng-stack-ability {
-  width: 40px;
-  height: 56px;
-  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #2e2356;
-  font-size: 20px;
+  background: linear-gradient(180deg, #2f2a48 0%, #201d33 100%);
+  color: var(--accent);
+  font-size: 19px;
+}
+.eng-stack-info {
+  min-width: 0;
 }
 .eng-stack-cardname {
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.15;
 }
 .eng-stack-next {
+  font-family: var(--font-ui);
   font-size: 10px;
+  font-weight: 600;
   color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
 }
 
 /* Phase bar: the turn's steps, current one lit, stop markers per step. */
@@ -685,15 +916,16 @@
   font-size: 13px;
 }
 
-/* ---- Game log (bottom of the sidebar) ---- */
+/* ---- Game log (bottom of the reference column) ---- */
 .eng-log {
   flex: 1 1 0;
   min-height: 90px;
   overflow-y: auto;
   padding: 8px 10px;
   border-top: 1px solid var(--border);
-  font-size: 11px;
-  line-height: 1.45;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
   color: var(--muted);
 }
 .eng-log-line {
@@ -742,15 +974,14 @@
   font-weight: 700;
 }
 
-/* ---- Card inspector (sidebar) ---- */
+/* ---- Card inspector (top of the reference column) ---- */
 .eng-inspector {
   flex: 0 0 auto;
-  max-height: 34%;
+  max-height: 46%;
   overflow-y: auto;
-  padding: 8px 10px;
-  border-top: 1px solid var(--border);
+  padding: 9px 10px;
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 .eng-inspector-head {
   display: flex;
@@ -936,4 +1167,25 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 2px 8px;
+}
+
+/* ---- Narrower tables: the board keeps its width, the chrome gives way ---- */
+@media (max-width: 1280px) {
+  .eng-rail {
+    width: 148px;
+    padding: 8px 10px;
+  }
+  .eng-side {
+    width: 186px;
+  }
+  .eng-zones {
+    gap: 7px;
+  }
+}
+@media (max-width: 1080px) {
+  /* Card text is on the card and in the tooltip; the log is the first thing
+     that can go when there is no room for it. */
+  .eng-side {
+    display: none;
+  }
 }

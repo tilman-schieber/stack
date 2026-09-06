@@ -63,7 +63,10 @@
   pointer-events: none;
 }
 
-/* A card on the board */
+/* A card on the board: an object lying on the felt. It casts a shadow at rest,
+   lifts towards you under the cursor, and turns rather than jumps when it taps.
+   `rotate` and `translate` are set separately so tapping and lifting compose
+   instead of overwriting each other. */
 .board-card {
   position: relative;
   width: 90px;
@@ -71,7 +74,8 @@
   border-radius: 5px;
   cursor: grab;
   user-select: none;
-  transition: transform 0.1s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 5px 12px rgba(0, 0, 0, 0.4);
+  transition: rotate 0.22s cubic-bezier(0.2, 0.7, 0.3, 1), translate 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 .board-card img {
   width: 100%;
@@ -79,8 +83,18 @@
   border-radius: 5px;
   display: block;
 }
+.board-card:hover {
+  translate: 0 -5px;
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.6), 0 12px 24px rgba(0, 0, 0, 0.55);
+  z-index: 4;
+}
 .board-card.tapped {
-  transform: rotate(90deg);
+  rotate: 90deg;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-card {
+    transition: none;
+  }
 }
 
 /* Card back (face-down, library, hidden hands) */
@@ -93,18 +107,30 @@
   background: repeating-linear-gradient(135deg, #263329 0 5px, #1c2721 5px 10px);
 }
 
-/* Zone piles (library / graveyard / exile) */
+/* Zone piles (library / graveyard / exile). `--depth` scales the drawn edges of
+   the cards underneath, so a full library reads as thick. */
 .rail-pile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 .rail-pile-card {
   position: relative;
   width: 84px;
   height: 117px;
+  border-radius: 4px;
+  box-shadow: calc(var(--depth, 0) * 2px) calc(var(--depth, 0) * 2px) 0 -0.5px #1b2620,
+    calc(var(--depth, 0) * 4px) calc(var(--depth, 0) * 4px) 0 -1px #131c17,
+    calc(var(--depth, 0) * 6px) calc(var(--depth, 0) * 6px) 0 -1.5px #0c110e,
+    0 4px 10px rgba(0, 0, 0, 0.45);
+  transition: translate 0.12s ease-out;
+}
+.rail-pile-card.openable {
   cursor: pointer;
+}
+.rail-pile-card.openable:hover {
+  translate: 0 -3px;
 }
 .rail-pile-card img {
   width: 100%;
@@ -124,17 +150,23 @@
 }
 .pile-count {
   position: absolute;
-  bottom: 3px;
-  right: 3px;
-  background: rgba(0, 0, 0, 0.82);
-  border-radius: 8px;
-  padding: 0 6px;
-  font-size: 12px;
-  font-weight: 700;
+  bottom: -3px;
+  right: -4px;
+  min-width: 17px;
+  text-align: center;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-bright);
+  border-radius: 9px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 15px;
+  color: var(--text);
 }
 .rail-pile-label {
+  font-family: var(--font-ui);
   font-size: 11px;
-  color: var(--muted);
+  color: var(--faint);
 }
 
 /* Context / ability menu */

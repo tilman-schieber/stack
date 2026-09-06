@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
-import { EngineCard, Pile, ManaPool, HelperCard, isCreature, isLand } from './engine/EngineCard.jsx'
+import { EngineCard, Pile, ManaPool, LifePlate, HelperCard, isCreature, isLand } from './engine/EngineCard.jsx'
 import Prompt from './engine/Prompt.jsx'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
 import { ZoneViewer, SearchOverlay, ScryOverlay, LookTopOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
@@ -600,26 +600,36 @@ export default function EnginePlayArea() {
   const bottom = view.players[mySeat]
   const top = view.players[mySeat === 0 ? 1 : 0]
 
-  // Player status + zones live in the left sidebar, one block per player.
-  const statusColumn = (p) => (
+  // A player's own end of the table: who they are, their life, their unspent
+  // mana and their three piles, in a rail down the outer edge of their half.
+  const seatRail = (p) => {
+    // Seat names carry the deck in brackets ("Computer (Mono Red Rally)"). The
+    // rail is narrow, so the placard gives each its own line instead of cutting
+    // the whole thing off mid-word.
+    const parts = /^(.*?)\s*\((.+)\)\s*$/.exec(p.name)
+    const who = parts ? parts[1] : p.name
+    const deck = parts ? parts[2] : null
+    return (
     <div
-      className={'eng-status' + (view.activePlayer === p.id ? ' active' : '')}
+      className={'eng-rail' + (view.activePlayer === p.id ? ' active' : '') + (p.id === mySeat ? ' mine' : '')}
       key={p.id}
     >
-      <div className="eng-status-name">
-        {p.name}
-        {view.activePlayer === p.id && <span className="pp-active-dot" title="Active player" />}
-        {view.priorityPlayer === p.id && <span className="eng-prio-dot" title="Has priority" />}
+      <div className="eng-rail-placard" title={p.name}>
+        <div className="eng-rail-name">
+          <span className="eng-rail-who">{who}</span>
+          {view.activePlayer === p.id && <span className="pp-active-dot" title="Active player" />}
+          {view.priorityPlayer === p.id && <span className="eng-prio-dot" title="Has priority" />}
+        </div>
+        {deck && <div className="eng-rail-deck">{deck}</div>}
       </div>
-      <div className="eng-status-stats">
-        <span
-          className={'eng-life ' + (targeting && wantsPlayer ? 'targetable' : '')}
-          onClick={() => onPlayerTarget(p.id)}
-          title={targeting && wantsPlayer ? 'Target this player' : 'Life'}
-        >
-          ❤ {p.life}
-        </span>
-        <span className="eng-count" title="Cards in hand">
+      <LifePlate
+        life={p.life}
+        targetable={targeting && wantsPlayer}
+        onClick={() => onPlayerTarget(p.id)}
+        title={targeting && wantsPlayer ? `Target ${p.name}` : `${p.name}'s life total`}
+      />
+      <div className="eng-rail-counts">
+        <span className="eng-count" title={`${p.handCount} card${p.handCount === 1 ? '' : 's'} in hand`}>
           ✋ {p.handCount}
         </span>
         {Object.entries(p.counters || {})
@@ -727,10 +737,11 @@ export default function EnginePlayArea() {
         </div>
       )}
     </div>
-  )
+    )
+  }
 
   // A hand whose cards are all hidden from this viewer (the computer's, an online
-  // opponent's) isn't drawn at all — the count is in the sidebar and the space is
+  // opponent's) isn't drawn at all — the count is on their rail and the space is
   // better spent on the battlefield. Visible hands are a compact fan: card tops
   // showing, a card rising on hover; right-click still zooms.
   const handHidden = (p) => p.hand.length > 0 && p.hand.every((c) => c.hidden)
@@ -799,9 +810,13 @@ export default function EnginePlayArea() {
           ) : null
 
         // Lands are rendered individually (not piled) so their tapped state is
-        // always visible.
+        // always visible. The creature row is drawn even when empty: it is the
+        // row that grows, and it is what holds the lands against the player's
+        // own edge instead of letting them drift to the centre line.
         const landsEl = cardRow(lands, 'eng-lands', 'lands')
-        const creaturesEl = cardRow(creatures, 'eng-creatures', 'creatures')
+        const creaturesEl = cardRow(creatures, 'eng-creatures', 'creatures') || (
+          <div className="eng-creatures" key="creatures" />
+        )
         const othersEl = cardRow(others, 'eng-others', 'others')
         const bands =
           place === 'bottom'
@@ -812,14 +827,16 @@ export default function EnginePlayArea() {
     </div>
   )
 
-  // A seat = one player's hand + battlefield. Hands sit at the outer edges
-  // (top player's above their board, bottom player's below), battlefields meet
-  // in the middle.
+  // A seat = one player's own end of the table: their rail down the outer edge,
+  // their hand at the far edge, their battlefield facing the centre line.
   const seat = (p, place) => (
     <div className={'eng-seat ' + place} key={p.id}>
-      {place === 'top' && handRow(p)}
-      {battlefield(p, place)}
-      {place === 'bottom' && handRow(p)}
+      {seatRail(p)}
+      <div className="eng-seat-stack">
+        {place === 'top' && handRow(p)}
+        {battlefield(p, place)}
+        {place === 'bottom' && handRow(p)}
+      </div>
     </div>
   )
 
@@ -942,24 +959,22 @@ export default function EnginePlayArea() {
       </div>
 
       <div className="eng-table">
-        <div className="eng-sidebar">
-          {statusColumn(top)}
-          {statusColumn(bottom)}
+        <div className="eng-center">
+          {seat(top, 'top')}
+          <div className="eng-seam" />
+          {seat(bottom, 'bottom')}
+          <StackOverlay
+            stack={view.stack}
+            targeting={!!(targeting && wantsSpell)}
+            onItem={onStackItem}
+            onZoom={setZoom}
+          />
+        </div>
+        <div className="eng-side">
           <Inspector card={hover || zoom} />
           <GameLog log={view.log || []} />
         </div>
-        <div className="eng-center">
-          {seat(top, 'top')}
-          {seat(bottom, 'bottom')}
-        </div>
       </div>
-
-      <StackOverlay
-        stack={view.stack}
-        targeting={!!(targeting && wantsSpell)}
-        onItem={onStackItem}
-        onZoom={setZoom}
-      />
 
       {(kind === 'lookAtHand' || kind === 'chooseFromHand') && (
         <HandRevealOverlay

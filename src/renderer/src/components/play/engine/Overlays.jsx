@@ -301,36 +301,43 @@ export function ZoomOverlay({ card, onClose }) {
   )
 }
 
-// Floating stack, top-of-stack first ("resolves next"). Hidden when empty.
+// The stack as a physical pile at the centre line: the object that resolves next
+// lies on top and in full, the ones under it peek out below in the order they
+// will resolve. Hidden when empty.
 export function StackOverlay({ stack, targeting, onItem, onZoom }) {
   if (!stack.length) return null
   const topFirst = [...stack].reverse()
   return (
-    <div className="eng-stack-overlay">
-      <div className="eng-stack-title">Stack ({stack.length})</div>
-      {topFirst.map((item, i) => (
-        <div
-          key={item.oid}
-          className={'eng-stack-card ' + (targeting ? 'targetable ' : '') + (i === 0 ? 'top' : '')}
-          onClick={() => onItem(item)}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            if (item.cardId) onZoom?.(item)
-          }}
-          title={item.name}
-        >
-          {item.cardId ? (
-            <img src={cardImageUrl(item.cardId, item.face)} alt="" draggable={false} />
-          ) : (
-            <div className="eng-stack-ability">✦</div>
-          )}
-          <div className="eng-stack-info">
-            <div className="eng-stack-cardname">{item.name}</div>
-            {item.targetNames?.length > 0 && <div className="eng-stack-targets">→ {item.targetNames.join(', ')}</div>}
-            {i === 0 && <div className="eng-stack-next">resolves next</div>}
+    <div className="eng-stack">
+      <div className="eng-stack-title">
+        The stack <span className="eng-stack-n">{stack.length}</span>
+      </div>
+      <div className="eng-stack-fan">
+        {topFirst.map((item, i) => (
+          <div
+            key={item.oid}
+            className={'eng-stack-card' + (targeting ? ' targetable' : '') + (i === 0 ? ' top' : '')}
+            style={{ '--i': i, zIndex: topFirst.length - i }}
+            onClick={() => onItem(item)}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              if (item.cardId) onZoom?.(item)
+            }}
+            title={item.name}
+          >
+            {item.cardId ? (
+              <img src={cardImageUrl(item.cardId, item.face)} alt="" draggable={false} />
+            ) : (
+              <div className="eng-stack-ability">✦</div>
+            )}
+            <div className="eng-stack-info">
+              <div className="eng-stack-cardname">{item.name}</div>
+              {item.targetNames?.length > 0 && <div className="eng-stack-targets">→ {item.targetNames.join(', ')}</div>}
+              {i === 0 && <div className="eng-stack-next">resolves next</div>}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   )
 }
