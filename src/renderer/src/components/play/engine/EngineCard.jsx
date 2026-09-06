@@ -11,7 +11,9 @@ export const isLand = (c) => c.types?.includes('Land')
 
 // One permanent / stack card, styled from play.css .board-card.
 // Right-click zooms (via onZoom); left-click acts (via onClick).
-export function EngineCard({ card, className = '', onClick, onZoom, onHover, title }) {
+// `zone` tags the card for the motion layer (see lib/boardMotion.js): it diffs
+// consecutive views by oid and zone to decide what moved where.
+export function EngineCard({ card, className = '', onClick, onZoom, onHover, title, zone }) {
   // Tokens have no fixed printing — resolve their art from the token-art store.
   const key = card.token && card.tokenDef ? tokenKey(card.tokenDef) : null
   const artId = useTokenArt((s) => (key ? s.cache[key]?.chosenId : null))
@@ -25,6 +27,8 @@ export function EngineCard({ card, className = '', onClick, onZoom, onHover, tit
   return (
     <div
       className={'board-card ' + (card.tapped ? 'tapped ' : '') + className}
+      data-oid={zone ? card.oid : undefined}
+      data-zone={zone}
       onClick={onClick}
       onContextMenu={(e) => {
         e.preventDefault()
@@ -38,6 +42,14 @@ export function EngineCard({ card, className = '', onClick, onZoom, onHover, tit
       {card.faceDown && <span className="eng-facedown">{card.realName ? '?' : ''}</span>}
       {isCreature(card) && pt && <span className="eng-pt">{pt}</span>}
       {card.damage > 0 && <span className="eng-dmg">{card.damage}</span>}
+      {/* How close to dead it is, without doing the arithmetic yourself. */}
+      {card.damage > 0 && card.toughness > 0 && (
+        <span
+          className="eng-dmgbar"
+          style={{ '--hurt': Math.min(1, card.damage / card.toughness) }}
+          title={`${card.damage} damage marked, toughness ${card.toughness}`}
+        />
+      )}
       {card.loyalty != null && <span className="eng-loyalty">◆ {card.loyalty}</span>}
       {card.defense != null && <span className="eng-loyalty" title="Defense">🛡 {card.defense}</span>}
       {card.ringBearer && <span className="eng-badge ring" title="Your Ring-bearer: legendary, can't be blocked by creatures with greater power (and more as the Ring tempts you)">💍</span>}
@@ -112,13 +124,19 @@ export function HelperCard({ def, label, sub, info, dungeon, onZoom, onHover }) 
 // A zone as a physical pile: the top card (or a card back) with the edges of the
 // cards underneath showing behind it, so a full library looks thick and a nearly
 // empty one looks thin. Depth saturates around 40 cards.
-export function Pile({ label, count, topCard, faceDown, onOpen }) {
+export function Pile({ label, count, topCard, faceDown, onOpen, zone, player }) {
   const depth = count === 0 ? 0 : Math.min(1, 0.3 + count / 45)
   const openable = !!onOpen && count > 0
   return (
     <div className="rail-pile">
       <div
         className={'rail-pile-card' + (count === 0 ? ' empty' : '') + (openable ? ' openable' : '')}
+        // The motion layer flies cards to and from these: the top of a face-up
+        // pile is a real object, and the library is where new cards come from.
+        data-oid={zone && topCard?.oid ? topCard.oid : undefined}
+        data-zone={zone}
+        data-pile={zone}
+        data-player={player}
         title={count === 0 ? `${label} — empty` : `${label} (${count})${openable ? ' — click to look through it' : ''}`}
         onClick={openable ? onOpen : undefined}
         style={{ '--depth': depth }}

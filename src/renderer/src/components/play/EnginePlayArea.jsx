@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useEngineGame } from '../../store/engineGame.js'
 import { EngineCard, Pile, ManaPool, LifePlate, HelperCard, isCreature, isLand } from './engine/EngineCard.jsx'
 import Prompt from './engine/Prompt.jsx'
+import MotionLayer from './engine/Motion.jsx'
+import { useBoardMotion } from '../../lib/boardMotion.js'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
 import { ZoneViewer, SearchOverlay, ScryOverlay, LookTopOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
 import '../../play.css'
@@ -126,6 +128,11 @@ export default function EnginePlayArea() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [zoom, abilityMenu, cast, pendingKind, myTurn, chooseRaw, gameOn, setYield]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Watches for cards that changed zone between this view and the last one, and
+  // for damage newly marked, so the board can show the move instead of just the
+  // result. Called before the early return: hooks must run on every render.
+  const { flights, hits } = useBoardMotion(view)
 
   if (!view) return null
   const pending = view.pending || {}
@@ -642,17 +649,21 @@ export default function EnginePlayArea() {
       </div>
       <ManaPool pool={p.manaPool} restricted={p.restrictedMana} />
       <div className="eng-zones">
-        <Pile label="Library" count={p.libraryCount} faceDown />
+        <Pile label="Library" count={p.libraryCount} faceDown zone="library" player={p.id} />
         <Pile
           label="Graveyard"
           count={p.graveyard.length}
           topCard={p.graveyard[p.graveyard.length - 1]}
+          zone="graveyard"
+          player={p.id}
           onOpen={() => setZoneView({ pid: p.id, zone: 'graveyard' })}
         />
         <Pile
           label="Exile"
           count={p.exile.length}
           topCard={p.exile[p.exile.length - 1]}
+          zone="exile"
+          player={p.id}
           onOpen={() => setZoneView({ pid: p.id, zone: 'exile' })}
         />
       </div>
@@ -744,7 +755,9 @@ export default function EnginePlayArea() {
   // opponent's) isn't drawn at all — the count is on their rail and the space is
   // better spent on the battlefield. Visible hands are a compact fan: card tops
   // showing, a card rising on hover; right-click still zooms.
-  const handHidden = (p) => p.hand.length > 0 && p.hand.every((c) => c.hidden)
+  // An empty hand is drawn as nothing rather than as an empty 84px strip: the
+  // count is on the player's rail, and the row comes back with the next draw.
+  const handHidden = (p) => p.hand.length === 0 || p.hand.every((c) => c.hidden)
   const handRow = (p) => (
     <div className={'eng-hand' + (handHidden(p) ? ' hidden' : '')} data-player={p.id}>
       {!handHidden(p) && p.hand.map((c) => {
@@ -760,6 +773,7 @@ export default function EnginePlayArea() {
           <div className="eng-hand-slot" key={c.oid}>
             <EngineCard
               card={c}
+              zone="hand"
               className={
                 'eng-hand-card ' +
                 (playable ? 'playable ' : '') +
@@ -799,6 +813,7 @@ export default function EnginePlayArea() {
                 <EngineCard
                   key={c.oid}
                   card={c}
+                  zone="bf"
                   className={bfClass(c, p.id)}
                   onClick={(ev) => onBattlefieldCard(c, p.id, ev)}
                   onZoom={setZoom}
@@ -1015,6 +1030,8 @@ export default function EnginePlayArea() {
         </div>
       )}
 
+
+      <MotionLayer flights={flights} hits={hits} />
 
       {/* One strip at your end of the table: what the game is asking, and every
           control for answering it. It replaces the old turn bar and prompt bar,

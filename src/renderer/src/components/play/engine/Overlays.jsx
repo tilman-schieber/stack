@@ -317,6 +317,9 @@ export function StackOverlay({ stack, targeting, onItem, onZoom }) {
           <div
             key={item.oid}
             className={'eng-stack-card' + (targeting ? ' targetable' : '') + (i === 0 ? ' top' : '')}
+            data-oid={item.oid}
+            data-zone="stack"
+            data-player={item.controller}
             style={{ '--i': i, zIndex: topFirst.length - i }}
             onClick={() => onItem(item)}
             onContextMenu={(e) => {

@@ -1276,3 +1276,104 @@
     padding: 6px 8px;
   }
 }
+
+/* ---- Motion: cards in transit, and damage thrown off a creature ----
+   The layer covers the window and takes no clicks, so a flight can cross a
+   hand's clip edge or a battlefield's scroll box without being cut off. */
+.eng-motion {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  pointer-events: none;
+}
+.eng-flight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 5px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.6);
+  will-change: transform;
+}
+.eng-flight img,
+.eng-flight .cardback {
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  display: block;
+  object-fit: cover;
+}
+.eng-hit {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+  color: #ef8f76;
+  text-shadow: 0 2px 6px #000, 0 0 14px rgba(192, 84, 66, 0.7);
+  animation: eng-hit-float 1s ease-out forwards;
+}
+@keyframes eng-hit-float {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -62%) scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -140%) scale(1);
+  }
+}
+
+/* How close a damaged creature is to dying, along its bottom edge. */
+.eng-dmgbar {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.eng-dmgbar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  transform: scaleX(var(--hurt, 0));
+  background: linear-gradient(90deg, #c05442, #ef8f76);
+  transition: transform 0.25s ease-out;
+}
+
+/* Combat: creatures step toward the centre line, so who is fighting reads off
+   the board rather than off the log. Written as `translate` so it composes with
+   a tapped card's `rotate`; the hover lift restates it, since one `translate`
+   would otherwise replace the other. */
+.eng-seat.bottom .board-card.atk,
+.eng-seat.bottom .board-card.blk {
+  translate: 0 -12px;
+}
+.eng-seat.top .board-card.atk,
+.eng-seat.top .board-card.blk {
+  translate: 0 12px;
+}
+.eng-seat.bottom .board-card.atk:hover,
+.eng-seat.bottom .board-card.blk:hover {
+  translate: 0 -17px;
+}
+.eng-seat.top .board-card.atk:hover,
+.eng-seat.top .board-card.blk:hover {
+  translate: 0 7px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .eng-hit {
+    animation: none;
+    opacity: 1;
+  }
+  .eng-dmgbar::after {
+    transition: none;
+  }
+}
