@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
 import { cardImageUrl, boardImageSize } from '../../../lib/cardUtils.js'
 
@@ -58,35 +58,75 @@ export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose 
   )
 }
 
-// Library search: pick one card (deduped by name), or take nothing if optional.
+// Library search: pick one card, or take nothing if optional.
+//
+// Searching a library means looking through all of it (701.19a), so the whole
+// library is available behind a toggle — sorted by name, never in library
+// order, which would give away the shuffle. Only the cards the effect can find
+// are clickable; the rest are there to be read.
 export function SearchOverlay({ pending, onPick, onNone }) {
+  const [all, setAll] = useState(false)
+  const matches = pending.cards || []
+  const library = pending.library || []
+  const canPick = new Set(matches.map((c) => c.oid))
+
   const unique = []
   const seen = new Set()
-  for (const c of pending.cards) {
+  for (const c of matches) {
     if (!seen.has(c.name)) {
       seen.add(c.name)
       unique.push(c)
     }
   }
+  // The whole library, deduped by name with a count, alphabetical.
+  const byName = new Map()
+  for (const c of library) {
+    const at = byName.get(c.name)
+    if (at) at.n++
+    else byName.set(c.name, { card: c, n: 1 })
+  }
+  const whole = [...byName.values()].sort((a, b) => a.card.name.localeCompare(b.card.name))
+  const shown = all ? whole : unique.map((c) => ({ card: c, n: 0 }))
+
   return (
     <div className="eng-scry">
       <div className="eng-scry-panel">
         <div className="eng-scry-title">
-          Search your library — choose a card{pending.optional ? ' (or take nothing)' : ''}
+          {all
+            ? `Your library — ${library.length} cards, ${matches.length} of them findable`
+            : `Search your library — choose a card${pending.optional ? ' (or take nothing)' : ''}`}
         </div>
-        <div className="eng-scry-cards">
-          {unique.map((c) => (
-            <div className="eng-scry-card" key={c.oid} onClick={() => onPick(c.oid)} title={c.name}>
-              {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
-              <div className="eng-scry-dest">{c.name}</div>
-            </div>
-          ))}
+        <div className="eng-scry-cards eng-search-grid">
+          {shown.map(({ card, n }) => {
+            const pickable = canPick.has(card.oid) || (!all && true)
+            return (
+              <div
+                className={'eng-scry-card' + (pickable ? '' : ' dim')}
+                key={card.oid}
+                onClick={() => pickable && onPick(card.oid)}
+                title={pickable ? card.name : `${card.name} — this search cannot find it`}
+              >
+                {card.cardId ? <img src={cardImageUrl(card.cardId)} alt={card.name} /> : <div className="cardback" />}
+                <div className="eng-scry-dest">
+                  {card.name}
+                  {n > 1 && <span className="muted"> ×{n}</span>}
+                </div>
+              </div>
+            )
+          })}
         </div>
-        {pending.optional && (
-          <button className="mini" onClick={onNone}>
-            Take nothing
-          </button>
-        )}
+        <div className="eng-scry-actions">
+          {library.length > 0 && (
+            <button className="mini" onClick={() => setAll((v) => !v)}>
+              {all ? 'Show only what this finds' : `Look through the whole library (${library.length})`}
+            </button>
+          )}
+          {pending.optional && (
+            <button className="mini" onClick={onNone}>
+              Take nothing
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -1517,3 +1517,25 @@
   border-radius: 1px;
   background: linear-gradient(180deg, rgba(201, 162, 83, 0.55), rgba(201, 162, 83, 0.12));
 }
+
+/* Looking through a whole library: many cards, so they wrap and scroll. */
+.eng-search-grid {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  max-height: 62vh;
+  overflow-y: auto;
+  padding: 2px;
+}
+.eng-search-grid .eng-scry-card img,
+.eng-search-grid .eng-scry-card .cardback {
+  width: 118px;
+  height: 165px;
+}
+.eng-search-grid .eng-scry-dest {
+  max-width: 118px;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+}

@@ -962,6 +962,10 @@ export const actionsMethods = {
         moveObject(s, ctx.oid, 'exile')
         s.delayedTriggers.push({ event: 'upkeep', yourTurn: true, controller: o.owner, sourceOid: o.oid, effect: [{ op: 'castFree', oid: o.oid }] })
       } else if (o.omenCast) {
+        // The card goes back rather than to the graveyard, which is the whole
+        // point of an Omen — and the log said nothing about it, so the card
+        // simply vanished off the stack.
+        this._log(`${this._objName(o)} is shuffled into its owner's library (omen)`)
         moveObject(s, ctx.oid, 'library')
         const lk = zoneKey('library', o.owner)
         s.zones[lk] = s.rng.shuffle(s.zones[lk])

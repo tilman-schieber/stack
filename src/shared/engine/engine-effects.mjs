@@ -144,6 +144,10 @@ export const effectsMethods = {
           optional: e.optional !== false,
           reveal: !!e.reveal, // "reveal it": the log names the card
           count: e.count || 1, // "up to three cards named …" — taken together
+          // Searching a library means looking through all of it (701.19a), so
+          // the whole thing is offered — the interface shows it sorted rather
+          // than in library order, which would leak the shuffle.
+          library: [...zone(s, 'library', pid)],
           shuffle: true
         }
         return true

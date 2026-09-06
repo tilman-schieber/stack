@@ -200,6 +200,10 @@ export function projectGame(engine, viewerPid = null) {
       privateToViewer || pending.revealed // a revealed search / "reveal the top four" is public
         ? { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])) }
         : { ...pending, cards: pending.cards.map((oid) => ({ oid, hidden: true })) }
+  // The rest of the library a search may look through is the searcher's alone:
+  // it never goes to another player's view, revealed search or not.
+  if (pending?.kind === 'search')
+    pending = { ...pending, library: privateToViewer ? (pending.library || []).map((oid) => cardView(state.objects[oid])) : [] }
   else if (pending?.kind === 'putBack') pending = { ...pending, hand: privateToViewer ? pending.hand : [] }
   else if (pending?.kind === 'chooseName') pending = { ...pending, _holder: undefined }
   else if (pending?.kind === 'lookAtHand' || pending?.kind === 'chooseFromHand')
