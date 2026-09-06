@@ -3,7 +3,7 @@ import { useEngineGame } from '../../store/engineGame.js'
 import { EngineCard, Pile, ManaPool, HelperCard, isCreature, isLand } from './engine/EngineCard.jsx'
 import Prompt from './engine/Prompt.jsx'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
-import { ZoneViewer, SearchOverlay, ScryOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
+import { ZoneViewer, SearchOverlay, ScryOverlay, LookTopOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
 import '../../play.css'
 import './engine.css'
 
@@ -55,7 +55,8 @@ export default function EnginePlayArea() {
   const [discardSel, setDiscardSel] = useState([])
   const [bottomSel, setBottomSel] = useState([]) // cards to put on the bottom (mulligan)
   const [chooseSel, setChooseSel] = useState([]) // engine-initiated target choice
-  const [scryBottom, setScryBottom] = useState([]) // scry: oids to put on the bottom
+  const [scryBottom, setScryBottom] = useState([]) // scry: oids to put on the bottom (reorder: the chosen top order)
+  const [topSel, setTopSel] = useState([]) // look-at-the-top: cards to take
   const [zoneView, setZoneView] = useState(null) // { pid, zone } graveyard/exile viewer
   const [xInput, setXInput] = useState(0) // X value being chosen for an X spell
   const [ninjutsu, setNinjutsu] = useState(null) // pending ninjutsu action awaiting an attacker
@@ -72,6 +73,7 @@ export default function EnginePlayArea() {
     setBottomSel([])
     setChooseSel([])
     setScryBottom([])
+    setTopSel([])
     setAbilityMenu(null)
     setZoneView(null)
     setXInput(0)
@@ -383,7 +385,7 @@ export default function EnginePlayArea() {
   // just watches (the host/store would ignore the choice anyway).
   function onHandCard(card, pid, ev) {
     if (!myTurn) return
-    if ((kind === 'discard' || kind === 'discardCards') && pid === pending.player) {
+    if ((kind === 'discard' || kind === 'discardCards' || kind === 'putBack') && pid === pending.player) {
       setDiscardSel((sel) =>
         sel.includes(card.oid)
           ? sel.filter((o) => o !== card.oid)
@@ -731,7 +733,7 @@ export default function EnginePlayArea() {
         const a = actionFor(c.oid)
         const playable = kind === 'priority' && p.id === pending.player && !!a && a.type !== 'pass'
         const selecting =
-          ((kind === 'discard' || kind === 'discardCards' || kind === 'bottom') &&
+          ((kind === 'discard' || kind === 'discardCards' || kind === 'bottom' || kind === 'putBack') &&
             p.id === pending.player) ||
           // Picking a card to discard as an additional cost (Grab the Prize).
           (needDiscard && p.id === pending.player && c.oid !== cast.action.oid)
@@ -964,15 +966,30 @@ export default function EnginePlayArea() {
         />
       )}
 
-      {kind === 'scry' && (
+      {kind === 'scry' && myTurn && (
         <ScryOverlay
           pending={pending}
           bottom={scryBottom}
           setBottom={setScryBottom}
-          onConfirm={() => {
+          onConfirm={(shuffle) => {
+            if (pending.noBottom) {
+              // Reorder: clicked cards first (in click order), the rest as they were.
+              const all = pending.cards.map((c) => c.oid)
+              choose({ toTop: [...scryBottom, ...all.filter((oid) => !scryBottom.includes(oid))], toBottom: [], shuffle: !!shuffle })
+              return
+            }
             const toTop = pending.cards.map((c) => c.oid).filter((oid) => !scryBottom.includes(oid))
             choose({ toBottom: scryBottom, toTop })
           }}
+        />
+      )}
+      {kind === 'lookTop' && myTurn && (
+        <LookTopOverlay
+          pending={pending}
+          picks={topSel}
+          setPicks={setTopSel}
+          onConfirm={() => choose({ picks: topSel })}
+          onType={(type) => choose({ type })}
         />
       )}
 

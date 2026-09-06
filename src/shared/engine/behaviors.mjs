@@ -12,6 +12,30 @@
 // Effects are { op, ... } records applied by the engine's effect runner.
 // Targets chosen at cast time are referenced as 'target0', 'target1', …
 
+// Shared shapes for families of cards.
+const FOOD_TOKEN = { name: 'Food', types: ['Artifact'], subtypes: ['Food'], colors: [] }
+// Karoo ("bounce") lands: enter tapped, return a land you control, tap for two.
+const KAROO = (pips) => ({
+  entersTapped: true,
+  manaOptions: [{ pips }],
+  triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'bounceChoose', filter: { type: 'Land' } }] }]
+})
+// The Baldur's Gate Gates: enter tapped, choose a colour, tap for the base colour or it.
+const GATE = (base) => ({ entersTapped: true, mana: [base, 'chosen'], chooseOnEnter: { kind: 'color' } })
+// "Gain lands": enter tapped, gain N life.
+const GAINLAND = (mana, life) => ({ entersTapped: true, mana, triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'gainLife', amount: life }] }] })
+// The Landscapes (MH3): {T}: {C}; {T}, sacrifice: fetch one of three basic types, tapped; cycling parsed.
+const LANDSCAPE = (subtypes) => ({
+  mana: ['C'],
+  activated: [
+    {
+      label: `Sacrifice: search for a basic ${subtypes.join(', ')}`,
+      cost: { tap: true, sacrifice: 'self' },
+      effect: [{ op: 'search', filter: { supertype: 'Basic', type: 'Land', subtypes }, to: 'battlefield', tapped: true }]
+    }
+  ]
+})
+
 export const BEHAVIORS = {
   'Lightning Bolt': {
     spell: {
@@ -1314,6 +1338,119 @@ export const BEHAVIORS = {
   // Recursion: when you draw your third card in a turn, return this from your
   // graveyard to the battlefield tapped. (It's never hard-cast in mono-red.)
   'Sneaky Snacker': { returnOnThirdDraw: true },
+  // ---- Food / Plant tokens ----
+  Food: { activated: [{ cost: { mana: '{2}', tap: true, sacrifice: 'self' }, effect: [{ op: 'gainLife', amount: 3 }] }] },
+
+  // ---- typecycling (parsed from oracle text) ----
+  'Lórien Revealed': { spell: { effect: [{ op: 'draw', amount: 3 }] } },
+  'Generous Ent': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'createToken', token: FOOD_TOKEN }] }] },
+  'Troll of Khazad-dûm': {}, // "except by three or more creatures" + swampcycling, both parsed
+  'Ash Barrens': { mana: ['C'] }, // basic landcycling parsed
+
+  // ---- library manipulation ----
+  'Malevolent Rumble': {
+    spell: {
+      effect: [
+        { op: 'lookAtTop', amount: 4, reveal: true, pick: { max: 1, filter: { permanent: true } }, rest: 'graveyard' },
+        { op: 'createToken', token: { name: 'Eldrazi Spawn', types: ['Creature'], subtypes: ['Eldrazi', 'Spawn'], colors: [], power: 0, toughness: 1 } }
+      ]
+    }
+  },
+  'Winding Way': { spell: { effect: [{ op: 'lookAtTop', amount: 4, reveal: true, chooseType: ['Creature', 'Land'], rest: 'graveyard' }] } },
+  'Lead the Stampede': { spell: { effect: [{ op: 'lookAtTop', amount: 5, pick: { max: 5, filter: { type: 'Creature' } }, rest: 'bottom' }] } },
+  Brainstorm: { spell: { effect: [{ op: 'draw', amount: 3 }, { op: 'putBack', amount: 2 }] } },
+  'Thought Scour': { spell: { targets: [{ type: 'player' }], effect: [{ op: 'mill', amount: 2, to: 'target0' }, { op: 'draw', amount: 1 }] } },
+  'Mental Note': { spell: { effect: [{ op: 'mill', amount: 2 }, { op: 'draw', amount: 1 }] } },
+  Ponder: { spell: { effect: [{ op: 'reorderTop', amount: 3, mayShuffle: true }, { op: 'draw', amount: 1 }] } },
+  'Deep Analysis': { spell: { targets: [{ type: 'player' }], effect: [{ op: 'draw', amount: 2, to: 'target0' }] }, flashback: { cost: '{1}{U}', life: 3 } },
+  'Pursue the Past': { spell: { effect: [{ op: 'gainLife', amount: 2 }, { op: 'discard', amount: 1, optional: true, draw: 2 }] }, flashback: { cost: '{2}{R}{W}' } },
+
+  // ---- utility lands ----
+  // The Urza lands' subtypes are two words ("Urza's Mine"); the parser keeps each
+  // word, so the distinctive second word is what the condition looks for.
+  "Urza's Mine": { mana: ['C'], manaOptions: [{ colors: ['C'], amount: 2, if: { controlsAll: [{ type: 'Land', subtype: 'Power-Plant' }, { type: 'Land', subtype: 'Tower' }] } }] },
+  "Urza's Power Plant": { mana: ['C'], manaOptions: [{ colors: ['C'], amount: 2, if: { controlsAll: [{ type: 'Land', subtype: 'Mine' }, { type: 'Land', subtype: 'Tower' }] } }] },
+  "Urza's Tower": { mana: ['C'], manaOptions: [{ colors: ['C'], amount: 3, if: { controlsAll: [{ type: 'Land', subtype: 'Mine' }, { type: 'Land', subtype: 'Power-Plant' }] } }] },
+  'Boros Garrison': KAROO(['R', 'W']),
+  'Golgari Rot Farm': KAROO(['B', 'G']),
+  'Azorius Chancery': KAROO(['W', 'U']),
+  'Dimir Aqueduct': KAROO(['U', 'B']),
+  'Simic Growth Chamber': KAROO(['G', 'U']),
+  'Citadel Gate': GATE('W'),
+  Cliffgate: GATE('R'),
+  'Manor Gate': GATE('G'),
+  'Sea Gate': GATE('U'),
+  'Black Dragon Gate': GATE('B'),
+  'Basilisk Gate': {
+    mana: ['C'],
+    activated: [
+      {
+        cost: { mana: '{2}', tap: true },
+        sorcerySpeed: true,
+        targets: [{ type: 'creature' }],
+        label: 'Target creature gets +X/+X (X = Gates you control)',
+        effect: [{ op: 'pump', to: 'target0', power: { count: { subtype: 'Gate' } }, toughness: { count: { subtype: 'Gate' } }, duration: 'eot' }]
+      }
+    ]
+  },
+  'Khalni Garden': {
+    entersTapped: true,
+    mana: ['G'],
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'createToken', token: { name: 'Plant', types: ['Creature'], subtypes: ['Plant'], colors: ['G'], power: 0, toughness: 1 } }] }]
+  },
+  'Bojuka Bog': { entersTapped: true, mana: ['B'], triggered: [{ trigger: { event: 'etb', self: true }, targets: [{ type: 'player' }], effect: [{ op: 'exileGraveyard', to: 'target0' }] }] },
+  'Wind-Scarred Crag': GAINLAND(['R', 'W'], 1),
+  'Dimension X': GAINLAND(['R', 'W'], 1),
+  'Kabira Crossroads': GAINLAND(['W'], 2),
+  'Haunted Mire': { entersTapped: true },
+  'Geothermal Bog': { entersTapped: true },
+  'Contaminated Aquifer': { entersTapped: true },
+  'Ice Tunnel': { entersTapped: true },
+  'Idyllic Beachfront': { entersTapped: true },
+  'Glacial Floodplain': { entersTapped: true },
+  'Volatile Fjord': { entersTapped: true },
+  'Wooded Ridgeline': { entersTapped: true },
+  'Tangled Islet': { entersTapped: true },
+  'Polluted Mire': { entersTapped: true, mana: ['B'] },
+  'Barren Moor': { entersTapped: true, mana: ['B'] },
+  'Forgotten Cave': { entersTapped: true, mana: ['R'] },
+  'Ancient Den': { mana: ['W'] },
+  "Serpent's Pass": { entersTapped: true, mana: ['U', 'B'], activated: [{ cost: { mana: '{4}', tap: true, sacrifice: 'self' }, effect: [{ op: 'draw', amount: 1 }] }] },
+  "Titan's Grave": { entersTapped: true, mana: ['B', 'G'], activated: [{ cost: { mana: '{2}{B}{G}', tap: true }, effect: [{ op: 'surveil', amount: 1 }] }] },
+  'Fields of Strife': { entersTapped: true, mana: ['R', 'W'], activated: [{ cost: { mana: '{2}{R}{W}', tap: true }, effect: [{ op: 'surveil', amount: 1 }] }] },
+  'Gingerbread Cabin': {
+    entersTapped: { unless: { controls: { subtype: 'Forest', min: 3, another: true } } },
+    triggered: [{ trigger: { event: 'etb', self: true, ifOnce: { untapped: true } }, effect: [{ op: 'createToken', token: FOOD_TOKEN }] }]
+  },
+  'Contaminated Landscape': LANDSCAPE(['Plains', 'Island', 'Swamp']),
+  'Shattered Landscape': LANDSCAPE(['Mountain', 'Plains', 'Swamp']),
+  'Perilous Landscape': LANDSCAPE(['Island', 'Mountain', 'Plains']),
+  'Foreboding Landscape': LANDSCAPE(['Swamp', 'Forest', 'Island']),
+
+  // ---- mana-tap bonuses and count-based cost reduction ----
+  'Utopia Sprawl': { enchant: { type: 'land', subtype: 'Forest' }, chooseOnEnter: { kind: 'color' }, attachedManaBonus: { color: 'chosen' } },
+  'Wild Growth': { enchant: { type: 'land' }, attachedManaBonus: { color: 'G' } },
+  'Arbor Elf': { activated: [{ cost: { tap: true }, targets: [{ type: 'land', subtype: 'Forest' }], label: 'Untap target Forest', effect: [{ op: 'untap', to: 'target0' }] }] },
+  'Tolarian Terror': { costReduction: { per: { zone: 'graveyard', types: ['Instant', 'Sorcery'] } } }, // ward {2} parsed
+  'Cryptic Serpent': { costReduction: { per: { zone: 'graveyard', types: ['Instant', 'Sorcery'] } } },
+  'Sunscape Familiar': { staticRules: [{ costMod: { spell: { controller: 'you', colorsAny: ['G', 'U'] }, generic: -1 } }] },
+
+  // ---- counter unless pay, conditional counters ----
+  'Mana Tithe': { spell: { targets: [{ type: 'spell' }], effect: [{ op: 'counterUnlessPay', to: 'target0', cost: '{1}' }] } },
+  'Force Spike': { spell: { targets: [{ type: 'spell' }], effect: [{ op: 'counterUnlessPay', to: 'target0', cost: '{1}' }] } },
+  'Spell Pierce': { spell: { targets: [{ type: 'spell', noncreature: true }], effect: [{ op: 'counterUnlessPay', to: 'target0', cost: '{2}' }] } },
+  Prohibit: { spell: { targets: [{ type: 'spell' }], effect: [{ op: 'counter', to: 'target0', maxMv: 2, ifKicked: { maxMv: 4 } }] } }, // kicker {2} parsed
+  Dispel: { spell: { targets: [{ type: 'spell', spellType: 'Instant' }], effect: [{ op: 'counter', to: 'target0' }] } },
+  Negate: { spell: { targets: [{ type: 'spell', noncreature: true }], effect: [{ op: 'counter', to: 'target0' }] } },
+
+  // ---- exile until this leaves ----
+  'Journey to Nowhere': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, targets: [{ type: 'creature' }], effect: [{ op: 'exileLinked', to: 'target0' }] },
+      { trigger: { event: 'leaves:battlefield', self: true }, effect: [{ op: 'returnLinked' }] }
+    ]
+  },
+
   // Blood token: {1}, {T}, Discard a card, Sacrifice: draw a card. The discard is a
   // cost, paid on activation (a discarded madness card is offered right away).
   Blood: {
@@ -1372,7 +1509,20 @@ export function loadBehavior(printed) {
   // Cycling {cost} / Cycling—Pay N life (702.29); Evoke {cost} (702.74).
   const cycMana = /^Cycling ((?:\{[^}]+\})+)/m.exec(text)
   const cycLife = /^Cycling\s*[—-]\s*Pay (\d+) life/m.exec(text)
-  const cycling = authored.cycling || (cycMana ? { cost: cycMana[1] } : cycLife ? { life: Number(cycLife[1]) } : null)
+  // Typecycling (702.29c): "Islandcycling {1}", "Basic landcycling {1}" — searches
+  // for a card of that type instead of drawing.
+  const typeCyc = /^(Plains|Island|Swamp|Mountain|Forest|Basic land|Land)cycling ((?:\{[^}]+\})+)/im.exec(text)
+  const typeCycFilter = typeCyc
+    ? /^basic land$/i.test(typeCyc[1])
+      ? { supertype: 'Basic', type: 'Land' }
+      : /^land$/i.test(typeCyc[1])
+        ? { type: 'Land' }
+        : { subtype: typeCyc[1] }
+    : null
+  const cycling = authored.cycling || (cycMana ? { cost: cycMana[1] } : cycLife ? { life: Number(cycLife[1]) } : typeCyc ? { cost: typeCyc[2], search: typeCycFilter } : null)
+  // "Can't be blocked except by two or more creatures" (Troll of Khazad-dûm: three).
+  const minBlkMatch = /can't be blocked except by (two|three|four|five) or more creatures/i.exec(text)
+  const minBlockers = authored.minBlockers ?? (minBlkMatch ? { two: 2, three: 3, four: 4, five: 5 }[minBlkMatch[1].toLowerCase()] : null)
   const evokeMatch = /^Evoke ((?:\{[^}]+\})+)/m.exec(text)
   const evoke = authored.evoke || (evokeMatch ? { cost: evokeMatch[1] } : null)
   // Crew N (702.122), Buyback / Unearth / Echo {cost}, Suspend N—{cost}.
@@ -1418,7 +1568,10 @@ export function loadBehavior(printed) {
     miracle,
     dredge,
     mutate,
-    manaOptions: authored.manaOptions || null, // [{ colors, amount, only }] — multi-mana / restricted mana (106.6)
+    manaOptions: authored.manaOptions || null, // [{ colors, amount, only, pips, if }] — multi-mana / restricted / fixed-pip / conditional mana (106.6)
+    attachedManaBonus: authored.attachedManaBonus || null, // Aura: { color | 'chosen' } — the enchanted permanent taps for one extra (Wild Growth)
+    costReduction: authored.costReduction || null, // { per: countFilter } — "costs {1} less for each …" (Tolarian Terror)
+    minBlockers,
     saga: authored.saga || null, // { chapters: [effects | { targets, effect }] } (714)
     cantBeBlocked,
     cantBlock,
@@ -1483,7 +1636,12 @@ export function manaAbilityColors(obj) {
     // swaps what it taps for; fall back to printed before chars are computed.
     const subtypes = obj.chars?.subtypes || p.subtypes
     for (const sub of subtypes) if (BASIC_MANA[sub]) out.push(BASIC_MANA[sub]) // basic land types
-    for (const c of obj.behavior?.mana || []) out.push(c) // authored nonbasic mana
+    // Authored nonbasic mana; 'chosen' is the colour picked as it entered (Citadel Gate).
+    for (const c of obj.behavior?.mana || []) {
+      if (c === 'chosen') {
+        if (obj.chosen) out.push(obj.chosen)
+      } else out.push(c)
+    }
   }
   for (const a of obj.behavior?.activated || []) {
     if (a.manaAbility && a.cost?.tap) {

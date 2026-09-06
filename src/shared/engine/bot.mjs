@@ -238,6 +238,26 @@ export function botChoose(engine, pid) {
       const pick = (cards.find((o) => isCreature(o)) || cards.find((o) => isLand(o)) || cards[0])?.oid || null
       return { pick }
     }
+    case 'lookTop': {
+      const cards = p.cards.map((oid) => s.objects[oid])
+      if (p.chooseType) {
+        // Winding Way: the type with more cards among the four (lands if short on them).
+        const counts = Object.fromEntries(p.chooseType.map((t) => [t, cards.filter((o) => o.printed.types.includes(t)).length]))
+        const short = landsInPlay + hand.filter(isLand).length < 4 && counts.Land
+        return { type: short ? 'Land' : p.chooseType.reduce((a, b) => (counts[b] > counts[a] ? b : a)) }
+      }
+      const ok = cards.filter((o) => !p.filter || engine._matchCardFilter(o, p.filter))
+      const ranked = ok.sort((a, b) => (isLand(a) ? 1 : 0) - (isLand(b) ? 1 : 0) || worth(b) - worth(a))
+      return { picks: ranked.slice(0, p.max).map((o) => o.oid) }
+    }
+    case 'putBack': {
+      // Brainstorm: put back what's least useful now — surplus lands, then the priciest spells.
+      const cards = p.hand.map((oid) => s.objects[oid])
+      const lands = cards.filter(isLand)
+      const spells = cards.filter((o) => !isLand(o)).sort((a, b) => mv(b) - mv(a))
+      const order = landsInPlay + lands.length > 5 ? [...lands, ...spells] : [...spells, ...lands]
+      return { cards: order.slice(0, p.count).map((o) => o.oid) }
+    }
     case 'explore':
       return { bin: !isLand(s.objects[p.card]) && mv(s.objects[p.card]) > landsInPlay + 2 }
     case 'mayPay':
@@ -706,6 +726,10 @@ export function botFallback(engine, pid) {
       return { toBottom: [], toTop: p.cards }
     case 'search':
       return { pick: p.optional ? null : p.cards[0] }
+    case 'lookTop':
+      return p.chooseType ? { type: p.chooseType[0] } : { picks: [] }
+    case 'putBack':
+      return { cards: p.hand.slice(0, p.count) }
     case 'madness':
       return { cast: false }
     case 'mayPay':

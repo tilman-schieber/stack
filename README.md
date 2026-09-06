@@ -178,6 +178,18 @@ archetype — Jund Wildfire, White Weenie, Mono Red Rally, Grixis Affinity — a
 every card enforced (sneak, web-slinging, disturb, prepared, connive, flashback by tapping
 creatures, Chain Lightning's copy-back, energy equip, "play it until the end of your next turn").
 
+Also (from a coverage scan of the Paupergeddon Summer 2026 Top 64): typecycling
+(Islandcycling, basic landcycling), "can't be blocked except by three or more creatures", the
+library-manipulation vocabulary (look at / reveal the top N and keep some — Lead the Stampede,
+Malevolent Rumble, Winding Way's type choice; put cards from hand back on top — Brainstorm;
+reorder the top and maybe shuffle — Ponder; mill), utility lands (the Tron lands' conditional
+mana, Karoo bounce lands tapping for two fixed pips, the Gates' chosen colour, Basilisk Gate,
+gain lands, Khalni Garden, Bojuka Bog, typed duals, the Landscapes), an Aura's extra mana when
+the enchanted land is tapped (Wild Growth, Utopia Sprawl — auto-payment counts it), count-based
+cost reduction (Tolarian Terror) and per-colour cost reduction (Sunscape Familiar), "counter
+unless its controller pays" (Mana Tithe, Spell Pierce), Prohibit's kicked threshold, and "exile
+until this leaves the battlefield" (Journey to Nowhere).
+
 Card characteristics come straight from Scryfall data; only cards whose text implies effects
 get an entry in `behaviors.mjs`, written against a small vocabulary of effect ops. Cards
 without an entry play with their printed characteristics. Dredge replaces draws; proliferate, the band controller's damage split, a Siege's protector and London mulligan rounds are all real player decisions. Two-Headed Giant is the one variant not implemented (Baldur's Gate Wilderness, the Commander Legends dungeon, is also left out); no

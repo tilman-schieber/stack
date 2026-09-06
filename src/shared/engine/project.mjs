@@ -190,11 +190,12 @@ export function projectGame(engine, viewerPid = null) {
   // cards are private, so strip them (keep kind/player so "waiting…" can show).
   let pending = state.pending
   const privateToViewer = viewerPid == null || pending?.player === viewerPid
-  if (pending?.kind === 'scry' || pending?.kind === 'search')
+  if (pending?.kind === 'scry' || pending?.kind === 'search' || pending?.kind === 'lookTop')
     pending =
-      privateToViewer || pending.revealed // a revealed search (Throne of the Dead Three) is public
+      privateToViewer || pending.revealed // a revealed search / "reveal the top four" is public
         ? { ...pending, cards: pending.cards.map((oid) => cardView(state.objects[oid])) }
         : { ...pending, cards: pending.cards.map((oid) => ({ oid, hidden: true })) }
+  else if (pending?.kind === 'putBack') pending = { ...pending, hand: privateToViewer ? pending.hand : [] }
   else if (pending?.kind === 'chooseName') pending = { ...pending, _holder: undefined }
   else if (pending?.kind === 'lookAtHand' || pending?.kind === 'chooseFromHand')
     // A revealed hand is public information (701.15): every viewer sees the cards.

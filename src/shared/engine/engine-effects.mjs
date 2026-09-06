@@ -37,6 +37,64 @@ export const effectsMethods = {
         s.pending = { kind: 'scry', player: pid, cards: [...top], surveil: false }
         return true
       }
+      case 'reorderTop': {
+        // Ponder: look at the top N, put them back in any order, maybe shuffle.
+        // A scry decision without the "bottom" option.
+        const pid = source.controller
+        const top = zone(s, 'library', pid).slice(0, e.amount)
+        if (top.length === 0) return false
+        s.pending = { kind: 'scry', player: pid, cards: [...top], surveil: false, noBottom: true, mayShuffle: !!e.mayShuffle }
+        return true
+      }
+      case 'lookAtTop': {
+        // "Look at / reveal the top N cards of your library. Put [up to M | any number
+        // of | all] [filter] cards from among them into your hand and the rest into
+        // your graveyard / on the bottom" (Lead the Stampede, Malevolent Rumble,
+        // Winding Way — which first chooses creature or land: `chooseType`).
+        const pid = source.controller
+        const top = zone(s, 'library', pid).slice(0, e.amount)
+        if (top.length === 0) return false
+        if (e.reveal) this._log(`${this._nameOf(pid)} reveals ${top.map((c) => this._objName(s.objects[c])).join(', ')}`)
+        s.pending = {
+          kind: 'lookTop',
+          player: pid,
+          cards: [...top],
+          revealed: !!e.reveal,
+          chooseType: e.chooseType || null, // ['Creature', 'Land']: pick a type, all of it goes to hand
+          max: e.pick ? e.pick.max ?? top.length : 0, // how many may be taken
+          filter: e.pick?.filter || null,
+          to: e.pick?.to || 'hand',
+          rest: e.rest || 'graveyard' // 'graveyard' | 'bottom' | 'top'
+        }
+        return true
+      }
+      case 'putBack': {
+        // Brainstorm: "put N cards from your hand on top of your library in any order".
+        const pid = source.controller
+        const hand = zone(s, 'hand', pid)
+        if (hand.length === 0) return false
+        s.pending = { kind: 'putBack', player: pid, hand: [...hand], count: Math.min(e.amount || 1, hand.length) }
+        return true
+      }
+      case 'counterUnlessPay': {
+        // "Counter target spell unless its controller pays {N}" (Mana Tithe): the
+        // spell's controller decides; declining counters it.
+        const t = this._resolveTargetRef(source, e.to || 'target0')
+        if (t?.kind !== 'object' || t.obj.zoneName !== 'stack') return false
+        const payer = t.obj.controller
+        s.pending = {
+          kind: 'mayPay',
+          player: payer,
+          cost: e.cost,
+          life: null,
+          canPay: this._canPay(payer, parseManaCost(e.cost)),
+          reason: `or ${this._objName(t.obj)} is countered`,
+          _source: source,
+          _effect: [],
+          _else: [{ op: 'counter', to: e.to || 'target0' }]
+        }
+        return true
+      }
       case 'surveil': {
         const pid = source.controller
         const top = zone(s, 'library', pid).slice(0, e.amount)
@@ -81,6 +139,7 @@ export const effectsMethods = {
           to: e.to || 'hand',
           tapped: !!e.tapped,
           optional: e.optional !== false,
+          reveal: !!e.reveal, // "reveal it": the log names the card
           shuffle: true
         }
         return true
@@ -606,6 +665,9 @@ export const effectsMethods = {
           if (t?.kind === 'object' && t.obj.zoneName === 'stack') {
             if (e.maxMv === 'faeries' && (t.obj.printed.manaValue || 0) > this._faerieCount(source.controller))
               break
+            // "…if its mana value is N or less" (Prohibit: 2, or 4 if kicked).
+            const lim = e.ifKicked && source.kicked ? e.ifKicked.maxMv : e.maxMv
+            if (typeof lim === 'number' && (t.obj.printed.manaValue || 0) > lim) break
             if (this._uncounterable(t.obj)) break // "This spell can't be countered."
             this._log(`${this._objName(t.obj)} is countered`)
             moveObject(s, t.obj.oid, 'graveyard')
@@ -904,6 +966,36 @@ export const effectsMethods = {
           if (t?.kind === 'player') for (const oid of [...zone(s, 'graveyard', t.pid)]) moveObject(s, oid, 'exile')
           break
         }
+        case 'exileLinked': {
+          // Journey to Nowhere: exile the target and remember it on the source
+          // permanent, so `returnLinked` can bring it back when the source leaves.
+          const t = this._resolveTargetRef(source, e.to)
+          const src = s.objects[source.sourceOid]
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield' && src) {
+            this._log(`${this._objName(t.obj)} is exiled by ${this._objName(src)}`)
+            this._relocate(t.obj, 'exile')
+            ;(src.linkedExile ||= []).push(t.obj.oid)
+          }
+          break
+        }
+        case 'returnLinked': {
+          // "…return the exiled card to the battlefield under its owner's control."
+          const src = s.objects[source.sourceOid]
+          for (const oid of src?.linkedExile || []) {
+            const o = s.objects[oid]
+            if (!o || o.zoneName !== 'exile') continue
+            this._log(`${this._objName(o)} returns to the battlefield`)
+            moveObject(s, oid, 'battlefield')
+            this._enterBattlefield(o, o.owner)
+          }
+          if (src) src.linkedExile = []
+          break
+        }
+        case 'untap': {
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && t.obj.zoneName === 'battlefield') this._setTapped(t.obj, false)
+          break
+        }
         case 'endTurn': {
           // "End the turn" (724): exile everything on the stack, remove creatures
           // from combat, and skip straight to the cleanup step; "until end of
@@ -1033,6 +1125,7 @@ export const effectsMethods = {
     if (filter.types && !filter.types.some((t) => p.types.includes(t))) return false
     if (filter.subtype && !p.subtypes.includes(filter.subtype)) return false
     if (filter.subtypes && !filter.subtypes.some((t) => p.subtypes.includes(t))) return false
+    if (filter.permanent && !isPermanent(p)) return false
     if (filter.maxMV != null && p.manaValue > filter.maxMV) return false
     if (filter.nonland && p.types.includes('Land')) return false
     if (filter.noncreature && p.types.includes('Creature')) return false
@@ -1175,9 +1268,66 @@ export const effectsMethods = {
       } else {
         moveObject(s, pick, pending.to)
       }
-      this._log(`${this._nameOf(pid)} puts ${pending.to === 'hand' ? 'a card' : this._objName(o)} ${pending.to === 'hand' ? 'into their hand' : 'onto the battlefield'}`)
+      // A revealed search (typecycling: "reveal it") names the card.
+      const shown = pending.to !== 'hand' || pending.reveal ? this._objName(o) : 'a card'
+      this._log(`${this._nameOf(pid)} puts ${shown} ${pending.to === 'hand' ? 'into their hand' : 'onto the battlefield'}`)
     }
     if (pending.shuffle) s.zones[zoneKey('library', pid)] = s.rng.shuffle(s.zones[zoneKey('library', pid)])
+    this._resumeResolution()
+  },
+
+  // Look-at-the-top-N: `picks` (up to `max`, matching the filter — or, with
+  // `chooseType`, every card of the chosen type) go to `to`; the rest go to the
+  // graveyard, the bottom, or back on top in their current order.
+  _applyLookTop(pending, answer) {
+    const s = this.state
+    const pid = pending.player
+    const lib = s.zones[zoneKey('library', pid)]
+    let picks
+    if (pending.chooseType) {
+      const type = pending.chooseType.includes(answer?.type) ? answer.type : pending.chooseType[0]
+      this._log(`${this._nameOf(pid)} chooses ${type.toLowerCase()}`)
+      picks = pending.cards.filter((oid) => s.objects[oid].printed.types.includes(type))
+    } else {
+      picks = [...new Set((answer?.picks || []).filter((oid) => pending.cards.includes(oid)))]
+      if (picks.length > pending.max) throw new Error(`choose at most ${pending.max} card(s)`)
+      if (pending.filter && picks.some((oid) => !this._matchCardFilter(s.objects[oid], pending.filter))) throw new Error('that card is not one you may take')
+    }
+    for (const oid of pending.cards) {
+      const i = lib.indexOf(oid)
+      if (i >= 0) lib.splice(i, 1)
+    }
+    for (const oid of picks) {
+      moveObject(s, oid, pending.to)
+      this._log(`${this._nameOf(pid)} puts ${pending.revealed || pending.to !== 'hand' ? this._objName(s.objects[oid]) : 'a card'} ${pending.to === 'hand' ? 'into their hand' : 'onto the battlefield'}`)
+      if (pending.to === 'battlefield') this._enterBattlefield(s.objects[oid], pid)
+    }
+    const rest = pending.cards.filter((oid) => !picks.includes(oid))
+    if (pending.rest === 'graveyard') for (const oid of rest) this._relocate(s.objects[oid], 'graveyard')
+    else if (pending.rest === 'bottom') for (const oid of rest) lib.push(oid)
+    else for (let i = rest.length - 1; i >= 0; i--) lib.unshift(rest[i])
+    if (rest.length) this._log(`${this._nameOf(pid)} puts ${rest.length} card${rest.length === 1 ? '' : 's'} ${pending.rest === 'graveyard' ? 'into their graveyard' : pending.rest === 'bottom' ? 'on the bottom of their library' : 'back on top'}`)
+    this._resumeResolution()
+  },
+
+  // Brainstorm: `cards` (exactly `count`, from hand) go on top, first one on top.
+  _applyPutBack(pending, answer) {
+    const s = this.state
+    const pid = pending.player
+    const cards = Array.isArray(answer?.cards) ? answer.cards : []
+    const hand = zone(s, 'hand', pid)
+    if (cards.length !== pending.count || new Set(cards).size !== cards.length || cards.some((oid) => !hand.includes(oid)))
+      throw new Error(`choose ${pending.count} card(s) from your hand`)
+    for (let i = cards.length - 1; i >= 0; i--) {
+      moveObject(s, cards[i], 'library')
+      const lib = s.zones[zoneKey('library', pid)]
+      const at = lib.indexOf(cards[i])
+      if (at > 0) {
+        lib.splice(at, 1)
+        lib.unshift(cards[i])
+      }
+    }
+    this._log(`${this._nameOf(pid)} puts ${cards.length} card${cards.length === 1 ? '' : 's'} from their hand on top of their library`)
     this._resumeResolution()
   },
 

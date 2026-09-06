@@ -390,6 +390,12 @@ export class GameEngine {
         case 'search':
           this._applySearch(pending, answer)
           break
+        case 'lookTop':
+          this._applyLookTop(pending, answer)
+          break
+        case 'putBack':
+          this._applyPutBack(pending, answer)
+          break
         case 'mayPay':
           this._applyMayPay(pending, answer)
           break
@@ -547,6 +553,17 @@ export class GameEngine {
         return this._assertFromHand(pending, a.discard)
       case 'bottom':
         return this._assertFromHand(pending, a.bottom)
+      case 'putBack':
+        return this._assertFromHand({ hand: pending.hand }, a.cards)
+      case 'lookTop': {
+        if (pending.chooseType) {
+          if (!pending.chooseType.includes(a.type)) throw new Error(`choose ${pending.chooseType.join(' or ')}`)
+          return
+        }
+        const picks = Array.isArray(a.picks) ? a.picks : []
+        if (picks.some((oid) => !pending.cards.includes(oid))) throw new Error('illegal choice: that card was not looked at')
+        return
+      }
       case 'chooseTargets': {
         if (pending.optional && a.decline) return
         const src = this.state.objects[pending.sourceOid]
@@ -671,7 +688,7 @@ export class GameEngine {
       if (spec.controller === 'you' && ref.pid !== ctx.byPid) return false
       return true
     }
-    if (ref.kind === 'spell') return spec.type === 'spell' && zone(s, 'stack').includes(ref.oid)
+    if (ref.kind === 'spell') return spec.type === 'spell' && zone(s, 'stack').includes(ref.oid) && this._spellSpecOk(spec, s.objects[ref.oid])
     if (ref.kind === 'object') {
       if (spec.type === 'player' || spec.type === 'spell') return false
       const o = s.objects[ref.oid]
@@ -1240,9 +1257,9 @@ export class GameEngine {
       const i = lib.indexOf(oid)
       if (i >= 0) lib.splice(i, 1)
     }
-    const toBottom = (answer?.toBottom || []).filter((oid) => scried.includes(oid))
+    const toBottom = pending.noBottom ? [] : (answer?.toBottom || []).filter((oid) => scried.includes(oid))
     const rest = scried.filter((oid) => !toBottom.includes(oid))
-    const topOrder = answer?.toTop?.length === rest.length ? answer.toTop : rest
+    const topOrder = answer?.toTop?.length === rest.length && rest.every((oid) => answer.toTop.includes(oid)) ? answer.toTop : rest
 
     if (pending.surveil) {
       for (const oid of toBottom) moveObject(s, oid, 'graveyard')
@@ -1250,8 +1267,22 @@ export class GameEngine {
       for (const oid of toBottom) lib.push(oid) // to the bottom
     }
     for (let i = topOrder.length - 1; i >= 0; i--) lib.unshift(topOrder[i]) // back on top
+    if (pending.mayShuffle && answer?.shuffle) {
+      s.zones[zoneKey('library', pid)] = s.rng.shuffle(lib)
+      this._log(`${this._nameOf(pid)} shuffles`)
+    }
 
     this._resumeResolution()
+  }
+
+  // "Target noncreature spell" (Negate), "target instant spell" (Dispel),
+  // "target creature spell": a stack object's printed types against the spec.
+  _spellSpecOk(spec, o) {
+    if (!o) return false
+    const types = o.kind === 'ability' ? [] : o.printed?.types || []
+    if (spec.noncreature && types.includes('Creature')) return false
+    if (spec.spellType && !types.includes(spec.spellType)) return false
+    return true
   }
 
   // Does a battlefield object satisfy a target spec (type + exclusions)?
@@ -1259,6 +1290,7 @@ export class GameEngine {
     if (spec.type === 'creature' && !o.chars.types.includes('Creature')) return false
     if (spec.attacking && !o.status.attacking) return false // "target attacking creature"
     if (spec.type === 'land' && !o.chars.types.includes('Land')) return false
+    if (spec.subtype && !hasSub(o.chars, spec.subtype)) return false // "target Forest"
     if (spec.type === 'artifact' && !o.chars.types.includes('Artifact')) return false
     if (spec.noncreature && o.chars.types.includes('Creature')) return false
     if (spec.nonHuman && hasSub(o.chars, 'Human')) return false
@@ -1293,7 +1325,7 @@ export class GameEngine {
   _legalTargetsExist(spec, ctx) {
     const s = this.state
     if (spec.type === 'player' || spec.type === 'any') return true
-    if (spec.type === 'spell') return zone(s, 'stack').length > 0
+    if (spec.type === 'spell') return zone(s, 'stack').some((oid) => this._spellSpecOk(spec, s.objects[oid]))
     if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact' || spec.type === 'permanent') {
       // A variadic slot ("N target creatures", "up to N…") needs at least `min`
       // legal targets to be cast (601.2c); a normal slot needs one.

@@ -25,10 +25,27 @@ export const manaMethods = {
   // land types and authored `mana` colours form one option; `manaOptions` adds
   // multi-mana or restricted ones (Sol Ring: {C}{C}; Eldrazi Temple: {C}{C} to be
   // spent only on colourless Eldrazi — rule 106.6).
+  // An option may also be a fixed set of pips (`pips: ['R','W']` — a Karoo's
+  // {R}{W}) or conditional (`if`, e.g. the Tron lands' extra mana). An Aura with
+  // `attachedManaBonus` on the permanent adds one fixed pip to every option
+  // (Wild Growth: "adds an additional {G}").
   _manaOptionsOf(o) {
     const colors = this._manaColorsOf(o)
     const opts = colors.length ? [{ colors, amount: 1, only: null }] : []
-    if (!o.chars?.lostAbilities) for (const m of o.behavior?.manaOptions || []) opts.push({ colors: [...m.colors], amount: m.amount || 1, only: m.only || null })
+    if (!o.chars?.lostAbilities)
+      for (const m of o.behavior?.manaOptions || []) {
+        if (m.if && !this._cond(m.if, o)) continue
+        if (m.pips) opts.push({ colors: [...new Set(m.pips)], amount: m.pips.length, only: null, pips: [...m.pips] })
+        else opts.push({ colors: [...m.colors], amount: m.amount || 1, only: m.only || null })
+      }
+    const bonus = []
+    for (const aura of objectsIn(this.state, 'battlefield')) {
+      const b = aura.behavior?.attachedManaBonus
+      if (!b || aura.status.attachedTo !== o.oid || aura.chars?.lostAbilities) continue
+      const color = b.color === 'chosen' ? aura.chosen : b.color
+      if (color) bonus.push(color)
+    }
+    if (bonus.length) for (const opt of opts) opt.extra = [...(opt.extra || []), ...bonus]
     return opts
   },
 
@@ -43,8 +60,8 @@ export const manaMethods = {
       if (o.printed.types.includes('Creature') && !this._canTap(o)) continue
       const usable = this._manaOptionsOf(o).filter((m) => !m.only || (printed && this._spellMatchesFilter(pid, printed, m.only, o)))
       if (!usable.length) continue
-      const best = usable.reduce((a, b) => (b.amount > a.amount ? b : a))
-      out.push({ oid: o.oid, colors: best.colors, amount: best.amount, only: best.only })
+      const best = usable.reduce((a, b) => (b.amount + (b.extra?.length || 0) > a.amount + (a.extra?.length || 0) ? b : a))
+      out.push({ oid: o.oid, colors: best.colors, amount: best.amount, only: best.only, pips: best.pips || null, extra: best.extra || null })
     }
     // Auto-payment spends generic mana from the sources whose colours the rest
     // of the hand needs least (keep the lone Mountain for the Bolt), and keeps
@@ -129,8 +146,13 @@ export const manaMethods = {
       useHave(c, k)
     }
 
-    // A source producing several mana (Sol Ring) is several units sharing one oid.
-    const avail = sources.flatMap((s) => Array.from({ length: s.amount || 1 }, () => ({ oid: s.oid, colors: s.colors })))
+    // A source producing several mana (Sol Ring) is several units sharing one oid;
+    // fixed pips ({R}{W}) and an Aura's extra pip are units of one colour each.
+    const avail = sources.flatMap((s) => {
+      const units = s.pips ? s.pips.map((c) => ({ oid: s.oid, colors: [c] })) : Array.from({ length: s.amount || 1 }, () => ({ oid: s.oid, colors: s.colors }))
+      for (const c of s.extra || []) units.push({ oid: s.oid, colors: [c] })
+      return units
+    })
     const chosen = []
     for (const c of COLORS) {
       let n = need[c]
@@ -206,6 +228,12 @@ export const manaMethods = {
       ).length
       cost.generic = Math.max(0, (cost.generic || 0) - artifacts)
     }
+    // "This spell costs {1} less to cast for each …" (Tolarian Terror: instant and
+    // sorcery cards in your graveyard).
+    if (behavior?.costReduction?.per) {
+      const n = this._amount({ controller: pid, oid: o.oid }, { count: behavior.costReduction.per })
+      cost.generic = Math.max(0, (cost.generic || 0) - n)
+    }
     // Rule-modifying statics that raise or lower this spell's cost (Thalia, Goblin
     // Warchief, medallions, …). Increases apply before reductions (601.2f order),
     // and generic is clamped at 0 — a reduction never touches colored pips.
@@ -262,6 +290,7 @@ export const manaMethods = {
     if (f.type && !p.types.includes(f.type)) return false
     if (f.noncreature && p.types.includes('Creature')) return false
     if (f.colorless && (p.colors || []).length) return false
+    if (f.colorsAny && !f.colorsAny.some((c) => (p.colors || []).includes(c))) return false // "green spells and blue spells"
     return true
   },
 
@@ -337,12 +366,21 @@ export const manaMethods = {
     if (v && typeof v === 'object' && v.count) {
       const f = v.count
       const selfOid = source?.sourceOid ?? source?.oid
+      // `zone: 'graveyard'`: cards in your graveyard instead of permanents you control
+      // ("for each instant and sorcery card in your graveyard").
+      if (f.zone === 'graveyard') {
+        const n = zone(this.state, 'graveyard', source.controller)
+          .map((oid) => this.state.objects[oid])
+          .filter((o) => o && (!f.type || o.printed.types.includes(f.type)) && (!f.types || f.types.some((t) => o.printed.types.includes(t)))).length
+        return n * (v.times || 1) + (v.plus || 0)
+      }
       const n = objectsIn(this.state, 'battlefield').filter(
         (o) =>
           (f.controller === 'any' || o.controller === source.controller) &&
           (!f.another || o.oid !== selfOid) &&
           (!f.attacking || o.status.attacking) &&
           (!f.type || o.chars.types.includes(f.type)) &&
+          (!f.types || f.types.some((t) => o.chars.types.includes(t))) &&
           (!f.subtype || hasSub(o.chars, f.subtype))
       ).length
       return n * (v.times || 1) + (v.plus || 0) // "twice the number of creatures you control"
@@ -392,6 +430,11 @@ export const manaMethods = {
       ).length
       return inRange(n, f)
     }
+    // "If you control an Urza's Mine and an Urza's Tower": every listed filter matched.
+    if (cond.controlsAll)
+      return cond.controlsAll.every((f) =>
+        objectsIn(s, 'battlefield').some((o) => o.controller === pid && o.oid !== w?.oid && (!f.type || o.chars.types.includes(f.type)) && (!f.subtype || hasSub(o.chars, f.subtype)))
+      )
     if (cond.life) return inRange(s.players[pid].life, cond.life)
     if (cond.opponentLife) return this._opponentsOf(pid).some((o) => inRange(s.players[o].life, cond.opponentLife))
     if (cond.handSize) return inRange(zone(s, 'hand', pid).length, cond.handSize)

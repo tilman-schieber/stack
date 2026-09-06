@@ -253,6 +253,9 @@ export const combatMethods = {
         throw new Error('illegal block: menace must be blocked by two or more creatures')
       const max = this._ability(atk, 'maxBlockers')
       if (max != null && n > max) throw new Error(`illegal block: ${atk.chars.name} can't be blocked by more than ${max} creature(s)`)
+      // "Can't be blocked except by N or more creatures" (Troll of Khazad-dûm).
+      const min = this._ability(atk, 'minBlockers')
+      if (min != null && n > 0 && n < min) throw new Error(`illegal block: ${atk.chars.name} can't be blocked except by ${min} or more creatures`)
     }
 
     // Merge this defender's blocks into the combat (other defenders add theirs).

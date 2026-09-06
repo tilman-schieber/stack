@@ -915,3 +915,16 @@
 .eng-daynight .eng-helper-label {
   font-size: 9px;
 }
+
+/* Look-at-the-top / reorder overlays */
+.eng-scry-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+}
+.eng-scry-card.chosen {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

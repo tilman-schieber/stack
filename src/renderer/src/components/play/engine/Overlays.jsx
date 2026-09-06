@@ -136,7 +136,11 @@ export function HandRevealOverlay({ pending, targetName, onPick, onDecline, onOk
 
 // Scry / Surveil: look at the top cards and send some to the bottom (or the
 // graveyard, for surveil). The rest stay on top in shown order.
+// Scry / surveil: click a card to send it to the bottom (or graveyard). In
+// reorder mode (Ponder — `pending.noBottom`) clicks instead number the cards in
+// the order they'll go back on top; unclicked ones follow in their current order.
 export function ScryOverlay({ pending, bottom, setBottom, onConfirm }) {
+  const reorder = !!pending.noBottom
   const toggle = (oid) =>
     setBottom((b) => (b.includes(oid) ? b.filter((o) => o !== oid) : [...b, oid]))
   const dest = pending.surveil ? 'graveyard' : 'bottom'
@@ -144,28 +148,79 @@ export function ScryOverlay({ pending, bottom, setBottom, onConfirm }) {
     <div className="eng-scry">
       <div className="eng-scry-panel">
         <div className="eng-scry-title">
-          {pending.surveil ? 'Surveil' : 'Scry'} {pending.cards.length} — click a card to send it to
-          the {dest}
+          {reorder
+            ? `Look at the top ${pending.cards.length} — click cards in the order they should go back on top (first click = top)`
+            : `${pending.surveil ? 'Surveil' : 'Scry'} ${pending.cards.length} — click a card to send it to the ${dest}`}
         </div>
         <div className="eng-scry-cards">
           {pending.cards.map((c) => {
-            const toBottom = bottom.includes(c.oid)
+            const marked = bottom.includes(c.oid)
+            const nth = bottom.indexOf(c.oid)
             return (
               <div
                 key={c.oid}
-                className={'eng-scry-card' + (toBottom ? ' to-bottom' : '')}
+                className={'eng-scry-card' + (marked && !reorder ? ' to-bottom' : '')}
                 onClick={() => toggle(c.oid)}
                 title={c.name}
               >
                 {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
-                <div className="eng-scry-dest">{toBottom ? dest : 'top'}</div>
+                <div className="eng-scry-dest">{reorder ? (nth >= 0 ? `#${nth + 1}` : 'as is') : marked ? dest : 'top'}</div>
               </div>
             )
           })}
         </div>
-        <button className="primary" onClick={onConfirm}>
-          Confirm
-        </button>
+        <div className="eng-scry-actions">
+          <button className="primary" onClick={() => onConfirm(false)}>
+            {reorder ? 'Put back' : 'Confirm'}
+          </button>
+          {reorder && pending.mayShuffle && (
+            <button className="mini" onClick={() => onConfirm(true)} title="Put them back, then shuffle your library">
+              Shuffle instead
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// "Look at the top N": pick up to `max` cards matching the filter (Lead the
+// Stampede, Malevolent Rumble), or choose a type and take all of it (Winding Way).
+export function LookTopOverlay({ pending, picks, setPicks, onConfirm, onType }) {
+  const toggle = (oid) => setPicks((p) => (p.includes(oid) ? p.filter((o) => o !== oid) : p.length < pending.max ? [...p, oid] : p))
+  const restWord = pending.rest === 'graveyard' ? 'go to your graveyard' : pending.rest === 'bottom' ? 'go to the bottom of your library' : 'stay on top'
+  return (
+    <div className="eng-scry">
+      <div className="eng-scry-panel">
+        <div className="eng-scry-title">
+          {pending.chooseType
+            ? `${pending.revealed ? 'Revealed' : 'Looking at'} the top ${pending.cards.length} — choose a type: every card of it goes to your hand, the rest ${restWord}`
+            : `${pending.revealed ? 'Revealed' : 'Looking at'} the top ${pending.cards.length} — take up to ${pending.max} card${pending.max === 1 ? '' : 's'} (${picks.length}/${pending.max}); the rest ${restWord}`}
+        </div>
+        <div className="eng-scry-cards">
+          {pending.cards.map((c) => {
+            const taken = picks.includes(c.oid)
+            return (
+              <div key={c.oid} className={'eng-scry-card' + (taken ? ' chosen' : '')} onClick={() => !pending.chooseType && toggle(c.oid)} title={c.name}>
+                {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
+                <div className="eng-scry-dest">{pending.chooseType ? c.name : taken ? 'to hand' : ''}</div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="eng-scry-actions">
+          {pending.chooseType ? (
+            pending.chooseType.map((t) => (
+              <button key={t} className="primary" onClick={() => onType(t)}>
+                {t}s
+              </button>
+            ))
+          ) : (
+            <button className="primary" onClick={onConfirm}>
+              {picks.length ? `Take ${picks.length}` : 'Take nothing'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

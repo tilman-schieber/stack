@@ -218,6 +218,7 @@ export const legalMethods = {
       // Flashback cost may be mana, a sacrifice (e.g. Lava Dart), tapping creatures
       // (Prismatic Strands, Battle Screech), or a mix.
       if (fb.cost && !this._canPay(pid, parseManaCost(fb.cost))) continue
+      if (fb.life && s.players[pid].life < fb.life) continue // "Flashback—{1}{U}, Pay 3 life"
       if (fb.sacrifice && this._sacrificeCandidates(pid, fb.sacrifice).length < (fb.sacrifice.count || 1))
         continue
       if (fb.tapCreatures && this._tapCandidates(pid, fb.tapCreatures).length < (fb.tapCreatures.count || 1)) continue

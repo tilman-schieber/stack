@@ -31,10 +31,19 @@ export const actionsMethods = {
     }
     switch (action.type) {
       case 'playLand': {
-        this._log(`${this._nameOf(pid)} plays ${this._objName(s.objects[action.oid])}`)
-        moveObject(s, action.oid, 'battlefield')
-        this._enterBattlefield(s.objects[action.oid], pid)
+        const land = s.objects[action.oid]
+        this._log(`${this._nameOf(pid)} plays ${this._objName(land)}`)
         s.players[pid].landsPlayed++
+        // "As this land enters, choose a color" (the Gates): ask first; the land
+        // enters when the choice is made (_applyChooseValue), and priority waits.
+        const ch = land.behavior?.chooseOnEnter
+        if (ch && ch.kind !== 'cardName' && land.chosen == null) {
+          this._castPaused = true
+          s.pending = { kind: 'chooseValue', player: pid, oid: land.oid, options: this._chooseOptions(ch), label: ch.label || `${this._objName(land)} — choose a ${ch.kind === 'color' ? 'color' : 'value'}` }
+          break
+        }
+        moveObject(s, action.oid, 'battlefield')
+        this._enterBattlefield(land, pid)
         break
       }
       case 'crew': {
@@ -76,7 +85,9 @@ export const actionsMethods = {
         if (cyc.cost) this._pay(pid, parseManaCost(cyc.cost))
         this._log(`${this._nameOf(pid)} cycles ${this._objName(o)}`)
         this._discardCard(pid, action.oid)
-        const aoid = createAbility(s, { controller: pid, sourceOid: o.oid, effect: [{ op: 'draw', amount: 1 }], targets: [] })
+        // Typecycling (702.29c): search for a card of the type instead of drawing.
+        const effect = cyc.search ? [{ op: 'search', filter: cyc.search, to: 'hand', reveal: true }] : [{ op: 'draw', amount: 1 }]
+        const aoid = createAbility(s, { controller: pid, sourceOid: o.oid, effect, targets: [] })
         zone(s, 'stack').push(aoid.oid)
         break
       }
@@ -86,13 +97,19 @@ export const actionsMethods = {
         const o = s.objects[action.oid]
         const opts = this._manaOptionsOf(o)
         const m = opts[action.option ?? 0] || opts[0]
-        const color = m.colors.length === 1 ? m.colors[0] : action.color
-        if (!m || !m.colors.includes(color)) throw new Error('choose a color this permanent can produce')
+        if (!m) throw new Error('this permanent has no mana ability')
         this._setTapped(o, true)
-        for (let i = 0; i < (m.amount || 1); i++) {
-          if (m.only) (s.players[pid].restrictedPool ||= []).push({ color, only: m.only, source: o })
-          else s.players[pid].manaPool[color]++
+        if (m.pips) {
+          for (const c of m.pips) s.players[pid].manaPool[c]++ // a fixed set ({R}{W})
+        } else {
+          const color = m.colors.length === 1 ? m.colors[0] : action.color
+          if (!m.colors.includes(color)) throw new Error('choose a color this permanent can produce')
+          for (let i = 0; i < (m.amount || 1); i++) {
+            if (m.only) (s.players[pid].restrictedPool ||= []).push({ color, only: m.only, source: o })
+            else s.players[pid].manaPool[color]++
+          }
         }
+        for (const c of m.extra || []) s.players[pid].manaPool[c]++ // an attached Aura's bonus
         break
       }
       case 'cast': {
@@ -281,6 +298,10 @@ export const actionsMethods = {
         const o = s.objects[action.oid]
         const fb = o.behavior.flashback
         if (fb.cost) this._pay(pid, parseManaCost(fb.cost))
+        if (fb.life) {
+          s.players[pid].life -= fb.life
+          this._log(`${this._nameOf(pid)} pays ${fb.life} life`)
+        }
         if (fb.tapCreatures) this._payTapCreatures(pid, fb.tapCreatures)
         if (fb.sacrifice)
           for (const so of this._sacrificeCandidates(pid, fb.sacrifice).slice(0, fb.sacrifice.count || 1))
@@ -717,8 +738,10 @@ export const actionsMethods = {
     }
     const o = s.objects[pending.oid]
     o.chosen = pending.options.includes(answer?.value) ? answer.value : pending.options[0]
+    this._log(`${this._nameOf(pending.player)} chooses ${o.chosen}`)
     moveObject(s, pending.oid, 'battlefield')
     this._enterBattlefield(o, o.controller ?? o.owner)
+    this._castPaused = false // a land played with a choice (the Gates) held priority back
     if (!this._resume) this._grantPriorityTo(s.activePlayer)
   },
 

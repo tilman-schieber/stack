@@ -48,6 +48,9 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       discardCards: 'is discarding',
       scry: 'is scrying',
       search: 'is searching their library',
+      lookTop: 'is looking at the top of their library',
+      putBack: 'is putting cards back on their library',
+      mayPay: 'is deciding whether to pay',
       chooseTargets: 'is choosing targets',
       orderTriggers: 'is ordering their triggers',
       playOrDraw: 'is choosing to play or draw',
@@ -436,13 +439,26 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
     body = (
       <>
         <span>
-          <b>{nameOf(pending.player)}</b> — {pending.name ? `${pending.name} ` : ''}pay {pending.cost}?
+          <b>{nameOf(pending.player)}</b> — {pending.name ? `${pending.name} ` : ''}pay {pending.cost}
+          {pending.reason ? ` ${pending.reason}` : ''}?
         </span>
         <button className="primary" disabled={!pending.canPay} onClick={() => choose({ pay: true })}>
           Pay {pending.cost}
         </button>
         <button className="mini" onClick={() => choose({ pay: false })}>
-          Decline
+          {pending.reason ? "Don't pay" : 'Decline'}
+        </button>
+      </>
+    )
+  } else if (kind === 'putBack') {
+    body = (
+      <>
+        <span>
+          <b>{nameOf(pending.player)}</b> — put {pending.count} card(s) from your hand on top of your library, in order (first
+          click = top) ({discardSel.length}/{pending.count}).
+        </span>
+        <button className="primary" disabled={discardSel.length !== pending.count} onClick={() => choose({ cards: discardSel })}>
+          Put back
         </button>
       </>
     )
