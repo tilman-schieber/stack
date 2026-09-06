@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useDeck } from '../store/deck.js'
 import { imageSrc, typeLine } from '../lib/cardUtils.js'
+import ManaCost from './Mana.jsx'
 
 // In-app card search (Scryfall query syntax). Click a result to add it.
 export default function CardSearch() {
@@ -51,7 +52,10 @@ export default function CardSearch() {
           >
             <img src={imageSrc(card)} alt={card.name} loading="lazy" draggable={false} />
             <div className="search-result-meta">
-              <div className="search-result-name">{card.name}</div>
+              <div className="search-result-name">
+                {card.name}
+                <ManaCost cost={card.mana_cost} />
+              </div>
               <div className="muted small">{typeLine(card)}</div>
             </div>
             <span className="add-plus">＋</span>

@@ -24,6 +24,7 @@
     "@fontsource/barlow-semi-condensed": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "better-sqlite3": "^11.7.0",
+    "mana-font": "^1.18.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

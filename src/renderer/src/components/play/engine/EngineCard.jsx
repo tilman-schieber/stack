@@ -177,13 +177,12 @@ export function ManaPool({ pool, restricted = [] }) {
   return (
     <span className="eng-mana" title={`Unspent mana: ${summary}`}>
       {shown.map((p, i) => (
-        <span
+        <i
           key={i}
-          className={'mana-pip mana-' + p.c.toLowerCase() + (p.restricted ? ' restricted' : '')}
-          title={p.restricted ? `Restricted ${MANA_NAME[p.c]} mana` : undefined}
-        >
-          {p.c}
-        </span>
+          className={'ms ms-cost ms-shadow ms-' + p.c.toLowerCase() + (p.restricted ? ' restricted' : '')}
+          title={p.restricted ? `Restricted ${MANA_NAME[p.c]} mana` : `One ${MANA_NAME[p.c]} mana`}
+          aria-label={`${MANA_NAME[p.c]} mana`}
+        />
       ))}
       {pips.length > shown.length && <span className="mana-more">+{pips.length - shown.length}</span>}
     </span>

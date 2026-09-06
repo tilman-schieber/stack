@@ -71,7 +71,10 @@ export const SETTINGS_DEFAULTS = {
   // Additional set codes (lowercase) to hide.
   ignoredSets: [],
   // Set once the default decks have been saved into the deck store.
-  seededDecks: false
+  seededDecks: false,
+  // Table sounds during a game (a card landing, a permanent tapping, damage).
+  // Synthesised, and off unless asked for.
+  sounds: false
 }
 
 // Merge a settings patch, normalizing set codes.

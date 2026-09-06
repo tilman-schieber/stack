@@ -120,6 +120,9 @@ function printedFromFace(sf, f, multi) {
   return {
     name: f.name || sf.name,
     manaCost: cost,
+    // The cost as printed ("{2}{R}"), kept so the interface can draw the real
+    // symbols; `manaCost` above is the parsed form the rules work with.
+    manaCostText: f.mana_cost || '',
     manaValue: manaValue(cost),
     supertypes: t.supertypes,
     types: t.types,

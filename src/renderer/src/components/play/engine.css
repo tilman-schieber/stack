@@ -178,45 +178,21 @@
   font-size: 12px;
 }
 
-/* Unspent mana: one pip per mana, in its own colour. */
+/* Unspent mana, drawn with Magic's own symbols (see mana.css). */
 .eng-mana {
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
   min-height: 17px;
+  font-size: 13px;
 }
-.mana-pip {
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  color: rgba(0, 0, 0, 0.62);
-  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.5);
+.eng-mana .ms-cost {
+  /* The font's own coin, sized to the rail rather than to running text. */
+  width: 1.35em;
+  height: 1.35em;
+  line-height: 1.4em;
 }
-.mana-w {
-  background: var(--mtg-w);
-}
-.mana-u {
-  background: var(--mtg-u);
-}
-.mana-b {
-  background: var(--mtg-b);
-}
-.mana-r {
-  background: var(--mtg-r);
-}
-.mana-g {
-  background: var(--mtg-g);
-}
-.mana-c {
-  background: var(--mtg-c);
-}
-.mana-pip.restricted {
+.eng-mana .restricted {
   outline: 1px dashed var(--accent);
   outline-offset: 1px;
 }

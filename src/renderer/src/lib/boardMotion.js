@@ -14,6 +14,7 @@
 // The decision of what moved is `planMotion`, which is pure and takes plain
 // data; only the measuring and the animating touch the DOM.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { play } from './sound.js'
 
 const FLIGHT_MS = 270
 const DAMAGE_MS = 1000
@@ -138,6 +139,10 @@ export function useBoardMotion(view, enabled = true) {
     if (first || !enabled || reduceMotion()) return
 
     const plan = planMotion({ before, now, damageBefore, damageNow, sourceFor: domSource })
+
+    // The same two events the motion layer draws are the ones worth hearing.
+    if (plan.flights.length) play('card', plan.flights.length)
+    if (plan.hits.length) play('damage', plan.hits.length)
 
     if (plan.flights.length) {
       const added = plan.flights.map((f) => {

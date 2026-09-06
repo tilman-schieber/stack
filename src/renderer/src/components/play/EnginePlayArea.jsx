@@ -4,6 +4,8 @@ import { EngineCard, Pile, ManaPool, LifePlate, HelperCard, isCreature, isLand }
 import Prompt from './engine/Prompt.jsx'
 import MotionLayer from './engine/Motion.jsx'
 import { useBoardMotion } from '../../lib/boardMotion.js'
+import { play as playSound, setSoundEnabled } from '../../lib/sound.js'
+import { useSettings } from '../../store/settings.js'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
 import { ZoneViewer, SearchOverlay, ScryOverlay, LookTopOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
 import '../../play.css'
@@ -128,6 +130,11 @@ export default function EnginePlayArea() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [zoom, abilityMenu, cast, pendingKind, myTurn, chooseRaw, gameOn, setYield]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Table sounds follow the setting; the module itself stays silent until it is
+  // switched on, so nothing tries to start an AudioContext unasked.
+  const soundsOn = useSettings((st) => st.sounds)
+  useEffect(() => setSoundEnabled(!!soundsOn), [soundsOn])
 
   // Watches for cards that changed zone between this view and the last one, and
   // for damage newly marked, so the board can show the move instead of just the
@@ -361,6 +368,7 @@ export default function EnginePlayArea() {
   function startAction(a) {
     setAbilityMenu(null)
     if (a.type === 'tapForMana') {
+      playSound('tap')
       choose({ type: 'tapForMana', oid: a.oid, color: a.color })
       return
     }

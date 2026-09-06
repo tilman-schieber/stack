@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { PRIORITY_STEPS, stopKey } from '../../../store/engineGame.js'
+import ManaCost, { RulesText } from '../../Mana.jsx'
 
 const LOG_HIDDEN = 'stack.gamelog.hidden'
 const readHidden = () => {
@@ -76,6 +77,7 @@ export function Inspector({ card }) {
     <div className="eng-inspector">
       <div className="eng-inspector-head">
         <b>{card.faceDown && card.realName ? `${card.name} (${card.realName})` : card.name}</b>
+        <ManaCost cost={card.manaCost} />
         {pt && <span className="eng-inspector-pt">{pt}{card.damage ? ` (${card.damage} damage)` : ''}</span>}
         {card.loyalty != null && <span className="eng-inspector-pt">◆ {card.loyalty}</span>}
         {card.defense != null && <span className="eng-inspector-pt">🛡 {card.defense}</span>}
@@ -100,7 +102,11 @@ export function Inspector({ card }) {
       )}
       {counters.length > 0 && <div className="small">Counters: {counters.map(([k, n]) => `${n}× ${k}`).join(', ')}</div>}
       {status.length > 0 && <div className="small">{status.join(' · ')}</div>}
-      {card.oracleText && <div className="eng-inspector-text">{card.oracleText}</div>}
+      {card.oracleText && (
+        <div className="eng-inspector-text">
+          <RulesText text={card.oracleText} />
+        </div>
+      )}
       {card.supported === false && <div className="eng-inspector-warn">! Part of this text is not enforced — the card plays with its printed characteristics only.</div>}
     </div>
   )

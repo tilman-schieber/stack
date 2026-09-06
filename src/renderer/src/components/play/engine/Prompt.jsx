@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Sym } from '../../Mana.jsx'
 
 // Mode selection for a modal spell ("Choose one/two —"). Click modes to select;
 // once `count` are chosen it commits (and the parent collects any per-mode targets).
@@ -600,10 +601,10 @@ function PipPicker({ pips, cancelCast }) {
       <span>Pay each pip with:</span>
       {slots.map((sl, i) => (
         <span key={i} className="eng-confirm">
-          {'{' + (sl.kind === 'hybrid' ? sl.opts.join('/') : '2/' + sl.opts[0]) + '}'}
+          <Sym code={sl.kind === 'hybrid' ? sl.opts.join('/') : '2/' + sl.opts[0]} />
           {sl.opts.map((c) => (
             <button key={c} className={picks[i] === c ? 'primary' : 'mini'} onClick={() => setPicks((p) => p.map((x, j) => (j === i ? c : x)))}>
-              {c === '2' ? '{2}' : '{' + c + '}'}
+              <Sym code={c} />
             </button>
           ))}
         </span>

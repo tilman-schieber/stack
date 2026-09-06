@@ -66,6 +66,7 @@ function cardView(o, viewerPid = null, engine = null) {
     // printed, whether the engine enforces all of this card's text, and any
     // attack/block restrictions currently applying to it.
     oracleText: o.printed?.oracleText || '',
+    manaCost: o.printed?.manaCostText || '',
     printedKeywords: o.printed?.keywords || [],
     supported: o.supported !== false,
     ringBearer: !!o.ringBearer, // the Ring's designation (701.54b)

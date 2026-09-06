@@ -6,15 +6,18 @@ export const useSettings = create((set, get) => ({
   ignoreGoldBordered: true,
   ignoreNonTournamentLegal: true,
   ignoredSets: [],
+  sounds: false,
 
   load: async () => {
     const s = await window.api.getSettings()
     set({ ...s, loaded: true })
   },
 
+  // Persists whatever the store holds, minus its own bookkeeping. Naming the
+  // fields here instead meant every new setting silently failed to save.
   update: async (patch) => {
     set(patch)
-    const { ignoreGoldBordered, ignoreNonTournamentLegal, ignoredSets } = get()
-    await window.api.setSettings({ ignoreGoldBordered, ignoreNonTournamentLegal, ignoredSets })
+    const { loaded, load, update, ...persisted } = get() // eslint-disable-line no-unused-vars
+    await window.api.setSettings(persisted)
   }
 }))

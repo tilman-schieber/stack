@@ -16,7 +16,7 @@ export default function SettingsModal({ onClose }) {
         <header className="modal-header">
           <div>
             <h2>Settings</h2>
-            <p className="muted small">Control which printings show in the art picker.</p>
+            <p className="muted small">Which printings show in the art picker, and how a game sounds.</p>
           </div>
           <button className="del" onClick={onClose} title="Close">
             ✕
@@ -48,6 +48,14 @@ export default function SettingsModal({ onClose }) {
                 {' '}
                 — Un-sets, silver-bordered, oversized, and digital-only (Alchemy/MTGO)
               </span>
+            </span>
+          </label>
+
+          <label className="setting-row">
+            <input type="checkbox" checked={!!s.sounds} onChange={(e) => s.update({ sounds: e.target.checked })} />
+            <span>
+              <b>Table sounds</b>
+              <span className="muted small"> — a card landing, a permanent tapping, damage</span>
             </span>
           </label>
 

@@ -8,6 +8,8 @@
 @import '@fontsource/barlow-semi-condensed/latin-600.css';
 @import '@fontsource/ibm-plex-mono/latin-400.css';
 @import '@fontsource/ibm-plex-mono/latin-500.css';
+/* Magic's mana symbols — generated, see scripts/gen-mana-css.mjs. */
+@import './mana.css';
 
 /* A card table under a low lamp: green-black felt, aged brass for anything you
    can act on, warm paper-white text. Magic's five colours carry meaning that a
@@ -1328,4 +1330,23 @@ button.danger-btn:hover {
 }
 .deck-acts .row-menu button.mini {
   padding: 4px 10px;
+}
+
+/* ---- Mana symbols in the interface ----
+   The font draws them at the surrounding text size; these are the two places
+   that want a size of their own. */
+.mana-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+/* Inside a sentence of rules text a symbol sits on the baseline of the line it
+   is in, and must not push the line height around. */
+.rules-text .ms-cost {
+  font-size: 0.82em;
+  vertical-align: -0.06em;
+  margin: 0 1px;
 }
