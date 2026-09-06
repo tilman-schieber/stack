@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Sym } from '../../Mana.jsx'
+import { Sym, RulesText } from '../../Mana.jsx'
 
 // Mode selection for a modal spell ("Choose one/two —"). Click modes to select;
 // once `count` are chosen it commits (and the parent collects any per-mode targets).
@@ -20,7 +20,7 @@ function ModalPicker({ modal, cancelCast }) {
           className={sel.includes(i) ? 'primary' : 'mini'}
           onClick={() => toggle(i)}
         >
-          {m.label}
+          <RulesText text={m.label} />
         </button>
       ))}
       <button className="mini" onClick={cancelCast}>
@@ -413,7 +413,21 @@ export default function Prompt({ view, pending, myTurn, match, openSideboard, ta
       </>
     )
   } else if (kind === 'chooseValue') {
-    body = <ValuePicker label={`${nameOf(pending.player)} — ${pending.label}`} options={pending.options} onPick={(value) => choose({ value })} />
+    body =
+      pending.kindOfChoice === 'color' ? (
+        <>
+          <span>
+            <b>{nameOf(pending.player)}</b> — {pending.label}:
+          </span>
+          {pending.options.map((c) => (
+            <button key={c} className="mini eng-color-pick" onClick={() => choose({ value: c })} title={c}>
+              <Sym code={c} />
+            </button>
+          ))}
+        </>
+      ) : (
+        <ValuePicker label={`${nameOf(pending.player)} — ${pending.label}`} options={pending.options} onPick={(value) => choose({ value })} />
+      )
   } else if (kind === 'chooseRingBearer') {
     body = (
       <span>

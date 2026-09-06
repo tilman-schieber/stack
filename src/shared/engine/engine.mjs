@@ -649,9 +649,14 @@ export class GameEngine {
       this._validateTargets(a.targets, match.targets, ctx)
     }
     // Hybrid / two-brid choices must name real options for those pips.
-    if (a.hybrid && (!match.hybrid || a.hybrid.some((c, i) => c != null && !match.hybrid[i]?.includes(c)))) throw new Error('illegal hybrid mana choice')
-    if (a.twobrid && (!match.twobrid || a.twobrid.some((c, i) => c != null && c !== '2' && c !== match.twobrid[i]))) throw new Error('illegal two-brid mana choice')
-    if (a.hybrid || a.twobrid) {
+    //
+    // Length, not truthiness: the interface sends both lists whenever it shows
+    // the pip picker, so a card with only hybrid pips arrives with `twobrid: []`
+    // — an empty array, which is truthy. Testing the array itself refused every
+    // hybrid card ever cast through the picker, Slippery Bogle included.
+    if (a.hybrid?.length && (!match.hybrid || a.hybrid.some((c, i) => c != null && !match.hybrid[i]?.includes(c)))) throw new Error('illegal hybrid mana choice')
+    if (a.twobrid?.length && (!match.twobrid || a.twobrid.some((c, i) => c != null && c !== '2' && c !== match.twobrid[i]))) throw new Error('illegal two-brid mana choice')
+    if (a.hybrid?.length || a.twobrid?.length) {
       const test = this._canPay(pid, match.hybrid || match.twobrid ? this._effectiveCost(pid, o) : {}, [], null, o.printed)
       void test
     }

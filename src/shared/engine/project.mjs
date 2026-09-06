@@ -59,6 +59,10 @@ function cardView(o, viewerPid = null, engine = null) {
     blocking: o.status?.blocking || null,
     damage: o.status?.damage || 0,
     counters: o.status?.counters || {},
+    // What this card is attached to, if it is an Aura, an Equipment or a
+    // Fortification — so the board can draw it with the permanent it is on
+    // rather than in a row of its own.
+    attachedTo: o.status?.attachedTo || null,
     loyalty: o.chars?.types?.includes('Planeswalker') ? o.status?.counters?.loyalty ?? null : null,
     defense: o.chars?.types?.includes('Battle') ? o.status?.counters?.defense ?? null : null,
     protector: o.chars?.types?.includes('Battle') ? o.protector ?? null : undefined,

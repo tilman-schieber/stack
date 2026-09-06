@@ -402,6 +402,10 @@
   flex-wrap: wrap;
   gap: 10px;
   align-content: flex-start;
+  /* Cards rest on a common baseline. A permanent carrying an Aura is taller
+     than its neighbours, and without this it would hang below the row instead
+     of the Aura rising above it. */
+  align-items: flex-end;
 }
 /* Creatures take the room that is going spare, which keeps them fronting the
    centre line and holds the lands against the player's own edge. The top seat's
@@ -1447,4 +1451,61 @@
   border-radius: 12px;
   padding: 1px 10px;
   white-space: nowrap;
+}
+
+/* Choosing a colour: the five pips, not a dropdown of letters. */
+.eng-color-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  font-size: 15px;
+}
+
+/* ---- A permanent and what is attached to it ----
+   Auras and Equipment sit behind the permanent they are on, fanned upwards so
+   each one's title bar and mana cost stay readable — the way you would lay them
+   out on a table.
+
+   The host stays in normal flow at the foot of the wrapper, which reserves the
+   height the fan needs, so an enchanted permanent does not shift the rows
+   around it. Each attachment is placed `--i` steps above the host's top edge,
+   counting outwards, and they are drawn back to front so the one nearest the
+   host overlaps the ones behind it. */
+.eng-attached {
+  --fan-step: calc(var(--card-w) * 0.2);
+  position: relative;
+  padding-top: calc(var(--fan-step) * var(--fanned, 1));
+}
+/* Only the strip that shows is drawn. Clipping the attachment to one fan step
+   is what guarantees it cannot cover its host — relying on paint order alone
+   left a full-size Rancor sitting on top of the creature it was enchanting. */
+.eng-attached-aura {
+  position: absolute;
+  left: 0;
+  top: calc(var(--fan-step) * (var(--fanned, 1) - var(--i, 1)));
+  height: calc(var(--fan-step) + 4px);
+  overflow: hidden;
+  border-radius: 5px 5px 0 0;
+  z-index: 0;
+  box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.5);
+}
+.eng-attached-aura .board-card:hover {
+  translate: none; /* the lift would only slide it under the clip */
+}
+/* The host sits in front of the fan. */
+.eng-attached > .board-card {
+  position: relative;
+  z-index: 2;
+}
+/* A brass thread down the left edge, so the group reads as one object. */
+.eng-attached::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: calc(var(--fan-step) * 0.3);
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, rgba(201, 162, 83, 0.55), rgba(201, 162, 83, 0.12));
 }

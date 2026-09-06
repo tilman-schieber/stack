@@ -7,6 +7,7 @@ import { useBoardMotion } from '../../lib/boardMotion.js'
 import { play as playSound, setSoundEnabled } from '../../lib/sound.js'
 import { loadScale, saveScale, scaleBy, cardWidth, handHoverScale } from '../../lib/cardScale.js'
 import { zoneCardAction, readyCount } from '../../lib/zoneActions.js'
+import { RulesText } from '../Mana.jsx'
 import { useSettings } from '../../store/settings.js'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
 import { ZoneViewer, SearchOverlay, ScryOverlay, LookTopOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
@@ -419,7 +420,10 @@ export default function EnginePlayArea() {
     setAbilityMenu(null)
     if (a.type === 'tapForMana') {
       playSound('tap')
-      choose({ type: 'tapForMana', oid: a.oid, color: a.color })
+      // `option` picks which of the source's mana abilities is being used — a
+      // Forest under Abundant Growth has its own {G} and the Aura's any-colour
+      // one. Dropping it made every ability but the first unusable.
+      choose({ type: 'tapForMana', oid: a.oid, color: a.color, option: a.option })
       return
     }
     if (a.type === 'playLand' || a.type === 'plot' || a.type === 'cycle' || a.type === 'suspend' || a.type === 'crew' || a.type === 'unearth') {
@@ -869,25 +873,58 @@ export default function EnginePlayArea() {
       {p.battlefield.length === 0 && <div className="bf-hint">No permanents</div>}
       {(() => {
         const byName = (a, b) => a.name.localeCompare(b.name)
-        const creatures = p.battlefield.filter(isCreature).sort(byName)
-        const lands = p.battlefield.filter(isLand).sort(byName)
-        const others = p.battlefield.filter((c) => !isCreature(c) && !isLand(c)).sort(byName)
+        // An Aura or Equipment is drawn with the permanent it is on, not in a
+        // row of its own — otherwise nothing on screen says which Forest the
+        // Abundant Growth is enchanting. Attachments can come from either
+        // player, so they are gathered across the whole board.
+        const attachments = new Map() // host oid -> [cards]
+        for (const pl of view.players) {
+          for (const c of pl.battlefield) {
+            if (!c.attachedTo) continue
+            if (!attachments.has(c.attachedTo)) attachments.set(c.attachedTo, [])
+            attachments.get(c.attachedTo).push(c)
+          }
+        }
+        const free = p.battlefield.filter((c) => !c.attachedTo)
+        const creatures = free.filter(isCreature).sort(byName)
+        const lands = free.filter(isLand).sort(byName)
+        const others = free.filter((c) => !isCreature(c) && !isLand(c)).sort(byName)
+
+        const one = (c) => (
+          <EngineCard
+            key={c.oid}
+            card={c}
+            zone="bf"
+            className={bfClass(c, p.id)}
+            onClick={(ev) => onBattlefieldCard(c, p.id, ev)}
+            onZoom={setZoom}
+            onHover={setHover}
+            title={c.name + (c.keywords?.length ? ' — ' + c.keywords.join(', ') : '')}
+          />
+        )
+
+        // The host in front, its attachments fanned up behind it so each one's
+        // title bar shows. The stack reserves the height it fans into, so rows
+        // below it are not pushed around.
+        const withAttachments = (c) => {
+          const on = attachments.get(c.oid)
+          if (!on?.length) return one(c)
+          return (
+            <div className="eng-attached" key={c.oid} style={{ '--fanned': on.length }}>
+              {on.map((a, i) => (
+                <div className="eng-attached-aura" key={a.oid} style={{ '--i': on.length - i }}>
+                  {one(a)}
+                </div>
+              ))}
+              {one(c)}
+            </div>
+          )
+        }
 
         const cardRow = (list, cls, key) =>
           list.length ? (
             <div className={cls} key={key}>
-              {list.map((c) => (
-                <EngineCard
-                  key={c.oid}
-                  card={c}
-                  zone="bf"
-                  className={bfClass(c, p.id)}
-                  onClick={(ev) => onBattlefieldCard(c, p.id, ev)}
-                  onZoom={setZoom}
-                  onHover={setHover}
-                  title={c.name + (c.keywords?.length ? ' — ' + c.keywords.join(', ') : '')}
-                />
-              ))}
+              {list.map(withAttachments)}
             </div>
           ) : null
 
@@ -1075,7 +1112,8 @@ export default function EnginePlayArea() {
           {abilityMenu.actions.map((a, i) => (
             <button key={i} onClick={() => startAction(a)}>
               {a.label
-                ? a.label
+                ? /* "Tap for {G}" and the like: draw the mana symbols rather
+                     than printing the braces. */ <RulesText text={a.label} />
                 : a.loyalty != null
                   ? (a.loyalty > 0 ? `+${a.loyalty}` : `${a.loyalty}`) + ' loyalty'
                   : 'Activate'}
