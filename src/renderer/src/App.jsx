@@ -8,6 +8,7 @@ import { useSettings } from './store/settings.js'
 import { useNav } from './store/nav.js'
 import { useDecks } from './store/decks.js'
 import { useEngineGame } from './store/engineGame.js'
+import logoUrl from './assets/logo.png'
 
 // Keeps a render error in one view from white-screening the whole app.
 class ErrorBoundary extends React.Component {
@@ -63,6 +64,7 @@ export default function App() {
       {playing && <div className="topbar-hot" aria-hidden="true" title="Menu — move the pointer to the top edge" />}
       <header className="topbar">
         <button className="topbrand" onClick={() => go('home')} title="Home">
+          <img src={logoUrl} alt="" className="brand-logo" />
           Stack
         </button>
         <nav className="viewnav">

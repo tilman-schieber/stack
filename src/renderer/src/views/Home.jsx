@@ -3,6 +3,7 @@ import { useNav } from '../store/nav.js'
 import { useDeck } from '../store/deck.js'
 import { useDecks } from '../store/decks.js'
 import DeckPlate from '../components/DeckPlate.jsx'
+import logoUrl from '../assets/logo.png'
 
 const SHOWN = 6
 
@@ -32,7 +33,10 @@ export default function Home() {
   return (
     <div className="home">
       <section className="home-hero">
-        <h1>Stack</h1>
+        <h1>
+          <img src={logoUrl} alt="" className="hero-logo" />
+          Stack
+        </h1>
         <p>
           Build Magic: The Gathering decks and play them with the rules enforced for you — against the computer, a
           friend at the same screen, or a friend online with no server in between. Card data and art come from Scryfall.
