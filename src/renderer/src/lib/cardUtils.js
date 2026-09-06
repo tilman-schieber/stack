@@ -73,11 +73,18 @@ export function setImageResolver(fn) {
 }
 
 // Scryfall serves a card at 146px (12kB), 488px (81kB) and 672px (122kB). A
-// board draws cards about 100px wide and a hand about 118px, so the smallest
-// one is the right fetch — until the screen has the pixels to show the
-// difference, where the soft upscale would be obvious.
-export const boardImageSize = () =>
-  typeof window !== 'undefined' && window.devicePixelRatio > 1.5 ? 'normal' : 'small'
+// board draws cards about 100px wide, so the smallest one is the right fetch —
+// until the card is actually being drawn bigger than that, either because the
+// screen is dense or because the player has scaled the board up (see
+// lib/cardScale.js), where the soft upscale would be obvious.
+let boardScale = 1
+export function setBoardScale(scale) {
+  boardScale = Number(scale) > 0 ? Number(scale) : 1
+}
+export const boardImageSize = () => {
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+  return 100 * boardScale * dpr > 160 ? 'normal' : 'small'
+}
 
 // `face`: false = the front, true/'back' = the second face, 'art' = the crop.
 // `size`: 'small' | 'normal' | 'large'.

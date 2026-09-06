@@ -203,27 +203,31 @@
   align-self: center;
 }
 
-/* Library / graveyard / exile side by side, each as a pile of real thickness. */
+/* Library, graveyard and exile as piles of real thickness. Two across rather
+   than three: a third of the rail is 40px, which is too small to see what is on
+   top of your graveyard, and the rail has the height to spare. */
 .eng-zones {
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 12px;
+  justify-items: center;
 }
 .eng-zones .rail-pile-card {
-  width: 40px;
-  height: 56px;
+  width: 66px;
+  height: 92px;
   /* Shallower edges than a full-size pile, so 40px of card still reads. */
-  box-shadow: calc(var(--depth, 0) * 1.5px) calc(var(--depth, 0) * 1.5px) 0 -0.5px #1b2620,
-    calc(var(--depth, 0) * 3px) calc(var(--depth, 0) * 3px) 0 -1px #131c17,
-    calc(var(--depth, 0) * 4.5px) calc(var(--depth, 0) * 4.5px) 0 -1.5px #0c110e,
-    0 3px 7px rgba(0, 0, 0, 0.45);
+  box-shadow: calc(var(--depth, 0) * 2px) calc(var(--depth, 0) * 2px) 0 -0.5px #1b2620,
+    calc(var(--depth, 0) * 4px) calc(var(--depth, 0) * 4px) 0 -1px #131c17,
+    calc(var(--depth, 0) * 6px) calc(var(--depth, 0) * 6px) 0 -1.5px #0c110e,
+    0 4px 9px rgba(0, 0, 0, 0.45);
 }
 .eng-zones .pile-count {
-  min-width: 15px;
-  font-size: 9px;
-  line-height: 13px;
+  min-width: 16px;
+  font-size: 10px;
+  line-height: 14px;
 }
 .eng-zones .rail-pile-label {
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -408,21 +412,50 @@
   gap: 7px;
 }
 
-/* Board card sizing in engine mode */
+/* Board card sizing. Everything comes off --card-w, which the wheel over the
+   table changes (see lib/cardScale.js); 100px is the resting size. */
+.play-area.engine {
+  --card-w: 100px;
+}
 .play-area.engine .board-card {
-  width: 100px;
-  height: 140px;
+  width: var(--card-w);
+  height: calc(var(--card-w) * 1.4);
   cursor: default;
+  transition: width 0.12s ease-out, height 0.12s ease-out;
 }
 .play-area.engine .eng-lands .board-card {
-  width: 84px;
-  height: 117px;
+  width: calc(var(--card-w) * 0.84);
+  height: calc(var(--card-w) * 1.176);
 }
 .play-area.engine .board-card.tapped {
-  margin: 0 20px; /* room for the rotation */
+  margin: 0 calc(var(--card-w) * 0.2); /* room for the rotation */
 }
 .play-area.engine .eng-lands .board-card.tapped {
-  margin: 0 16px;
+  margin: 0 calc(var(--card-w) * 0.16);
+}
+@media (prefers-reduced-motion: reduce) {
+  .play-area.engine .board-card {
+    transition: none;
+  }
+}
+
+/* What the wheel just did, shown briefly at the centre line. */
+.eng-scale-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 950;
+  pointer-events: none;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--accent);
+  background: rgba(10, 14, 12, 0.92);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
 .board-card.atk {
   outline: 3px solid #e0a52e;

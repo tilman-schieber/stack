@@ -5,6 +5,7 @@ import Prompt from './engine/Prompt.jsx'
 import MotionLayer from './engine/Motion.jsx'
 import { useBoardMotion } from '../../lib/boardMotion.js'
 import { play as playSound, setSoundEnabled } from '../../lib/sound.js'
+import { loadScale, saveScale, scaleBy, cardWidth } from '../../lib/cardScale.js'
 import { useSettings } from '../../store/settings.js'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
 import { ZoneViewer, SearchOverlay, ScryOverlay, LookTopOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
@@ -130,6 +131,35 @@ export default function EnginePlayArea() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [zoom, abilityMenu, cast, pendingKind, myTurn, chooseRaw, gameOn, setYield]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // How big the cards on the board are drawn. The wheel over the table changes
+  // it, which is as much about fitting a full board on screen as it is taste.
+  const [cardScale, setCardScale] = useState(loadScale)
+  const [scaleHint, setScaleHint] = useState(null)
+  const hintTimer = React.useRef(null)
+  // A ref callback rather than an effect: the table is only in the DOM once
+  // there is a view, and this fires exactly when it arrives and leaves. The
+  // listener has to be non-passive to be allowed to swallow the scroll.
+  const tableWheel = React.useCallback((el) => {
+    if (!el) return undefined
+    const onWheel = (e) => {
+      // Ctrl is the browser's own zoom; Shift scrolls the half instead, which
+      // is the way out when the board is taller than its room and you would
+      // rather move than shrink.
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return
+      e.preventDefault()
+      setCardScale((s) => {
+        const next = saveScale(scaleBy(s, e.deltaY < 0 ? 1 : -1))
+        setScaleHint(Math.round(next * 100) + '%')
+        clearTimeout(hintTimer.current)
+        hintTimer.current = setTimeout(() => setScaleHint(null), 900)
+        return next
+      })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+  useEffect(() => () => clearTimeout(hintTimer.current), [])
 
   // Table sounds follow the setting; the module itself stays silent until it is
   // switched on, so nothing tries to start an AudioContext unasked.
@@ -871,9 +901,10 @@ export default function EnginePlayArea() {
   const inSetup = kind === 'mulligan' || kind === 'bottom' || kind === 'playOrDraw'
 
   return (
-    <div className="play-area engine">
+    <div className="play-area engine" style={{ '--card-w': cardWidth(cardScale) + 'px' }}>
       <div className="eng-table">
-        <div className="eng-center">
+        <div className="eng-center" ref={tableWheel} title="Scroll to resize the cards · hold Shift to scroll the board instead">
+          {scaleHint && <div className="eng-scale-hint">Cards {scaleHint}</div>}
           {seat(top, 'top')}
           <div className="eng-seam" />
           {seat(bottom, 'bottom')}
