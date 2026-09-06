@@ -1,5 +1,19 @@
 // Helpers for reading fields off Scryfall card objects.
 
+// Which bucket a card with several types belongs to. This is a different
+// question from the order the buckets are listed in, and conflating the two is
+// what put artifact lands under Artifacts.
+//
+// A card is filed under the first of these it has. Land wins outright: an
+// artifact land is a land you play off your land drop, registered in the lands
+// section of a tournament decklist, and every deckbuilder files it there — the
+// same reasoning puts Dryad Arbor ("Land Creature") under lands. Creature comes
+// next, so an artifact creature like Frogmite is a creature, not an artifact.
+const TYPE_PRECEDENCE = ['Land', 'Creature', 'Planeswalker', 'Battle', 'Instant', 'Sorcery', 'Artifact', 'Enchantment']
+
+// The order the groups are listed in: creatures first, lands last, which is how
+// decklists have been written and registered for as long as there have been
+// decklists.
 const TYPE_ORDER = [
   'Creature',
   'Planeswalker',
@@ -16,17 +30,26 @@ export function typeLine(card) {
   return card.type_line || card.card_faces?.[0]?.type_line || ''
 }
 
-// The primary type used for grouping (first recognized type in the type line).
+// The supertypes and types of the front face only.
+//
+// Two things have to be cut away before matching. A double-faced card's line
+// holds both faces ("Sorcery // Land" — Bala Ged Recovery is a sorcery you may
+// instead play as a land, and every tool files it under sorceries), and the
+// subtypes after the em dash are free text that can contain a type's name.
+function frontTypes(card) {
+  return typeLine(card).split('//')[0].split('—')[0]
+}
+
+const hasType = (card, t) => new RegExp(`\\b${t}\\b`).test(frontTypes(card))
+
+// The group a card is listed under.
 export function primaryType(card) {
-  const line = typeLine(card)
-  for (const t of TYPE_ORDER) {
-    if (t !== 'Other' && line.includes(t)) return t
-  }
+  for (const t of TYPE_PRECEDENCE) if (hasType(card, t)) return t
   return 'Other'
 }
 
 export function isLand(card) {
-  return typeLine(card).includes('Land')
+  return hasType(card, 'Land')
 }
 
 export function manaValue(card) {
