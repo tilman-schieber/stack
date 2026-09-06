@@ -161,6 +161,7 @@ export async function createWebApi() {
       name: deck.name,
       description: deck.description || '',
       artId: deck.artId || null,
+      coverKey: deck.coverKey || null,
       colors: deck.colors || [],
       updatedAt: new Date().toISOString(),
       entries: deck.entries || []

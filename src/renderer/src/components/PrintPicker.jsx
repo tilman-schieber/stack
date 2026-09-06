@@ -3,6 +3,7 @@ import { imageSrc, oracleKey, printLabel } from '../lib/cardUtils.js'
 import { isAllowed } from '../lib/printFilter.js'
 import { useDeck } from '../store/deck.js'
 import { useSettings } from '../store/settings.js'
+import { CoverIcon } from './Icons.jsx'
 
 // Modal for choosing the art/printing of a card.
 // - Click a printing to use it for this deck entry.
@@ -11,7 +12,12 @@ import { useSettings } from '../store/settings.js'
 export default function PrintPicker({ entry, onClose }) {
   const key = oracleKey(entry.card)
   const setEntryPrinting = useDeck((s) => s.setEntryPrinting)
+  const coverKey = useDeck((s) => s.coverKey)
+  const setCover = useDeck((s) => s.setCover)
   const settings = useSettings()
+  const isCover = coverKey === key
+  // Only a maindeck card can be the deck's face.
+  const canBeCover = (entry.section || 'main') !== 'sideboard'
 
   // byId accumulates every printing we've seen; order preserves load order.
   const [byId, setById] = useState(() => new Map([[entry.card.id, entry.card]]))
@@ -176,6 +182,20 @@ export default function PrintPicker({ entry, onClose }) {
               favorite is the import default
             </p>
           </div>
+          {canBeCover && (
+            <button
+              className={'cover-btn' + (isCover ? ' on' : '')}
+              onClick={() => setCover(isCover ? null : key)}
+              title={
+                isCover
+                  ? 'This card is the deck cover — click to go back to choosing one automatically'
+                  : "Use this card's art as the deck cover"
+              }
+            >
+              <CoverIcon />
+              {isCover ? 'Deck cover' : 'Use as cover'}
+            </button>
+          )}
           <button className="del" onClick={onClose} title="Close">
             ✕
           </button>

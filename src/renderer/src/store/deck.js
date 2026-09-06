@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { signatureCard, deckColors } from '../lib/cardUtils.js'
+import { signatureCard, deckColors, oracleKey } from '../lib/cardUtils.js'
 
 // An entry pairs a resolved Scryfall card with a quantity + section.
 // entries: { id, card, qty, section }[]   section = 'main' | 'sideboard'
@@ -29,16 +29,22 @@ function mergeEntry(entries, card, qty, section) {
 export const useDeck = create((set, get) => ({
   deckName: 'Untitled Deck',
   description: '', // free-text notes saved with the deck
+  // The card chosen to represent the deck, by oracle key rather than printing,
+  // so changing a card's art keeps it the cover. Null = pick one automatically.
+  coverKey: null,
   entries: [],
   loading: false,
   notFound: [], // names that could not be resolved
   parseErrors: [], // raw lines the parser could not read
 
   setDeckName: (name) => set({ deckName: name }),
+
+  // Pin a card as the deck's cover, or clear the pin to go back to automatic.
+  setCover: (key) => set({ coverKey: key || null }),
   setDescription: (description) => set({ description }),
 
   newDeck: () =>
-    set({ deckName: 'Untitled Deck', description: '', entries: [], notFound: [], parseErrors: [] }),
+    set({ deckName: 'Untitled Deck', description: '', coverKey: null, entries: [], notFound: [], parseErrors: [] }),
 
   // Import a parsed decklist (from parseDecklist): resolve names -> cards. The
   // app is 1v1 constructed, so a pasted list's Commander section joins the main
@@ -150,6 +156,7 @@ export const useDeck = create((set, get) => ({
         entries,
         deckName: record.name,
         description: record.description || '',
+        coverKey: record.coverKey || null,
         notFound: unresolved,
         parseErrors: [],
         loading: false
@@ -161,12 +168,16 @@ export const useDeck = create((set, get) => ({
 
   // Serialize the current deck for saving.
   serialize: () => {
-    const { deckName, description, entries } = get()
+    const { deckName, description, entries, coverKey } = get()
     const main = entries.filter((e) => (e.section || 'main') === 'main')
-    const art = signatureCard(main)
+    // A pinned cover wins; if that card has left the deck, fall back to picking
+    // one rather than saving art the deck no longer contains.
+    const pinned = coverKey ? main.find((e) => oracleKey(e.card) === coverKey) : null
+    const art = pinned ? pinned.card : signatureCard(main)
     return {
       name: deckName,
       description,
+      coverKey: pinned ? coverKey : null,
       artId: art?.id || null, // the card whose illustration represents the deck
       colors: deckColors(main),
       entries: entries.map((e) => ({
