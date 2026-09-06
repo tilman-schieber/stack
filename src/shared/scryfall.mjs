@@ -25,12 +25,17 @@ function hasImage(card) {
   return !!(card.image_uris?.normal || card.card_faces?.some((f) => f.image_uris?.normal))
 }
 
-// Pick the best normal-size image url from a card for a given face.
-// face 'back' -> the second card face (transform / MDFC); otherwise the front.
+// Pick an image url from a card.
+//   face 'back' -> the second card face (transform / MDFC)
+//   face 'art'  -> the cropped illustration, for deck banners
+//   otherwise   -> the whole front card
 export function imageUrlFor(card, face) {
   if (!card) return null
   if (face === 'back') {
     return card.card_faces?.[1]?.image_uris?.normal || null
+  }
+  if (face === 'art') {
+    return card.image_uris?.art_crop || card.card_faces?.find((f) => f.image_uris?.art_crop)?.image_uris?.art_crop || null
   }
   if (card.image_uris?.normal) return card.image_uris.normal
   const front = card.card_faces?.find((f) => f.image_uris?.normal)

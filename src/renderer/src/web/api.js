@@ -35,12 +35,12 @@ export async function createWebApi() {
   // card that passes through the API. Ids we have never seen (an online
   // opponent's cards) fall back to Scryfall's redirecting image endpoint and are
   // fetched in the background so later renders use direct image URLs.
-  const images = new Map() // id -> { front, back }
+  const images = new Map() // id -> { front, back, art }
   const unknown = new Set()
   let flushTimer = null
   function remember(cards) {
     for (const c of cards) {
-      if (c?.id) images.set(c.id, { front: imageUrlFor(c, 'front'), back: imageUrlFor(c, 'back') })
+      if (c?.id) images.set(c.id, { front: imageUrlFor(c, 'front'), back: imageUrlFor(c, 'back'), art: imageUrlFor(c, 'art') })
     }
   }
   function noteUnknown(id) {
@@ -59,11 +59,12 @@ export async function createWebApi() {
       for (const id of ids) if (images.has(id)) unknown.delete(id)
     }, 50)
   }
-  setImageResolver((id, back) => {
+  setImageResolver((id, face) => {
     const known = images.get(id)
-    if (known) return back ? known.back : known.front
+    if (known) return face === 'art' ? known.art || known.front : face ? known.back : known.front
     noteUnknown(id)
-    return `${SCRYFALL_BASE}/cards/${encodeURIComponent(id)}?format=image&version=normal${back ? '&face=back' : ''}`
+    const version = face === 'art' ? 'art_crop' : 'normal'
+    return `${SCRYFALL_BASE}/cards/${encodeURIComponent(id)}?format=image&version=${version}${face === true ? '&face=back' : ''}`
   })
 
   // ---------- card store (mirrors src/main/db.js) ----------
@@ -159,6 +160,8 @@ export async function createWebApi() {
       slug: slugify(deck.name),
       name: deck.name,
       description: deck.description || '',
+      artId: deck.artId || null,
+      colors: deck.colors || [],
       updatedAt: new Date().toISOString(),
       entries: deck.entries || []
     }

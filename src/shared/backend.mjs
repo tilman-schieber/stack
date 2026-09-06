@@ -51,8 +51,14 @@ export function deckSummary(rec) {
     slug: rec.slug,
     name: rec.name,
     description: rec.description || '',
+    // The card whose art represents the deck, and the colours it plays.
+    artId: rec.artId || rec.entries?.[0]?.scryfallId || null,
+    colors: rec.colors || [],
     updatedAt: rec.updatedAt,
-    count: (rec.entries || []).reduce((s, e) => s + (e.qty || 0), 0)
+    count: (rec.entries || []).reduce((s, e) => s + (e.qty || 0), 0),
+    // Split out, because a decklist is read as "60 + 15", not 75.
+    mainCount: (rec.entries || []).filter((e) => (e.section || 'main') !== 'sideboard').reduce((s, e) => s + (e.qty || 0), 0),
+    sideCount: (rec.entries || []).filter((e) => e.section === 'sideboard').reduce((s, e) => s + (e.qty || 0), 0)
   }
 }
 

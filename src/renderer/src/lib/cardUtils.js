@@ -42,12 +42,39 @@ export function colorIdentity(card) {
 // the main process, which caches them on disk. The web build has no such
 // protocol and installs a resolver that maps ids to Scryfall image URLs
 // (src/web/api.js).
-let imageResolver = (id, back) => `card://${id}${back ? '/back' : ''}`
+// `face`: false/undefined = the whole front card, true/'back' = the second face,
+// 'art' = the cropped illustration (deck banners).
+let imageResolver = (id, face) => `card://${id}${face === 'art' ? '/art' : face ? '/back' : ''}`
 export function setImageResolver(fn) {
   imageResolver = fn
 }
-export function cardImageUrl(id, back = false) {
-  return id ? imageResolver(id, !!back) : null
+export function cardImageUrl(id, face = false) {
+  return id ? imageResolver(id, face === 'art' ? 'art' : !!face) : null
+}
+// The cropped illustration of a card, for deck banners.
+export const cardArtUrl = (id) => cardImageUrl(id, 'art')
+
+// A deck's signature card — the one whose art represents it. The most expensive
+// nonland card, since that is what a deck is built around; ties go to the card
+// with more copies. Falls back to whatever the deck's first card is.
+export function signatureCard(cards) {
+  const list = (cards || []).filter(Boolean)
+  if (!list.length) return null
+  const spells = list.filter((e) => !isLand(e.card))
+  const pool = spells.length ? spells : list
+  return [...pool].sort((a, b) => manaValue(b.card) - manaValue(a.card) || (b.qty || 0) - (a.qty || 0))[0].card
+}
+
+// The colours a deck actually plays, in WUBRG order — the colours of the spells
+// you cast, not colour identity, which also counts mana symbols in rules text and
+// would paint a two-colour deck five colours because of its lands.
+export function deckColors(cards) {
+  const seen = new Set()
+  for (const e of cards || []) {
+    if (!e.card || isLand(e.card)) continue
+    for (const c of e.card.colors || e.card.card_faces?.[0]?.colors || []) seen.add(c)
+  }
+  return ['W', 'U', 'B', 'R', 'G'].filter((c) => seen.has(c))
 }
 export function imageSrc(card) {
   return cardImageUrl(card.id)

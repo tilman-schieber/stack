@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useDeck } from '../store/deck.js'
 import { useNav } from '../store/nav.js'
 import { useDecks, missingDefaults } from '../store/decks.js'
+import DeckPlate, { deckSize } from '../components/DeckPlate.jsx'
 import { parseDecklist } from '../lib/deckParser.js'
 import { exportDeckText } from '../lib/deckExport.js'
 
@@ -174,7 +175,7 @@ export default function DeckManager() {
   const when = (iso) => {
     if (!iso) return ''
     const d = new Date(iso)
-    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString()
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString()
   }
 
   // Backup: every deck record in one JSON file; restore adds them back (a deck
@@ -274,81 +275,61 @@ export default function DeckManager() {
             : 'No decks. Import a decklist, build one from scratch, or restore the default decks.'}
         </p>
       ) : (
-        <div className="dm-scroll">
-          <table className="dm-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th className="num">Cards</th>
-                <th>Updated</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {decks.map((d) => (
-                <tr key={d.slug}>
-                  <td className="dm-name">
-                    {renaming?.slug === d.slug ? (
-                      <input
-                        autoFocus
-                        value={renaming.name}
-                        onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') commitRename()
-                          if (e.key === 'Escape') setRenaming(null)
-                        }}
-                        onBlur={commitRename}
-                      />
-                    ) : (
-                      <>
-                        <span className="dm-link" onClick={() => edit(d.slug)} title="Open in the builder">
-                          {d.name}
-                        </span>
-                        {d.description && (
-                          <div className="dm-desc" title={d.description}>
-                            {d.description}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </td>
-                  <td className="num">{d.count}</td>
-                  <td className="muted small">{when(d.updatedAt)}</td>
-                  <td className="dm-row-actions">
-                    {confirmDelete === d.slug ? (
-                      <>
-                        <span className="muted small">Delete “{d.name}”?</span>
-                        <button className="mini danger" onClick={() => remove(d.slug)}>
-                          Delete
-                        </button>
-                        <button className="mini" onClick={() => setConfirmDelete(null)}>
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button className="mini primary" onClick={() => play(d.slug)} title="Start a game with this deck">
-                          Play
-                        </button>
-                        <button className="mini" onClick={() => edit(d.slug)}>
-                          Edit
-                        </button>
-                        <RowMenu
-                          items={[
-                            { label: 'Rename', onClick: () => setRenaming({ slug: d.slug, name: d.name }) },
-                            { label: 'Duplicate', onClick: () => duplicate(d) },
-                            { label: 'Copy list', onClick: () => exportClipboard(d), title: 'Copy the decklist as text' },
-                            { label: 'Export file…', onClick: () => exportFile(d), title: 'Save the decklist as a .txt file' },
-                            { label: 'Delete', onClick: () => setConfirmDelete(d.slug), danger: true }
-                          ]}
-                        />
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="deck-grid">
+          {decks.map((d) => {
+            if (renaming?.slug === d.slug)
+              return (
+                <div className="deck-plate renaming" key={d.slug}>
+                  <label className="field-label">New name</label>
+                  <input
+                    autoFocus
+                    value={renaming.name}
+                    onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitRename()
+                      if (e.key === 'Escape') setRenaming(null)
+                    }}
+                    onBlur={commitRename}
+                  />
+                </div>
+              )
+            if (confirmDelete === d.slug)
+              return (
+                <div className="deck-plate confirming" key={d.slug}>
+                  <p>
+                    Delete <b>{d.name}</b>?
+                  </p>
+                  <div className="deck-acts">
+                    <button className="danger-btn" onClick={() => remove(d.slug)}>
+                      Delete
+                    </button>
+                    <button className="secondary" onClick={() => setConfirmDelete(null)}>
+                      Keep it
+                    </button>
+                  </div>
+                </div>
+              )
+            return (
+              <DeckPlate
+                key={d.slug}
+                deck={d}
+                subtitle={`${deckSize(d)} · ${when(d.updatedAt)}`}
+                onPlay={() => play(d.slug)}
+                onEdit={() => edit(d.slug)}
+                menu={
+                  <RowMenu
+                    items={[
+                      { label: 'Rename', onClick: () => setRenaming({ slug: d.slug, name: d.name }) },
+                      { label: 'Duplicate', onClick: () => duplicate(d) },
+                      { label: 'Copy list', onClick: () => exportClipboard(d), title: 'Copy the decklist as text' },
+                      { label: 'Export file…', onClick: () => exportFile(d), title: 'Save the decklist as a .txt file' },
+                      { label: 'Delete', onClick: () => setConfirmDelete(d.slug), danger: true }
+                    ]}
+                  />
+                }
+              />
+            )
+          })}
         </div>
       )}
     </div>

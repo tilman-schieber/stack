@@ -1,13 +1,43 @@
+/* Self-hosted so the desktop app keeps working offline and the page CSP stays
+   tight (no external font host). */
+@import '@fontsource/alegreya/latin-400.css';
+@import '@fontsource/alegreya/latin-400-italic.css';
+@import '@fontsource/alegreya/latin-700.css';
+@import '@fontsource/barlow-semi-condensed/latin-400.css';
+@import '@fontsource/barlow-semi-condensed/latin-500.css';
+@import '@fontsource/barlow-semi-condensed/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+
+/* A card table under a low lamp: green-black felt, aged brass for anything you
+   can act on, warm paper-white text. Magic's five colours carry meaning that a
+   single accent used to carry. */
 :root {
-  --bg: #14151a;
-  --panel: #1c1e26;
-  --panel-2: #23262f;
-  --border: #2e323d;
-  --text: #e6e8ee;
-  --muted: #8b90a0;
-  --accent: #d4863a;
-  --accent-hover: #e59a4d;
-  --danger: #e05a5a;
+  --bg: #0f1512;
+  --bg-deep: #0a0e0c;
+  --panel: #17201c;
+  --panel-2: #1e2925;
+  --border: #2c3b34;
+  --border-bright: #3d5147;
+  --text: #e9e5da;
+  --muted: #94a09a;
+  --faint: #6b7873;
+  --accent: #c9a253;
+  --accent-hover: #dcb768;
+  --danger: #c05442;
+  --on-accent: #17140b; /* text on a brass fill */
+
+  /* The five colours (WUBRG) — deck identity, mana pips, card colour. */
+  --mtg-w: #efe4c4;
+  --mtg-u: #5b8bcb;
+  --mtg-b: #857491;
+  --mtg-r: #c65440;
+  --mtg-g: #55925d;
+  --mtg-c: #8c9a93;
+
+  --font-display: 'Alegreya', 'Iowan Old Style', Georgia, serif;
+  --font-ui: 'Barlow Semi Condensed', 'Helvetica Neue', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
 }
 
 * {
@@ -17,7 +47,7 @@
 /* Dark-themed scrollbars (Chromium/Electron) */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3a3f4b var(--bg);
+  scrollbar-color: var(--border-bright) var(--bg);
 }
 ::-webkit-scrollbar {
   width: 11px;
@@ -27,12 +57,12 @@
   background: var(--bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: #3a3f4b;
+  background: var(--border-bright);
   border-radius: 7px;
   border: 2px solid var(--bg);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a5060;
+  background: #4e6459;
 }
 ::-webkit-scrollbar-corner {
   background: var(--bg);
@@ -46,11 +76,29 @@ body,
 }
 
 body {
-  background: var(--bg);
+  background: radial-gradient(120% 80% at 50% -10%, #1a241f 0%, var(--bg) 46%, var(--bg-deep) 100%) var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  font-size: 14px;
+  font-family: var(--font-ui);
+  font-size: 15px;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Names and numbers are set in the serif; small labels and counts in the mono.
+   Scoped with `>` so a heading nested inside a section keeps the serif. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+.field-label,
+.dm-section,
+.home-section > h3,
+.eng-count,
+.rail-pile-label,
+.eng-stops-sub {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
 }
 
 button {
@@ -64,12 +112,12 @@ button {
   transition: background 0.12s, border-color 0.12s;
 }
 button:hover {
-  background: #2b2f3a;
+  background: var(--panel-2);
 }
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #1a1206;
+  color: var(--on-accent);
   font-weight: 600;
 }
 button.primary:hover {
@@ -735,7 +783,7 @@ code {
   top: 6px;
   right: 6px;
   background: var(--accent);
-  color: #1a1206;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 700;
   border-radius: 10px;
@@ -779,7 +827,7 @@ code {
   line-height: 1;
   background: rgba(0, 0, 0, 0.72);
   border-color: rgba(255, 255, 255, 0.15);
-  color: #9aa0b0;
+  color: var(--muted);
 }
 .icon-btn:hover {
   background: rgba(0, 0, 0, 0.85);
@@ -954,7 +1002,7 @@ code {
   border-radius: 5px;
 }
 .row-menu-pop button:hover {
-  background: #2b2f3a;
+  background: var(--panel-2);
 }
 .row-menu-pop button.danger {
   color: var(--danger);
@@ -1011,7 +1059,7 @@ code {
 .home-section {
   margin-top: 28px;
 }
-.home-section h3 {
+.home-section > h3 {
   margin: 0 0 6px;
   font-size: 12px;
   text-transform: uppercase;
@@ -1096,4 +1144,139 @@ code {
     border-top: 1px solid var(--border);
     max-height: 60vh;
   }
+}
+
+/* ===== Deck plates =====
+   A deck shown as an object: its signature card's illustration behind the name,
+   its colours as pips, and the actions over the art. */
+.deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 14px;
+}
+.deck-plate {
+  position: relative;
+  border: 1px solid var(--border-bright);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  min-height: 168px;
+}
+.deck-art {
+  height: 132px;
+  background-size: cover;
+  background-position: 50% 32%;
+  filter: saturate(0.92);
+}
+.deck-art.none {
+  background: linear-gradient(160deg, var(--panel-2), var(--bg-deep));
+}
+.deck-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10, 14, 12, 0.1) 0%, rgba(10, 14, 12, 0.74) 52%, rgba(10, 14, 12, 0.97) 100%);
+  pointer-events: none;
+}
+.deck-front {
+  position: relative;
+  margin-top: -74px;
+  padding: 14px 16px 15px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.deck-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 21px;
+  line-height: 1.15;
+  margin: 7px 0 3px;
+  cursor: pointer;
+}
+.deck-name:hover {
+  color: var(--accent-hover);
+}
+.deck-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 0;
+}
+.deck-note {
+  font-size: 13px;
+  line-height: 1.42;
+  color: var(--muted);
+  margin: 8px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.deck-acts {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+.deck-acts button {
+  padding: 4px 13px;
+  font-size: 13px;
+}
+
+/* Colour pips (WUBRG) */
+.pips {
+  display: inline-flex;
+  gap: 4px;
+}
+.pip {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  color: #10150f;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+.pip-W { background: var(--mtg-w); }
+.pip-U { background: var(--mtg-u); }
+.pip-B { background: var(--mtg-b); }
+.pip-R { background: var(--mtg-r); }
+.pip-G { background: var(--mtg-g); }
+.pip-C { background: var(--mtg-c); }
+
+/* Rename / delete take over the plate they belong to, so the grid never jumps. */
+.deck-plate.renaming,
+.deck-plate.confirming {
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  background: var(--panel);
+}
+.deck-plate.confirming p {
+  margin: 0;
+}
+button.danger-btn {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: transparent;
+  padding: 4px 13px;
+  font-size: 13px;
+}
+button.danger-btn:hover {
+  background: var(--danger);
+  color: var(--on-accent);
+}
+.all-decks {
+  margin-top: 14px;
+}
+.deck-acts .row-menu button.mini {
+  padding: 4px 10px;
 }

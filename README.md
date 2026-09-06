@@ -43,12 +43,14 @@ served over HTTPS (or from localhost) for WebRTC and the clipboard.
 ## Home
 
 The landing page: what the app does, the three places to go (Play, Decks, Build), and your
-decks, each with **Play** and **Edit**. The 🃏 Stack brand in the top bar returns here;
-**Settings** (⚙, top right) filters which printings the art picker shows.
+decks as plates — each showing the illustration of its signature card (the most expensive
+nonland card in it), its colours as WUBRG pips and its size as `60 + 15`. The 🃏 Stack brand in
+the top bar returns here; **Settings** (⚙, top right) filters which printings the art picker
+shows.
 
 ## Decks (deck manager)
 
-Every deck in one list — **Play** starts a game with it as Player 1, **Edit** opens it in
+Every deck as a plate — **Play** starts a game with it as Player 1, **Edit** opens it in
 Build, and the ⋯ menu has **Rename**, **Duplicate**, **Copy list** (decklist text to the
 clipboard), **Export file…** (a `.txt` with set codes and collector numbers so the exact
 printings round-trip) and **Delete**. **Import…** a decklist by pasting Arena/MTGO text or
@@ -139,6 +141,15 @@ screen lists each deck and its sideboard side by side; click a card to move one 
 start the next game. A deck may not get smaller than it started. The loser of each game chooses
 to play or draw (103.6), and the running score shows in the turn bar. The computer keeps its deck
 as it is between games.
+
+## Look
+
+A card table under a low lamp: a green-black felt ground, aged brass for anything you can act
+on, and Magic's five colours doing the semantic work (deck pips, and more to come). Type is
+Alegreya for names, Barlow Semi Condensed for interface text and IBM Plex Mono for labels and
+counts — all self-hosted from `@fontsource`, so the desktop app still works offline and the
+page needs no external font host. The full redesign plan is four phases; this is phase one
+(identity and deck art). Phases two to four cover the table layout, motion and chrome.
 
 ## Rules engine (`src/shared/engine/`)
 

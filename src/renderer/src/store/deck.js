@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { signatureCard, deckColors } from '../lib/cardUtils.js'
 
 // An entry pairs a resolved Scryfall card with a quantity + section.
 // entries: { id, card, qty, section }[]   section = 'main' | 'sideboard'
@@ -161,9 +162,13 @@ export const useDeck = create((set, get) => ({
   // Serialize the current deck for saving.
   serialize: () => {
     const { deckName, description, entries } = get()
+    const main = entries.filter((e) => (e.section || 'main') === 'main')
+    const art = signatureCard(main)
     return {
       name: deckName,
       description,
+      artId: art?.id || null, // the card whose illustration represents the deck
+      colors: deckColors(main),
       entries: entries.map((e) => ({
         scryfallId: e.id,
         name: e.card.name,

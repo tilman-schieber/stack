@@ -2,8 +2,9 @@ import React from 'react'
 import { useNav } from '../store/nav.js'
 import { useDeck } from '../store/deck.js'
 import { useDecks } from '../store/decks.js'
+import DeckPlate from '../components/DeckPlate.jsx'
 
-const SHOWN = 8
+const SHOWN = 6
 
 // Landing page: what the app does, the three places to go, and the quickest
 // route into a game — your decks, each with Play and Edit.
@@ -88,31 +89,18 @@ export default function Home() {
           <p className="muted small">No decks yet. Import a list, build one, or restore the default decks in Decks.</p>
         )}
         {shown.length > 0 && (
-          <div className="home-list">
-            {shown.map((d) => (
-              <div key={d.slug} className="home-row">
-                <span className="home-row-name" title={d.description || undefined}>
-                  {d.name}
-                </span>
-                <span className="muted small">{d.count} cards</span>
-                <span className="home-row-actions">
-                  <button className="mini primary" onClick={() => play(d.slug)}>
-                    Play
-                  </button>
-                  <button className="mini" onClick={() => edit(d.slug)}>
-                    Edit
-                  </button>
-                </span>
-              </div>
-            ))}
+          <>
+            <div className="deck-grid">
+              {shown.map((d) => (
+                <DeckPlate key={d.slug} deck={d} onPlay={() => play(d.slug)} onEdit={() => edit(d.slug)} />
+              ))}
+            </div>
             {decks.length > SHOWN && (
-              <div className="home-row">
-                <button className="mini" onClick={() => go('decks')}>
-                  All {decks.length} decks →
-                </button>
-              </div>
+              <button className="secondary all-decks" onClick={() => go('decks')}>
+                All {decks.length} decks →
+              </button>
             )}
-          </div>
+          </>
         )}
       </section>
     </div>

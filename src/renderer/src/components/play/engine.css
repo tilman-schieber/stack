@@ -30,7 +30,7 @@
   width: 214px;
   display: flex;
   flex-direction: column;
-  background: #0e0f13;
+  background: var(--bg-deep);
   border-right: 1px solid var(--border);
   overflow-y: auto;
 }
@@ -94,7 +94,7 @@
   min-height: 18px;
 }
 .eng-mana-pip {
-  color: #1a1206;
+  color: var(--on-accent);
   font-weight: 700;
   font-size: 12px;
   border-radius: 8px;
@@ -141,7 +141,7 @@
   gap: 4px;
   padding: 6px 130px 0 12px;
   height: 84px;
-  background: #101116;
+  background: var(--panel);
   align-items: flex-start;
   flex: 0 0 auto;
   position: relative;
@@ -289,7 +289,7 @@
   position: absolute;
   bottom: 3px;
   right: 3px;
-  background: #2b2f3a;
+  background: var(--panel-2);
   color: #ffd479;
   border: 1px solid #ffd479;
   font-size: 13px;
@@ -404,7 +404,7 @@
 }
 .eng-phase.now {
   background: var(--accent);
-  color: #1a1206;
+  color: var(--on-accent);
   font-weight: 700;
 }
 .eng-phase.stop {
@@ -421,7 +421,7 @@
   background: #e05a5a;
 }
 .eng-phase.now .eng-phase-dot {
-  background: #1a1206;
+  background: var(--on-accent);
 }
 .eng-yield {
   display: inline-flex;
@@ -558,7 +558,7 @@
   left: 50%;
   transform: translateX(-50%);
   background: var(--accent);
-  color: #1a1206;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 700;
   border-radius: 6px;
@@ -803,7 +803,7 @@
 }
 .eng-badge.warn {
   background: #e0a52e;
-  color: #1a1206;
+  color: var(--on-accent);
 }
 .eng-badge.stop {
   right: 24px;
@@ -899,7 +899,7 @@
 .eng-badge.ring {
   right: 24px;
   background: #ffd66b;
-  color: #1a1206;
+  color: var(--on-accent);
 }
 .eng-daynight {
   display: inline-flex;

@@ -29,7 +29,7 @@ export function registerScheme() {
 
 async function ensureImage(id, face) {
   await fs.mkdir(cacheDir(), { recursive: true })
-  const suffix = face === 'back' ? '-back' : ''
+  const suffix = face === 'back' ? '-back' : face === 'art' ? '-art' : ''
   const file = path.join(cacheDir(), `${id}${suffix}.jpg`)
   if (existsSync(file)) return file
 
@@ -59,8 +59,9 @@ export function registerHandler() {
     try {
       const url = new URL(request.url)
       const id = url.hostname
-      // card://<id> (front) or card://<id>/back (second face)
-      const face = url.pathname.replace(/^\/+/, '') === 'back' ? 'back' : 'front'
+      // card://<id> (front), card://<id>/back (second face), card://<id>/art (crop)
+      const path = url.pathname.replace(/^\/+/, '')
+      const face = path === 'back' ? 'back' : path === 'art' ? 'art' : 'front'
       const file = await ensureImage(id, face)
       // Serve via net.fetch on a file:// url so Electron streams it efficiently.
       return net.fetch(`file://${file}`)

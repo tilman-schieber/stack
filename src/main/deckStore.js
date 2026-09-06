@@ -18,6 +18,8 @@ export async function saveDeck(deck) {
     slug,
     name: deck.name,
     description: deck.description || '',
+    artId: deck.artId || null,
+    colors: deck.colors || [],
     updatedAt: new Date().toISOString(),
     entries: deck.entries || []
   }

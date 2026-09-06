@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_DECKS, deckCardNames } from '../lib/defaultDecks.mjs'
 import { buildLookup } from '../lib/resolveDeck.js'
+import { signatureCard, deckColors } from '../lib/cardUtils.js'
 import { slugify } from '../../../shared/backend.mjs'
 
 // The list of saved decks, shared by every view that shows or picks decks, plus
@@ -22,7 +23,9 @@ async function buildDefaultDeck(d) {
   }
   add(d.cards, 'main')
   add(d.sideboard || [], 'sideboard')
-  return { name: d.name, description: d.description || '', entries }
+  const mainCards = entries.filter((e) => e.section === 'main').map((e) => ({ card: lookup(e.name), qty: e.qty }))
+  const art = signatureCard(mainCards)
+  return { name: d.name, description: d.description || '', artId: art?.id || null, colors: deckColors(mainCards), entries }
 }
 
 export const useDecks = create((set, get) => ({
@@ -37,13 +40,39 @@ export const useDecks = create((set, get) => ({
     return decks
   },
 
-  // App start: load the list and, the first time, add the default decks.
-  // The flag is only set once seeding succeeds, so an offline first start
-  // tries again next time. Deleting the defaults later is respected.
+  // App start: load the list, add the default decks the first time, and fill in
+  // the art / colours of decks saved before those existed.
   init: async () => {
     await get().refresh()
     const settings = await window.api.getSettings()
     if (!settings.seededDecks) await get().restoreDefaults()
+    await get().backfillIdentity()
+  },
+
+  // A deck records the card whose art represents it and the colours it plays.
+  // Decks saved before that existed get it filled in once, from cards already
+  // cached, so this needs no network and never touches a deck's contents.
+  backfillIdentity: async () => {
+    const stale = get().decks.filter((d) => !d.artId || !Array.isArray(d.colors) || !d.colors.length)
+    if (!stale.length) return
+    let changed = 0
+    for (const summary of stale) {
+      try {
+        const rec = await window.api.loadDeck(summary.slug)
+        const main = (rec.entries || []).filter((e) => (e.section || 'main') === 'main')
+        if (!main.length) continue
+        const { cards } = await window.api.ensureCards(main.map((e) => e.scryfallId))
+        const byId = new Map(cards.map((c) => [c.id, c]))
+        const pairs = main.map((e) => ({ card: byId.get(e.scryfallId), qty: e.qty })).filter((p) => p.card)
+        if (!pairs.length) continue
+        const art = signatureCard(pairs)
+        await window.api.saveDeck({ ...rec, artId: art?.id || null, colors: deckColors(pairs) })
+        changed++
+      } catch {
+        // a deck we can't resolve keeps its plain plate; not worth failing start-up
+      }
+    }
+    if (changed) await get().refresh()
   },
 
   // Save every default deck that isn't in the list (matched by name).
