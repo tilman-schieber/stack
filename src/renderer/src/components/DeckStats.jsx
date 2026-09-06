@@ -137,7 +137,7 @@ function computeStats(entries) {
   const typeCounts = {}
 
   for (const e of entries) {
-    // Only maindeck + commander count toward stats.
+    // Only the main deck counts toward stats.
     if (e.section === 'sideboard') continue
     const n = e.qty
     total += n

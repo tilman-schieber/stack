@@ -645,14 +645,6 @@ export default function EnginePlayArea() {
           topCard={p.exile[p.exile.length - 1]}
           onOpen={() => setZoneView({ pid: p.id, zone: 'exile' })}
         />
-        {view.format === 'commander' && (
-          <Pile
-            label={`Command${p.command?.[0]?.commanderCasts ? ` (tax ${2 * p.command[0].commanderCasts})` : ''}`}
-            count={p.command?.length || 0}
-            topCard={p.command?.[0]}
-            onOpen={() => setZoneView({ pid: p.id, zone: 'command' })}
-          />
-        )}
       </div>
       {(p.libraryTop || p.monarch || p.initiative || p.dungeon || p.emblems?.length > 0) && (
         <div className="eng-designations">
@@ -732,11 +724,6 @@ export default function EnginePlayArea() {
       {p.phasedOut?.length > 0 && (
         <div className="eng-count" title="Phased out — treated as though they don't exist until they phase in">
           ◌ phased out: {p.phasedOut.map((c) => c.name).join(', ')}
-        </div>
-      )}
-      {Object.keys(p.commanderDamage || {}).length > 0 && (
-        <div className="eng-count" title="Combat damage taken from each commander (21 loses)">
-          ⚔ commander damage: {Object.values(p.commanderDamage).join(' / ')}
         </div>
       )}
     </div>

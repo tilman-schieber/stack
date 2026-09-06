@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
 // An entry pairs a resolved Scryfall card with a quantity + section.
-// entries: { id, card, qty, section }[]   section = 'main' | 'sideboard' | 'commander'
+// entries: { id, card, qty, section }[]   section = 'main' | 'sideboard'
 
 // Build a name->card lookup that also indexes each face of double-faced cards.
 function buildLookup(cards) {
@@ -39,9 +39,11 @@ export const useDeck = create((set, get) => ({
   newDeck: () =>
     set({ deckName: 'Untitled Deck', description: '', entries: [], notFound: [], parseErrors: [] }),
 
-  // Import a parsed decklist (from parseDecklist): resolve names -> cards.
+  // Import a parsed decklist (from parseDecklist): resolve names -> cards. The
+  // app is 1v1 constructed, so a pasted list's Commander section joins the main
+  // deck rather than being dropped.
   importParsed: async (parsed, deckName) => {
-    const all = [...parsed.main, ...parsed.sideboard, ...parsed.commander]
+    const all = [...parsed.main, ...parsed.commander.map((e) => ({ ...e, section: 'main' })), ...parsed.sideboard]
     if (all.length === 0) {
       set({ parseErrors: parsed.errors || [], notFound: [] })
       return

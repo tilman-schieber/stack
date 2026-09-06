@@ -71,7 +71,8 @@ back the ones you deleted; it never touches decks you kept or changed. A deck's 
    (e.g. `t:goblin cmc<=2`) and click a result to add it.
 2. **Import** → paste an Arena/MTGO decklist (or *Load sample*) → *Import deck*, replacing the
    cards in the current deck. Lines like `4 Lightning Bolt`, `4x Lightning Bolt`,
-   `2 Snapcaster Mage (MM2) 42` all work; `Sideboard` / `Commander` headers are honored.
+   `2 Snapcaster Mage (MM2) 42` all work; a `Sideboard` header is honored, and a `Commander`
+   section joins the main deck (the app is 1v1 constructed).
    An empty deck opens on this tab.
 3. Adjust quantities with `–` / `+`; `✕` removes. Hover a card and click 🖼 to pick a
    printing; ♥ favorites a printing (favorites first, drag to reorder; the first favorite is
@@ -173,8 +174,9 @@ day and night with daybound/nightbound transforming, the Ring tempts you (the Ri
 Ring-bearer designation and all four levels), Classes (level up as a sorcery), Rooms (cast either
 door, unlock the other), blocking additional creatures (Entourage of Trest),
 partial target legality on resolution, state-based
-actions, draws and concessions, multiplayer elimination, and the Commander format (command
-zone, tax, 21-damage rule, 40 life).
+actions, draws and concessions, and multiplayer elimination. The Commander format (command zone,
+tax, the 21-damage rule, 40 life) and multiplayer are implemented in the engine but not offered
+in the UI — the app is 1v1 constructed.
 
 Designations show up on the board as the real helper cards — the Monarch token, the
 Undercity // The Initiative card (its back for the initiative, its front with the current room

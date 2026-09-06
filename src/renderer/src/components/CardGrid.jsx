@@ -5,7 +5,6 @@ import { useDeck } from '../store/deck.js'
 
 const SECTION_LABELS = {
   main: 'Main Deck',
-  commander: 'Commander',
   sideboard: 'Sideboard'
 }
 
@@ -30,7 +29,7 @@ export default function CardGrid() {
 
   return (
     <div className="card-grid-scroll">
-      {['commander', 'main', 'sideboard'].map((sec) => {
+      {['main', 'sideboard'].map((sec) => {
         const groups = sections[sec]
         if (!groups || groups.length === 0) return null
         const total = groups.reduce(
@@ -65,7 +64,7 @@ export default function CardGrid() {
 }
 
 function groupEntries(entries) {
-  const bySection = { main: {}, commander: {}, sideboard: {} }
+  const bySection = { main: {}, sideboard: {} }
   for (const e of entries) {
     const sec = bySection[e.section] ? e.section : 'main'
     const t = primaryType(e.card)

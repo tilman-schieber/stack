@@ -27,10 +27,10 @@ export default function DeckSidebar() {
 
   const counts = entries.reduce(
     (acc, e) => {
-      acc[e.section === 'sideboard' ? 'side' : e.section === 'commander' ? 'cmd' : 'main'] += e.qty
+      acc[e.section === 'sideboard' ? 'side' : 'main'] += e.qty
       return acc
     },
-    { main: 0, side: 0, cmd: 0 }
+    { main: 0, side: 0 }
   )
 
   async function save() {
@@ -66,7 +66,6 @@ export default function DeckSidebar() {
       <input className="deck-name-input" value={deckName} onChange={(e) => setDeckName(e.target.value)} />
       <div className="muted small deck-counts">
         {counts.main} main{counts.side ? ` · ${counts.side} sideboard` : ''}
-        {counts.cmd ? ` · ${counts.cmd} commander` : ''}
       </div>
       <textarea
         className="notes-input"

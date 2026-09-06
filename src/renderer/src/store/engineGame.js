@@ -84,10 +84,11 @@ export const useEngineGame = create((set, get) => ({
   _botTimer: null,
 
   // ---- local hot-seat / vs. computer ---------------------------------------
-  // decks: [{ name, cards: [scryfallCard…], sideboard?, commander? }, …];
-  // format: null | 'commander'; bots: seat ids the computer plays (their hands
-  // are hidden like an opponent's). `bestOf` (3) plays a match with sideboarding
-  // between games; `chooser` is the seat that picks play/draw (games 2+, 103.6).
+  // decks: [{ name, cards: [scryfallCard…], sideboard? }, …]; bots: seat ids the
+  // computer plays (their hands are hidden like an opponent's). `bestOf` (3) plays
+  // a match with sideboarding between games; `chooser` is the seat that picks
+  // play/draw (games 2+, 103.6). The engine also implements Commander (903), but
+  // the app is 1v1 constructed only, so `format` stays null.
   startEngineGame: ({ decks, format = null, bots = [], bestOf = 1, chooser = null }) => {
     const engine = new GameEngine({
       seed: 'game-' + Date.now(),
@@ -231,8 +232,7 @@ export const useEngineGame = create((set, get) => ({
     const { _engine, stops } = get()
     if (msg.t === 'deck') {
       if (_engine) return // the game is already running; a second deck can't replace it
-      // Online: it's a Commander game when both decks bring a commander.
-      const format = myDeck.commander && msg.commander ? 'commander' : null
+      const format = null // 1v1 constructed
       const engine = new GameEngine({
         seed: 'game-' + Date.now(),
         format,
