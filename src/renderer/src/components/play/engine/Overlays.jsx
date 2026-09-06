@@ -10,7 +10,9 @@ export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose 
   const castLabel = (a) =>
     a.type === 'castPlotted'
       ? 'Plotted'
-      : a.type === 'playLand'
+      : a.type === 'castEscape'
+        ? 'Escape'
+        : a.type === 'playLand'
         ? 'Play'
         : a.type === 'cast'
           ? 'Cast'

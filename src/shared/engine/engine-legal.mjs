@@ -46,6 +46,14 @@ export const legalMethods = {
       const sus = o.behavior?.suspend
       if (sus && (p.types.includes('Instant') || sorcerySpeed) && this._canPay(pid, parseManaCost(sus.cost)))
         actions.push({ type: 'suspend', oid, label: `Suspend ${p.name} (${sus.count})` })
+      // Abilities that work from hand ("Discard this card: …" — Faerie Macabre).
+      ;(o.behavior?.activated || []).forEach((ab, i) => {
+        if (!ab.fromHand) return
+        const targets = ab.targets || []
+        const actx = { byPid: pid, sourceColors: tags(p) }
+        if (targets.some((t) => !this._legalTargetsExist(t, actx))) return
+        actions.push({ type: 'activate', oid, ability: i, targets, needsTargets: targets.filter((t) => !t.optional).length, label: ab.label || this._describeAbility(ab), fromHand: true })
+      })
       if (p.types.includes('Land')) continue
       // Morph (702.37): cast the card face down as a 2/2 creature for {3}.
       if (o.behavior?.morph && sorcerySpeed && this._canPay(pid, parseManaCost('{3}')))
@@ -227,6 +235,20 @@ export const legalMethods = {
       if (targets.length && !targets.every((t) => this._legalTargetsExist(t, fctx))) continue
       actions.push({ type: 'castFlashback', oid, targets, needsTargets: targets.length })
     }
+    // Escape (702.138): cast from your graveyard, exiling N other cards from it.
+    for (const oid of zone(s, 'graveyard', pid)) {
+      const o = s.objects[oid]
+      const esc = o.behavior?.escape
+      if (!esc) continue
+      const instantSpeed = o.printed.types.includes('Instant')
+      if (!(instantSpeed || sorcerySpeed)) continue
+      if (!this._canPay(pid, parseManaCost(esc.cost))) continue
+      if (zone(s, 'graveyard', pid).filter((x) => x !== oid).length < esc.exile) continue
+      const targets = this._spellTargets(o)
+      const ectx = { byPid: pid, sourceColors: tags(o.printed) }
+      if (targets.length && !targets.every((t) => this._legalTargetsExist(t, ectx))) continue
+      actions.push({ type: 'castEscape', oid, targets, needsTargets: targets.length, label: `${o.printed.name} (escape)` })
+    }
 
     // Manual mana: tap a mana source for one of its colors (605). Auto-payment
     // taps sources too, so this is only needed to float mana deliberately (e.g.
@@ -261,12 +283,15 @@ export const legalMethods = {
       if (crew != null && !o.chars.types.includes('Creature') && this._crewCandidates(pid, crew).length)
         actions.push({ type: 'crew', oid, label: `Crew ${crew}` })
       ;(o.behavior?.activated || []).forEach((ab, i) => {
-        if (ab.manaAbility && ab.cost?.tap) return // {T} mana abilities: see tapForMana above
+        const plainTap = ab.manaAbility && ab.cost?.tap && !ab.cost.mana && !ab.cost.sacrifice && !ab.cost.discard
+        if (plainTap) return // {T} mana abilities: see tapForMana above
         if (!this._canActivate(pid, o, ab)) return
         if (ab.manaAbility) {
-          // A non-tap mana ability (Eldrazi Spawn's sacrifice): offered as an
-          // explicit action so it's never spent automatically; resolves at once.
-          actions.push({ type: 'activate', oid, ability: i, targets: [], needsTargets: 0, mana: true, label: ab.label || 'Mana ability' })
+          // A mana ability with a further cost (Eldrazi Spawn's sacrifice, Prophetic
+          // Prism's {1}) is an explicit action so it's never spent automatically; it
+          // resolves at once. "Add one mana of any color": one action per colour.
+          for (const color of ab.colors || [undefined])
+            actions.push({ type: 'activate', oid, ability: i, targets: [], needsTargets: 0, mana: true, color, label: (ab.label || 'Mana ability') + (color ? ` — {${color}}` : '') })
           return
         }
         const targets = ab.targets || []
@@ -389,6 +414,21 @@ export const legalMethods = {
     // Buyback (702.27): the same spell with its buyback cost paid (returns to hand).
     if (b.buyback && this._canPay(pid, addCosts(base, parseManaCost(b.buyback.cost)), extra))
       actions.push(withFace({ ...castAction(false), buyback: true, label: `${p.name} (buyback)` }))
+    // Bargain (702.166): the same spell, sacrificing an artifact, enchantment or token.
+    const BARGAIN = { types: ['Artifact', 'Enchantment'], orToken: true }
+    if (b.bargain && this._canPay(pid, base, extra, null, p) && this._sacrificeCandidates(pid, BARGAIN).length)
+      actions.push(withFace({ ...castAction(false), bargain: true, sacChoose: BARGAIN, label: `${p.name} (bargain)` }))
+    // Gift (702.174): promise an opponent a gift; the spell then has an extra target.
+    if (b.gift && this._canPay(pid, base, extra, null, p) && this._opponentsOf(pid).length) {
+      const gt = b.gift.targets || []
+      if (gt.every((t) => this._legalTargetsExist(t, ctx)))
+        actions.push(withFace({ ...castAction(false), gift: true, targets: [...targets, ...gt], needsTargets: targets.length + gt.length, variadic: null, label: `${p.name} (gift)` }))
+    }
+    // Collect evidence N (702.167): exile cards with total mana value N or more
+    // from your graveyard as an optional additional cost.
+    const ev = addl?.evidence
+    if (ev && this._canPay(pid, base, extra, null, p) && this._evidenceCards(pid, ev).length)
+      actions.push(withFace({ ...castAction(false), evidence: true, label: `${p.name} (collect evidence ${ev})` }))
     why('not enough mana')
     // Mutate (702.140): cast for its mutate cost targeting a non-Human creature you own.
     if (b.mutate && p.types.includes('Creature')) {

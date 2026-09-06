@@ -610,6 +610,9 @@ export class GameEngine {
         !!x.kicker === !!a.kicker &&
         !!x.evoke === !!a.evoke &&
         !!x.buyback === !!a.buyback &&
+        !!x.bargain === !!a.bargain &&
+        !!x.gift === !!a.gift &&
+        !!x.evidence === !!a.evidence &&
         !!x.overload === !!a.overload &&
         !!x.mutate === !!a.mutate &&
         !!x.altCost === !!a.altCost &&
@@ -670,10 +673,31 @@ export class GameEngine {
   _validateTargets(refs, specs, ctx) {
     const list = Array.isArray(refs) ? refs : []
     const need = specs || []
-    if (list.length !== need.length) throw new Error(`choose ${need.length} target(s)`)
+    // Trailing optional specs ("up to two target creatures") may be left out.
+    const required = need.filter((sp, i) => !sp.optional || i < list.length).length
+    if (list.length !== required) throw new Error(`choose ${need.filter((sp) => !sp.optional).length}${need.some((sp) => sp.optional) ? ' or more' : ''} target(s)`)
     list.forEach((ref, i) => {
       if (!this._targetMatches(ref, need[i], ctx)) throw new Error('illegal target')
+      // "…creature that player controls" (Searing Blaze): tied to an earlier player target.
+      if (need[i].sameControllerAs != null) {
+        const p = list[need[i].sameControllerAs]
+        const o = this.state.objects[ref.oid]
+        if (p?.kind !== 'player' || !o || o.controller !== p.pid) throw new Error('that creature must be controlled by the targeted player')
+      }
     })
+    this._flagbearerCheck(ctx, list, need)
+  }
+
+  // Standard Bearer: while an opponent chooses targets, they must choose at least
+  // one Flagbearer on the battlefield if able.
+  _flagbearerCheck(ctx, refs, specs) {
+    const s = this.state
+    if (!specs.some((sp) => ['creature', 'any', 'permanent'].includes(sp.type))) return
+    const bearers = objectsIn(s, 'battlefield').filter((o) => hasSub(o.chars, 'Flagbearer') && o.controller !== ctx.byPid && this._targetableBy(o, ctx.byPid, ctx.sourceColors))
+    if (!bearers.length) return
+    const could = specs.some((sp) => bearers.some((b) => this._specMatches(sp, b) && this._controllerMatches(sp, b, ctx)))
+    if (!could) return
+    if (!refs.some((r) => r?.kind === 'object' && bearers.some((b) => b.oid === r.oid))) throw new Error('illegal target: a Flagbearer (Standard Bearer) must be targeted if able')
   }
 
   // Does a target reference ({ kind:'player'|'object'|'spell', … }) satisfy a spec?
@@ -692,6 +716,8 @@ export class GameEngine {
     if (ref.kind === 'object') {
       if (spec.type === 'player' || spec.type === 'spell') return false
       const o = s.objects[ref.oid]
+      // "Target card in a graveyard" (Faerie Macabre).
+      if (spec.type === 'graveyardCard') return !!o && o.zoneName === 'graveyard'
       if (!o || o.zoneName !== 'battlefield') return false
       if (spec.type === 'any' && !o.chars.types.includes('Creature') && !o.chars.types.includes('Planeswalker'))
         return false
@@ -727,14 +753,22 @@ export class GameEngine {
         for (const o of objectsIn(s, 'battlefield')) {
           o.status.attackedThisTurn = false // reset for every creature each turn
           if (o.controller === s.activePlayer) {
-            // "Doesn't untap during its controller's untap step" (Claustrophobia).
-            if (!this._restricted(o, 'untap')) this._setTapped(o, false)
+            // "Doesn't untap during its controller's untap step" (Claustrophobia);
+            // a stun counter is removed instead of untapping (122.1g, Cryogen Relic);
+            // "doesn't untap during its controller's next untap step" (Sleep of the Dead).
+            if (o.status.counters?.stun > 0) {
+              o.status.counters.stun--
+              if (o.status.counters.stun === 0) delete o.status.counters.stun
+            } else if (o.status.skipUntap) {
+              o.status.skipUntap = false
+            } else if (!this._restricted(o, 'untap')) this._setTapped(o, false)
             o.status.summoningSick = false
             o.status.loyaltyUsed = false // a planeswalker may act again this turn
             o.status.abilityUsed = [] // once-per-turn abilities reset
           }
         }
         s.players[s.activePlayer].landsPlayed = 0
+        for (const p of s.players) p.landfall = false
         for (const p of s.players) p.drewThisTurn = 0 // draw-count triggers are per turn
         s.spellsCastThisTurn = 0 // storm count is per turn
         break // no priority; _pump advances
@@ -1282,6 +1316,8 @@ export class GameEngine {
     const types = o.kind === 'ability' ? [] : o.printed?.types || []
     if (spec.noncreature && types.includes('Creature')) return false
     if (spec.spellType && !types.includes(spec.spellType)) return false
+    if (spec.spellTypes && !spec.spellTypes.some((t) => types.includes(t))) return false // "artifact or enchantment spell" (Annul)
+    if (spec.spellColor && !(o.printed?.colors || []).includes(spec.spellColor)) return false // "target blue spell"
     return true
   }
 
@@ -1301,6 +1337,9 @@ export class GameEngine {
     // characteristics, so a layer-5 color change (Aphotic Wisps) makes a creature
     // an illegal/legal target as expected.
     if (spec.excludeColor && o.chars.colors.includes(spec.excludeColor)) return false
+    if (spec.color && !(o.chars.colors || []).includes(spec.color)) return false // "target blue permanent"
+    if (spec.nonland && o.chars.types.includes('Land')) return false // "target nonland permanent"
+    if (spec.tapped && !o.status.tapped) return false // "target tapped creature"
     return true
   }
 
@@ -1326,6 +1365,8 @@ export class GameEngine {
     const s = this.state
     if (spec.type === 'player' || spec.type === 'any') return true
     if (spec.type === 'spell') return zone(s, 'stack').some((oid) => this._spellSpecOk(spec, s.objects[oid]))
+    if (spec.optional) return true // "up to one" — the spell is castable without it
+    if (spec.type === 'graveyardCard') return s.players.some((p) => zone(s, 'graveyard', p.id).length > 0)
     if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact' || spec.type === 'permanent') {
       // A variadic slot ("N target creatures", "up to N…") needs at least `min`
       // legal targets to be cast (601.2c); a normal slot needs one.
@@ -1363,13 +1404,14 @@ export class GameEngine {
   // Is a chosen target still legal at resolution? A permanent must still be on the
   // battlefield and targetable (it may have died, been bounced, or gained
   // hexproof/shroud in response); a targeted spell must still be on the stack.
-  _targetStillLegal(controllerPid, sourceColors, ref) {
+  _targetStillLegal(controllerPid, sourceColors, ref, allowGraveyard = false) {
     const s = this.state
     if (!ref) return false
     if (ref.kind === 'player') return s.players[ref.pid] != null
     if (ref.kind === 'spell') return zone(s, 'stack').includes(ref.oid)
     if (ref.kind === 'object') {
       const o = s.objects[ref.oid]
+      if (allowGraveyard && o?.zoneName === 'graveyard') return true // "target card in a graveyard"
       if (!o || o.zoneName !== 'battlefield') return false
       return this._targetableBy(o, controllerPid, sourceColors)
     }
@@ -1384,7 +1426,9 @@ export class GameEngine {
     if (refs.length === 0) return false
     const src = o.kind === 'ability' ? this.state.objects[o.sourceOid] : o
     const colors = tags(o.kind === 'ability' ? src?.chars : o.printed)
-    return refs.every((r) => !this._targetStillLegal(o.controller, colors, r))
+    const specs = o.kind === 'ability' ? o.targetSpecs || [] : this._spellTargets(o)
+    const gy = specs.some((sp) => sp.type === 'graveyardCard')
+    return refs.every((r) => !this._targetStillLegal(o.controller, colors, r, gy))
   }
 
   // Ward (702.21): after a spell or ability (`triggererOid`, controlled by

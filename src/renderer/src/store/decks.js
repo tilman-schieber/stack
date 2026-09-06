@@ -11,13 +11,17 @@ async function buildDefaultDeck(d) {
   const { cards } = await window.api.resolveDeck(deckCardNames(d))
   const lookup = buildLookup(cards)
   const entries = []
-  for (const [qty, name] of d.cards) {
-    const card = lookup(name)
-    if (!card) throw new Error(`Could not resolve "${name}" for ${d.name}`)
-    const found = entries.find((e) => e.scryfallId === card.id)
-    if (found) found.qty += qty
-    else entries.push({ scryfallId: card.id, name: card.name, qty, section: 'main' })
+  const add = (list, section) => {
+    for (const [qty, name] of list) {
+      const card = lookup(name)
+      if (!card) throw new Error(`Could not resolve "${name}" for ${d.name}`)
+      const found = entries.find((e) => e.scryfallId === card.id && e.section === section)
+      if (found) found.qty += qty
+      else entries.push({ scryfallId: card.id, name: card.name, qty, section })
+    }
   }
+  add(d.cards, 'main')
+  add(d.sideboard || [], 'sideboard')
   return { name: d.name, description: d.description || '', entries }
 }
 

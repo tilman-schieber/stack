@@ -55,9 +55,11 @@ printings round-trip) and **Delete**. **Import…** a decklist by pasting Arena/
 opening a `.txt` file; it is resolved against Scryfall and saved (*Import & edit* opens it in
 the builder).
 
-The app starts with ten **default decks** (`src/renderer/src/lib/defaultDecks.mjs`): on first
-start they are resolved against Scryfall and saved as ordinary decks, so you can edit, rename
-or delete them like any other. **Restore default decks** (shown whenever one is missing) adds
+The app starts with eleven **default decks** (`src/renderer/src/lib/defaultDecks.mjs`) — six
+exact Paupergeddon Summer 2026 Top 64 lists with their sideboards (Jund Wildfire, Grixis
+Affinity, Mono-Red Madness, White Weenie, Mono Red Rally, Mono Blue Terror) and five sample
+decks: on first start they are resolved against Scryfall and saved as ordinary decks, so you
+can edit, rename or delete them like any other. **Restore default decks** (shown whenever one is missing) adds
 back the ones you deleted; it never touches decks you kept or changed. A deck's **notes**
 (edited in the builder) show under its name.
 

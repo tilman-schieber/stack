@@ -303,6 +303,24 @@ export default function EnginePlayArea() {
 
   // Finalize a variadic cast: auto-divide the total evenly across the chosen
   // targets (remainder to the earlier ones) and send it.
+  // "Up to N target creatures": once every remaining target slot is optional the
+  // caster may stop here (a mode of Cast into the Fire, Cryogen Relic's stun).
+  const optionalReady = !!(
+    targeting &&
+    !variadic &&
+    targeting.chosen.length < targeting.targets.length &&
+    targeting.targets.slice(targeting.chosen.length).every((sp) => sp.optional)
+  )
+  function finalizeOptional() {
+    const chosen = targeting.chosen
+    if (cast && cast.action.modal) {
+      const modeTargets = [...cast.modeTargets]
+      modeTargets[cast.mtIdx] = chosen
+      advanceModal({ ...cast, modeTargets, mtIdx: cast.mtIdx + 1, curTargets: [] })
+    } else if (cast) finalizeCast(cast, chosen)
+    else choose({ targets: chosen })
+  }
+
   function finalizeVariadic(chosen) {
     const v = cast.action.variadic
     let division
@@ -418,7 +436,7 @@ export default function EnginePlayArea() {
       const acts = pending.actions.filter(
         (a) =>
           a.oid === card.oid &&
-          ['cast', 'castBestow', 'castOmen', 'castFlashback', 'castFaceDown', 'playLand', 'plot', 'ninjutsu', 'cycle', 'suspend'].includes(a.type)
+          ['cast', 'castBestow', 'castOmen', 'castFlashback', 'castFaceDown', 'playLand', 'plot', 'ninjutsu', 'cycle', 'suspend', 'activate'].includes(a.type)
       )
       if (acts.length === 1) startAction(acts[0])
       else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
@@ -1002,6 +1020,7 @@ export default function EnginePlayArea() {
               ? pending.actions?.find(
                   (a) =>
                     (a.type === 'castFlashback' ||
+                      a.type === 'castEscape' ||
                       a.type === 'castPlotted' ||
                       a.type === 'castDisturb' ||
                       a.type === 'unearth' ||
@@ -1070,7 +1089,7 @@ export default function EnginePlayArea() {
                 // A "you may" trigger's target choice can be declined.
                 decline: !cast && engineTargeting && pending.optional ? () => choose({ decline: true }) : null,
                 variadic: variadic ? { min: variadic.min ?? 1, max: variadic.max } : null,
-                confirm: variadicReady ? () => finalizeVariadic(targeting.chosen) : null
+                confirm: variadicReady ? () => finalizeVariadic(targeting.chosen) : optionalReady ? finalizeOptional : null
               }
             : null
         }

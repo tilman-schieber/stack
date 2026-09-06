@@ -116,6 +116,8 @@ function applyLayer(effects, bf, apply) {
 }
 
 // Rebuild chars for all battlefield objects. Pure; mutates object.chars only.
+const KEYWORD_COUNTERS = ['Flying', 'First strike', 'Double strike', 'Deathtouch', 'Hexproof', 'Indestructible', 'Lifelink', 'Menace', 'Reach', 'Trample', 'Vigilance', 'Haste']
+
 export function recompute(state) {
   const bf = state.zones.battlefield.map((oid) => state.objects[oid])
   for (const o of bf) o.chars = baseChars(o)
@@ -222,6 +224,11 @@ export function recompute(state) {
       for (const kw of d.grantKeywords || []) if (!o.chars.keywords.includes(kw)) o.chars.keywords.push(kw)
     }
   })
+  // Keyword counters (122.1f): a "lifelink counter" grants lifelink (Unexpected Fangs).
+  for (const o of bf) {
+    if (o.chars.lostAbilities) continue
+    for (const kw of KEYWORD_COUNTERS) if (o.status?.counters?.[kw.toLowerCase()] > 0 && !o.chars.keywords.includes(kw)) o.chars.keywords.push(kw)
+  }
 
   // Layer 7a — characteristic-defining P/T (Nightmare, Maro): the base P/T is a
   // count derived from game state. Runs before set/counters/modify so those stack.

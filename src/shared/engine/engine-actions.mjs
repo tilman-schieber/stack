@@ -156,12 +156,18 @@ export const actionsMethods = {
           // Additional cost: sacrifice a permanent (e.g. Fanatical Offering,
           // Reckoner's Bargain — which then pays off the sacrifice's mana value).
           const addl = o.behavior.spell?.additionalCost
-          if (addl?.sacrifice && action.sacrifice) {
+          if ((addl?.sacrifice || action.bargain) && action.sacrifice) {
             const so = s.objects[action.sacrifice]
             if (so && so.controller === pid && so.zoneName === 'battlefield') {
               o._sacrificedMV = so.printed.manaValue
               this._sacrifice(so)
             }
+          }
+          // Collect evidence N (702.167): exile graveyard cards totalling N+ mana value.
+          if (action.evidence && addl?.evidence) {
+            const picked = this._evidenceCards(pid, addl.evidence)
+            for (const eo of picked) this._relocate(eo, 'exile')
+            this._log(`${this._nameOf(pid)} collects evidence: exiles ${picked.map((eo) => this._objName(eo)).join(', ')}`)
           }
           // Additional cost: discard card(s) (Grab the Prize). Recorded for a later
           // conditional; a discarded madness card is still offered below.
@@ -179,6 +185,9 @@ export const actionsMethods = {
         o.buyback = !!action.buyback
         o.castFromHand = fromHand
         o.mutateCast = !!action.mutate
+        o.bargained = !!(action.bargain && action.sacrifice) // "if it was bargained"
+        o.gifted = !!action.gift // "if the gift was promised"
+        o.evidenceCollected = !!action.evidence
         if (action.sneak) o.sneaked = { target: sneakTarget } // enters tapped and attacking
         if (fromCommand) o.commanderCasts = (o.commanderCasts || 0) + 1
         if (o.behavior.spell?.modal) {
@@ -294,6 +303,28 @@ export const actionsMethods = {
         this._checkWard(copy.oid, pid, copy.targets)
         break
       }
+      case 'castEscape': {
+        // Escape (702.138): pay the escape cost and exile N other graveyard cards
+        // (the least valuable first); the spell is cast from the graveyard.
+        const o = s.objects[action.oid]
+        const esc = o.behavior.escape
+        this._pay(pid, parseManaCost(esc.cost))
+        const others = zone(s, 'graveyard', pid)
+          .filter((x) => x !== o.oid)
+          .map((x) => s.objects[x])
+          .sort((a, b) => (a.printed.manaValue || 0) - (b.printed.manaValue || 0))
+          .slice(0, esc.exile)
+        for (const eo of others) this._relocate(eo, 'exile')
+        moveObject(s, action.oid, 'stack')
+        o.controller = pid
+        o.targets = action.targets || []
+        o.spell = o.behavior.spell
+        this._log(`${this._nameOf(pid)} casts ${this._objName(o)} with escape${this._describeTargets(o.targets)} (exiling ${others.map((eo) => this._objName(eo)).join(', ')})`)
+        this._countSpellCast(o)
+        this._fireTriggers('castSpell', o)
+        this._checkWard(o.oid, o.controller, o.targets)
+        break
+      }
       case 'castFlashback': {
         const o = s.objects[action.oid]
         const fb = o.behavior.flashback
@@ -338,7 +369,7 @@ export const actionsMethods = {
         this._payActivationCost(pid, o, ab, action)
         if (ab.manaAbility) {
           // Mana abilities don't use the stack (605.3b): resolve immediately.
-          this._runEffects({ controller: pid, sourceOid: o.oid, targets: [] }, ab.effect)
+          this._runEffects({ controller: pid, sourceOid: o.oid, targets: [], _color: action.color || null }, ab.effect)
           break
         }
         this._log(`${this._nameOf(pid)} activates ${this._objName(o)}${this._describeTargets(action.targets)}`)
@@ -349,6 +380,7 @@ export const actionsMethods = {
           sourceName,
           effect: ab.effect,
           targets: action.targets || [],
+          targetSpecs: ab.targets || [], // for the fizzle re-check (graveyard-card targets stay legal there)
           xValue: action._xValue || 0 // X chosen for an {X} activation cost
         })
         zone(s, 'stack').push(aoid.oid)
@@ -482,10 +514,27 @@ export const actionsMethods = {
   },
 
   _sacMatches(o, spec) {
+    if (spec.orToken && o.token) return true // "an artifact, enchantment, or token" (bargain)
     if (spec.types && !spec.types.some((t) => o.chars.types.includes(t))) return false
     if (spec.type && !o.chars.types.includes(spec.type)) return false
     if (spec.subtype && !hasSub(o.chars, spec.subtype)) return false
     return true
+  },
+
+  // Graveyard cards to exile for "collect evidence N": the biggest mana values
+  // first, until the total reaches N; empty if the graveyard can't reach it.
+  _evidenceCards(pid, n) {
+    const cards = zone(this.state, 'graveyard', pid)
+      .map((oid) => this.state.objects[oid])
+      .sort((a, b) => (b.printed.manaValue || 0) - (a.printed.manaValue || 0))
+    const out = []
+    let total = 0
+    for (const c of cards) {
+      if (total >= n) break
+      out.push(c)
+      total += c.printed.manaValue || 0
+    }
+    return total >= n ? out : []
   },
 
   _payActivationCost(pid, o, ab, action = {}) {
@@ -511,6 +560,14 @@ export const actionsMethods = {
       const { counter, amount = 1 } = cost.removeCounters
       o.status.counters[counter] -= amount
       if (o.status.counters[counter] <= 0) delete o.status.counters[counter]
+    }
+    // "Discard this card:" — an ability activated from hand (Faerie Macabre).
+    if (cost.discardSelf && o.zoneName === 'hand') this._discardCard(pid, o.oid)
+    // "Reveal X white cards from your hand" (Martyr of Sands): X is however many there are.
+    if (cost.revealX) {
+      const n = zone(s, 'hand', pid).filter((h) => (s.objects[h].printed.colors || []).includes(cost.revealX.color)).length
+      action._xValue = n
+      this._log(`${this._nameOf(pid)} reveals ${n} ${cost.revealX.color === 'W' ? 'white' : cost.revealX.color} card${n === 1 ? '' : 's'}`)
     }
     // Discard as a cost (a Blood token): a discarded madness card is queued and
     // offered once the ability is on the stack.
@@ -940,6 +997,7 @@ export const actionsMethods = {
     o.controller = controller
     o.timestamp = ++this.state.tsCounter // for layer ordering (rule 613.7)
     if (o.printed.types.includes('Creature')) o.status.summoningSick = true
+    if (o.printed.types.includes('Land')) this.state.players[controller].landfall = true // for "landfall" this turn
     // Prepared (Elite Interceptor): enters prepared.
     if (o.behavior?.prepared) o.prepared = true
     // Daybound (731.4): as a daybound permanent enters, if it's neither day nor

@@ -261,6 +261,8 @@ export const manaMethods = {
         out.push({ source: src, mod })
       }
     }
+    // Floating rule modifiers ("damage can't be prevented this turn" — Flaring Pain).
+    for (const e of this.state.continuous) if (e.ruleMod) out.push({ source: { controller: e.controller, oid: null }, mod: e.ruleMod })
     return out
   },
 
@@ -359,6 +361,13 @@ export const manaMethods = {
   _amount(source, v) {
     if (v === 'X') return source?.xValue || 0
     if (v === 'sacrificedMV') return source?._sacrificedMV || 0
+    if (v && typeof v === 'object' && v.x) return (source?.xValue || 0) * v.x // "three times X" (Martyr of Sands)
+    if (v && typeof v === 'object' && v.if) {
+      // "N, or M instead if [condition]" (Searing Blaze's landfall).
+      const w = this.state.objects[source?.oid ?? source?.sourceOid] || source
+      return this._amount(source, this._cond(v.if, w) ? v.then : v.else)
+    }
+    if (v && typeof v === 'object' && v.count === 'drewThisTurn') return this.state.players[source.controller]?.drewThisTurn || 0
     // "for each …": a count of battlefield permanents matching a filter
     // (controlled by you unless `controller: 'any'`; `another` excludes the
     // source; `attacking` only creatures currently attacking).
@@ -435,6 +444,11 @@ export const manaMethods = {
       return cond.controlsAll.every((f) =>
         objectsIn(s, 'battlefield').some((o) => o.controller === pid && o.oid !== w?.oid && (!f.type || o.chars.types.includes(f.type)) && (!f.subtype || hasSub(o.chars, f.subtype)))
       )
+    if (cond.landfall != null) return !!s.players[pid]?.landfall === cond.landfall // a land entered under your control this turn
+    if (cond.gifted != null) return !!w?.gifted === cond.gifted // "if the gift was promised"
+    if (cond.bargained != null) return !!w?.bargained === cond.bargained // "if it was bargained"
+    if (cond.evidence != null) return !!w?.evidenceCollected === cond.evidence
+    if (cond.attached != null) return (w?.status?.attachedTo != null) === cond.attached // an Equipment's granted trigger
     if (cond.life) return inRange(s.players[pid].life, cond.life)
     if (cond.opponentLife) return this._opponentsOf(pid).some((o) => inRange(s.players[o].life, cond.opponentLife))
     if (cond.handSize) return inRange(zone(s, 'hand', pid).length, cond.handSize)

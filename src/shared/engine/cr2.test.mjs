@@ -109,7 +109,7 @@ section('Coverage classification of multi-faced cards')
 {
   assert(classifyCard(SAMPLE_CARDS['Fire // Ice']).supported, 'Fire // Ice: both halves authored')
   assert(classifyCard(SAMPLE_CARDS['Thraben Gargoyle // Stonewing Antagonizer']).supported, 'Gargoyle: authored front + keyword back')
-  assert(!classifyCard(SAMPLE_CARDS['Delver of Secrets // Insectile Aberration']).supported, 'Delver: front text not authored')
+  assert(classifyCard(SAMPLE_CARDS['Delver of Secrets // Insectile Aberration']).supported, 'Delver: both faces supported (upkeep trigger authored, back face keyword-only)')
 }
 
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)

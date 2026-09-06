@@ -149,7 +149,11 @@ function pluck(state, oid) {
 // effects and shields aimed at it, and per-object "this turn" bookkeeping.
 export function forgetObject(state, obj) {
   const oid = obj.oid
-  state.continuous = state.continuous.filter((e) => !e.targets?.includes(oid))
+  // An object that leaves drops out of the effects that name it; an effect with
+  // several targets (Holy Light's -1/-1 to each nonwhite creature) keeps the rest.
+  state.continuous = state.continuous
+    .map((e) => (e.targets?.includes(oid) ? { ...e, targets: e.targets.filter((t) => t !== oid) } : e))
+    .filter((e) => !e.targets || e.targets.length > 0)
   state.replacements = state.replacements.filter((r) => r.target?.oid !== oid)
   obj.status.regenShields = 0
   obj.status.abilityUsed = []

@@ -18,6 +18,9 @@ export const effectsMethods = {
     const list = effects || []
     for (let i = start; i < list.length; i++) {
       const e = list[i]
+      // "If [condition], …": an effect may carry its own condition, judged against
+      // the source object (a spell's gift/bargain/evidence flags, landfall, …).
+      if (e.if && !this._cond(e.if, s.objects[source.oid ?? source.sourceOid] || source)) continue
       if (this._applyEffect(source, e)) {
         this._resume = { source, effects: list, index: i + 1 }
         return false // paused for a decision
@@ -167,7 +170,27 @@ export const effectsMethods = {
           e.op === 'eachOpponentSacrifices'
             ? this._opponentsOf(source.controller)
             : [this._resolvePlayerRef(source, e.to || 'target0')]
-        return this._nextSacrificeChoice(queue, e.filter || { types: ['Creature'] }, e.count || 1)
+        // Extract a Confession: with evidence collected, "a creature with the greatest power".
+        const src = s.objects[source.oid ?? source.sourceOid]
+        const greatest = !!(e.greatestPowerIfEvidence && src?.evidenceCollected)
+        return this._nextSacrificeChoice(queue, e.filter || { types: ['Creature'] }, e.count || 1, greatest ? { greatestPower: true } : null)
+      }
+      case 'chooseOption': {
+        // "…its owner puts it second from the top or on the bottom" (Deem Inferior):
+        // the target's owner (or the controller) picks; remembered on the source.
+        const t = e.to ? this._resolveTargetRef(source, e.to) : null
+        const pid = t?.kind === 'object' ? t.obj.owner : source.controller
+        s.pending = { kind: 'chooseValue', player: pid, options: [...e.options], label: e.label || 'Choose', _holder: source }
+        return true
+      }
+      case 'graveyardChoose': {
+        // Relic of Progenitus: "target player exiles a card from their graveyard" —
+        // that player picks one (a search over their graveyard, to exile).
+        const pid = this._resolvePlayerRef(source, e.to || 'target0')
+        const cards = [...zone(s, 'graveyard', pid)]
+        if (!cards.length) return false
+        s.pending = { kind: 'search', player: pid, cards, to: 'exile', tapped: false, optional: false, shuffle: false, revealed: true }
+        return true
       }
       case 'draw': {
         // A draw an effect performs may be replaced by dredge (702.52).
@@ -448,7 +471,8 @@ export const effectsMethods = {
                 (f.controller !== 'opponent' || o.controller !== source.controller) &&
                 (!f.type || o.chars.types.includes(f.type)) &&
                 (!f.subtype || hasSub(o.chars, f.subtype)) &&
-                (!f.color || (o.chars.colors || []).includes(f.color))
+                (!f.color || (o.chars.colors || []).includes(f.color)) &&
+                (!f.excludeColor || !(o.chars.colors || []).includes(f.excludeColor)) // "nonwhite creatures" (Holy Light)
             )
             .map((o) => o.oid)
           s.continuous.push({
@@ -485,9 +509,12 @@ export const effectsMethods = {
           }
           break
         }
-        case 'addMana':
-          s.players[source.controller].manaPool[e.mana]++
+        case 'addMana': {
+          // 'chosen': the colour picked when the ability was activated (Chromatic Star).
+          const c = e.mana === 'chosen' ? source._color : e.mana
+          if (c) s.players[source.controller].manaPool[c]++
           break
+        }
         case 'draw':
           this.draw(source.controller, e.amount || 1)
           break
@@ -506,11 +533,15 @@ export const effectsMethods = {
           break
         }
         case 'dealDamageEach': {
-          // Damage to each permanent matching a filter (e.g. every creature).
+          // Damage to each permanent matching a filter (e.g. every creature) — and,
+          // with `players: 'opponents'`, to each opponent too (End the Festivities).
+          if (e.players === 'opponents') for (const pid of this._opponentsOf(source.controller)) this._dealDamage(source, { player: pid }, this._amount(source, e.amount))
           for (const oid of [...zone(s, 'battlefield')]) {
             const t = s.objects[oid]
             if (!t) continue
             if (e.filter === 'creature' && !t.chars.types.includes('Creature')) continue
+            if (e.filter === 'creatureOrPlaneswalker' && !t.chars.types.includes('Creature') && !t.chars.types.includes('Planeswalker')) continue
+            if (e.excludeSubtype && hasSub(t.chars, e.excludeSubtype)) continue // "each non-Dragon creature"
             if (e.excludeFlying && this._hasKW(t, 'Flying')) continue
             if (e.who === 'opponents' && t.controller === source.controller) continue // "you don't control"
             if (e.who === 'you' && t.controller !== source.controller) continue
@@ -585,8 +616,71 @@ export const effectsMethods = {
         }
         case 'destroy': {
           const t = this._resolveTargetRef(source, e.to)
+          if (e.ifColor && !(t?.obj?.chars?.colors || []).includes(e.ifColor)) break // "if it's blue" (Pyroblast)
           if (t?.kind === 'object' && t.obj.zoneName === 'battlefield' && !this._hasKW(t.obj, 'Indestructible'))
-            if (!this._tryRegenerate(t.obj)) this._bury(t.obj) // a regen shield replaces the destruction
+            if (e.noRegen || !this._tryRegenerate(t.obj)) this._bury(t.obj) // "It can't be regenerated" (Terminate)
+          break
+        }
+        case 'exile': {
+          // Exile the target (a permanent, or a card in a graveyard — Faerie Macabre).
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object' && (t.obj.zoneName === 'battlefield' || t.obj.zoneName === 'graveyard')) {
+            this._log(`${this._objName(t.obj)} is exiled`)
+            this._relocate(t.obj, 'exile')
+          }
+          break
+        }
+        case 'createTokenForOpponent': {
+          // A promised gift (Sazacap's Brew): the opponent gets the token, tapped.
+          const opp = this._opponentsOf(source.controller)[0]
+          if (opp == null) break
+          const before = new Set(zone(s, 'battlefield'))
+          this._log(`${this._nameOf(opp)} receives the gift: a ${e.token.name} token`)
+          this._createTokens(e.token, opp, 1)
+          if (e.tapped) for (const oid of zone(s, 'battlefield')) if (!before.has(oid)) s.objects[oid].status.tapped = true
+          break
+        }
+        case 'exileAllGraveyards':
+          for (const p of s.players) for (const oid of [...zone(s, 'graveyard', p.id)]) moveObject(s, oid, 'exile')
+          this._log('all graveyards are exiled')
+          break
+        case 'ruleModUntilEndOfTurn':
+          // "Damage can't be prevented this turn" (Flaring Pain): a floating rule modifier.
+          s.continuous.push({ timestamp: ++s.tsCounter, ruleMod: e.mod, duration: 'eot', owner: source.controller, controller: source.controller })
+          break
+        case 'skipNextUntap': {
+          // "It doesn't untap during its controller's next untap step" (Sleep of the Dead).
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind === 'object') t.obj.status.skipUntap = true
+          break
+        }
+        case 'putIntoLibrary': {
+          // Deem Inferior: the owner chose (chooseOption) second from the top or the bottom.
+          const t = this._resolveTargetRef(source, e.to)
+          if (t?.kind !== 'object' || t.obj.zoneName !== 'battlefield') break
+          const o = t.obj
+          const bottom = source.chosen === 'Bottom of library'
+          this._log(`${this._objName(o)} is put into its owner's library (${bottom ? 'on the bottom' : 'second from the top'})`)
+          this._relocate(o, 'library')
+          const lib = s.zones[zoneKey('library', o.owner)]
+          const at = lib.indexOf(o.oid)
+          if (at >= 0) lib.splice(at, 1)
+          if (bottom) lib.push(o.oid)
+          else lib.splice(Math.min(1, lib.length), 0, o.oid)
+          break
+        }
+        case 'revealTopTransform': {
+          // Delver of Secrets: look at the top card; if it's an instant or sorcery,
+          // reveal it and transform. (Revealing is always the right call.)
+          const pid = source.controller
+          const top = s.objects[zone(s, 'library', pid)[0]]
+          if (!top) break
+          const hit = (e.types || ['Instant', 'Sorcery']).some((t) => top.printed.types.includes(t))
+          const self = s.objects[source.sourceOid]
+          if (hit && self && self.zoneName === 'battlefield' && self.faces?.length > 1) {
+            this._log(`${this._nameOf(pid)} reveals ${this._objName(top)}: ${this._objName(self)} transforms`)
+            this._runEffects(source, [{ op: 'transform', to: 'self' }])
+          }
           break
         }
         case 'regenerate': {
@@ -665,6 +759,7 @@ export const effectsMethods = {
           if (t?.kind === 'object' && t.obj.zoneName === 'stack') {
             if (e.maxMv === 'faeries' && (t.obj.printed.manaValue || 0) > this._faerieCount(source.controller))
               break
+            if (e.ifColor && !(t.obj.printed.colors || []).includes(e.ifColor)) break // "if it's blue" (Pyroblast)
             // "…if its mana value is N or less" (Prohibit: 2, or 4 if kicked).
             const lim = e.ifKicked && source.kicked ? e.ifKicked.maxMv : e.maxMv
             if (typeof lim === 'number' && (t.obj.printed.manaValue || 0) > lim) break
@@ -774,7 +869,14 @@ export const effectsMethods = {
           const def = e.token
           const n = e.count || 1
           this._log(`${this._nameOf(source.controller)} creates ${n} ${def.name} token${n > 1 ? 's' : ''}`)
+          const before = new Set(zone(s, 'battlefield'))
           this._createTokens(def, source.controller, n)
+          // Job select (Black Mage's Rod): "…then attach this to it".
+          if (e.attachSelf) {
+            const made = zone(s, 'battlefield').filter((oid) => !before.has(oid))
+            const src = s.objects[source.sourceOid]
+            if (src && made.length) src.status.attachedTo = made[0]
+          }
           break
         }
         case 'becomeDay':
@@ -854,6 +956,7 @@ export const effectsMethods = {
             moveObject(s, oid, 'exile')
             o.playableFromExile = pid // after the move (400.7 reset)
             if (e.until === 'endOfNextTurn') o.playableUntilTurn = this._nextOwnTurn(pid)
+            else if (e.until === 'endOfTurn') o.playableUntilTurn = s.turnNumber // Experimental Synthesizer
           }
           break
         }
@@ -1126,6 +1229,7 @@ export const effectsMethods = {
     if (filter.subtype && !p.subtypes.includes(filter.subtype)) return false
     if (filter.subtypes && !filter.subtypes.some((t) => p.subtypes.includes(t))) return false
     if (filter.permanent && !isPermanent(p)) return false
+    if (filter.maxPower != null && (p.power == null || Number(p.power) > filter.maxPower)) return false // "with power 2 or less"
     if (filter.maxMV != null && p.manaValue > filter.maxMV) return false
     if (filter.nonland && p.types.includes('Land')) return false
     if (filter.noncreature && p.types.includes('Creature')) return false
@@ -1184,9 +1288,13 @@ export const effectsMethods = {
     const s = this.state
     while (queue?.length) {
       const pid = queue.shift()
-      const choices = objectsIn(s, 'battlefield')
+      let choices = objectsIn(s, 'battlefield')
         .filter((o) => o.controller === pid && this._sacMatches(o, filter || {}))
         .map((o) => o.oid)
+      if (opts?.greatestPower && choices.length) {
+        const top = Math.max(...choices.map((oid) => s.objects[oid].chars.power || 0))
+        choices = choices.filter((oid) => (s.objects[oid].chars.power || 0) === top)
+      }
       if (!choices.length) {
         if (opts?.elseLoseLife) {
           this._loseLife(pid, opts.elseLoseLife)
@@ -1359,7 +1467,10 @@ export const effectsMethods = {
     // in response, …) is not affected, even though the rest of the spell resolves.
     const src = source.kind === 'ability' ? this.state.objects[source.sourceOid] : source
     const colors = tags(source.kind === 'ability' ? src?.chars : source.printed)
-    if (!this._targetStillLegal(source.controller, colors, t)) return null
+    // A "target card in a graveyard" stays legal in the graveyard (Faerie Macabre).
+    const specs = source.kind === 'ability' ? source.targetSpecs || [] : source.printed ? this._spellTargets(source) : []
+    const gy = specs.some((sp) => sp.type === 'graveyardCard')
+    if (!this._targetStillLegal(source.controller, colors, t, gy)) return null
     if (t.kind === 'player') return { kind: 'player', pid: t.pid }
     return { kind: 'object', obj: this.state.objects[t.oid] }
   },

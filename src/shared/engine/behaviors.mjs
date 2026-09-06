@@ -14,6 +14,7 @@
 
 // Shared shapes for families of cards.
 const FOOD_TOKEN = { name: 'Food', types: ['Artifact'], subtypes: ['Food'], colors: [] }
+const TREASURE_TOKEN = { name: 'Treasure', types: ['Artifact'], subtypes: ['Treasure'], colors: [] }
 // Karoo ("bounce") lands: enter tapped, return a land you control, tap for two.
 const KAROO = (pips) => ({
   entersTapped: true,
@@ -1443,6 +1444,204 @@ export const BEHAVIORS = {
   Dispel: { spell: { targets: [{ type: 'spell', spellType: 'Instant' }], effect: [{ op: 'counter', to: 'target0' }] } },
   Negate: { spell: { targets: [{ type: 'spell', noncreature: true }], effect: [{ op: 'counter', to: 'target0' }] } },
 
+  // ---- the five default Pauper decks: their other Top 64 variants and sideboards ----
+  // Jund Wildfire
+  Terminate: { spell: { targets: [{ type: 'creature' }], effect: [{ op: 'destroy', to: 'target0', noRegen: true }] } },
+  'Gixian Infiltrator': {
+    triggered: [{ trigger: { event: 'sacrifice', filter: { controller: 'you', another: true } }, effect: [{ op: 'addCounter', to: 'self', counter: '+1/+1', amount: 1 }] }]
+  },
+  'Faerie Macabre': {
+    activated: [
+      {
+        fromHand: true,
+        cost: { discardSelf: true },
+        label: 'Discard: exile up to two target cards from graveyards',
+        targets: [{ type: 'graveyardCard' }, { type: 'graveyardCard', optional: true }],
+        effect: [{ op: 'exile', to: 'target0' }, { op: 'exile', to: 'target1' }]
+      }
+    ]
+  },
+  Pyroblast: {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        { label: "Counter target spell if it's blue", targets: [{ type: 'spell' }], effect: [{ op: 'counter', to: 'target0', ifColor: 'U' }] },
+        { label: "Destroy target permanent if it's blue", targets: [{ type: 'permanent' }], effect: [{ op: 'destroy', to: 'target0', ifColor: 'U' }] }
+      ]
+    }
+  },
+  'Red Elemental Blast': {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        { label: 'Counter target blue spell', targets: [{ type: 'spell', spellColor: 'U' }], effect: [{ op: 'counter', to: 'target0' }] },
+        { label: 'Destroy target blue permanent', targets: [{ type: 'permanent', color: 'U' }], effect: [{ op: 'destroy', to: 'target0' }] }
+      ]
+    }
+  },
+  Hydroblast: {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        { label: "Counter target spell if it's red", targets: [{ type: 'spell' }], effect: [{ op: 'counter', to: 'target0', ifColor: 'R' }] },
+        { label: "Destroy target permanent if it's red", targets: [{ type: 'permanent' }], effect: [{ op: 'destroy', to: 'target0', ifColor: 'R' }] }
+      ]
+    }
+  },
+  'Blue Elemental Blast': {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        { label: 'Counter target red spell', targets: [{ type: 'spell', spellColor: 'R' }], effect: [{ op: 'counter', to: 'target0' }] },
+        { label: 'Destroy target red permanent', targets: [{ type: 'permanent', color: 'R' }], effect: [{ op: 'destroy', to: 'target0' }] }
+      ]
+    }
+  },
+  'Troublemaker Ouphe': {
+    // Bargain is parsed; "if it was bargained" gates the trigger.
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true, if: { bargained: true } },
+        targets: [{ type: 'permanent', types: ['Artifact', 'Enchantment'], controller: 'opponent' }],
+        effect: [{ op: 'exile', to: 'target0' }]
+      }
+    ]
+  },
+  'Breath Weapon': { spell: { effect: [{ op: 'dealDamageEach', filter: 'creature', excludeSubtype: 'Dragon', amount: 2 }] } },
+  // White Weenie
+  'Mardu Devotee': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'scry', amount: 2 }] }],
+    activated: [{ manaAbility: true, oncePerTurn: true, colors: ['R', 'W', 'B'], cost: { mana: '{1}' }, label: 'Add {R}, {W}, or {B}', effect: [{ op: 'addMana', mana: 'chosen' }] }]
+  },
+  'Militia Bugler': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'lookAtTop', amount: 4, pick: { max: 1, filter: { type: 'Creature', maxPower: 2 } }, rest: 'bottom' }] }]
+  },
+  'Whitemane Lion': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'bounceChoose', filter: { type: 'Creature' } }] }] },
+  'Rally the Peasants': { spell: { effect: [{ op: 'pumpEach', filter: { type: 'Creature', controller: 'you' }, power: 2, toughness: 0 }] }, flashback: { cost: '{2}{R}' } },
+  'Dust to Dust': { spell: { targets: [{ type: 'artifact' }, { type: 'artifact' }], effect: [{ op: 'exile', to: 'target0' }, { op: 'exile', to: 'target1' }] } },
+  'Standard Bearer': {}, // the Flagbearer targeting requirement is enforced by the engine (_flagbearerCheck)
+  'Holy Light': { spell: { effect: [{ op: 'pumpEach', filter: { type: 'Creature', excludeColor: 'W' }, power: -1, toughness: -1 }] } },
+  'Martyr of Sands': {
+    activated: [{ cost: { mana: '{1}', revealX: { color: 'W' }, sacrifice: 'self' }, label: 'Reveal X white cards, sacrifice: gain 3×X life', effect: [{ op: 'gainLife', amount: { x: 3 } }] }]
+  },
+  // Mono Red Rally
+  'Experimental Synthesizer': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'exileTopPlayable', amount: 1, until: 'endOfTurn' }] },
+      { trigger: { event: 'leaves:battlefield', self: true }, effect: [{ op: 'exileTopPlayable', amount: 1, until: 'endOfTurn' }] }
+    ],
+    activated: [
+      {
+        cost: { mana: '{2}{R}', sacrifice: 'self' },
+        sorcerySpeed: true,
+        label: 'Sacrifice: create a 2/2 Samurai with vigilance',
+        effect: [{ op: 'createToken', token: { name: 'Samurai', types: ['Creature'], subtypes: ['Samurai'], colors: ['W'], power: 2, toughness: 2, keywords: ['Vigilance'] } }]
+      }
+    ]
+  },
+  'Reckless Lackey': {
+    activated: [
+      { cost: { mana: '{2}{R}', sacrifice: 'self' }, label: 'Sacrifice: draw a card and create a Treasure', effect: [{ op: 'draw', amount: 1 }, { op: 'createToken', token: TREASURE_TOKEN }] }
+    ]
+  },
+  'End the Festivities': { spell: { effect: [{ op: 'dealDamageEach', players: 'opponents', filter: 'creatureOrPlaneswalker', who: 'opponents', amount: 1 }] } },
+  'Tectonic Hazard': { spell: { effect: [{ op: 'dealDamageEach', players: 'opponents', filter: 'creature', who: 'opponents', amount: 1 }] } },
+  'Cast into the Fire': {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        { label: '1 damage to each of up to two target creatures', targets: [{ type: 'creature', optional: true }, { type: 'creature', optional: true }], effect: [{ op: 'dealDamage', to: 'target0', amount: 1 }, { op: 'dealDamage', to: 'target1', amount: 1 }] },
+        { label: 'Exile target artifact', targets: [{ type: 'artifact' }], effect: [{ op: 'exile', to: 'target0' }] }
+      ]
+    }
+  },
+  'Flaring Pain': { spell: { effect: [{ op: 'ruleModUntilEndOfTurn', mod: { damageCantBePrevented: true } }] }, flashback: { cost: '{R}' } },
+  'Relic of Progenitus': {
+    activated: [
+      { cost: { tap: true }, targets: [{ type: 'player' }], label: 'Target player exiles a card from their graveyard', effect: [{ op: 'graveyardChoose', to: 'target0' }] },
+      { cost: { mana: '{1}', exileSelf: true }, label: 'Exile: exile all graveyards, draw a card', effect: [{ op: 'exileAllGraveyards' }, { op: 'draw', amount: 1 }] }
+    ]
+  },
+  // Grixis Affinity
+  'Cryogen Relic': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'draw', amount: 1 }] },
+      { trigger: { event: 'leaves:battlefield', self: true }, effect: [{ op: 'draw', amount: 1 }] }
+    ],
+    activated: [
+      { cost: { mana: '{1}{U}', sacrifice: 'self' }, targets: [{ type: 'creature', tapped: true, optional: true }], label: 'Sacrifice: stun counter on up to one target tapped creature', effect: [{ op: 'addCounter', to: 'target0', counter: 'stun', amount: 1 }] }
+    ]
+  },
+  'Sewer-veillance Cam': {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, optional: true, targets: [{ type: 'creature' }], effect: [{ op: 'tapOrUntap', to: 'target0' }] },
+      { trigger: { event: 'leaves:battlefield', self: true }, optional: true, targets: [{ type: 'creature' }], effect: [{ op: 'tapOrUntap', to: 'target0' }] }
+    ],
+    activated: [{ cost: { mana: '{3}{U}', sacrifice: 'self' }, label: 'Sacrifice: draw two cards', effect: [{ op: 'draw', amount: 2 }] }]
+  },
+  'Chromatic Star': {
+    activated: [{ manaAbility: true, colors: ['W', 'U', 'B', 'R', 'G'], cost: { mana: '{1}', tap: true, sacrifice: 'self' }, label: 'Add one mana of any color', effect: [{ op: 'addMana', mana: 'chosen' }] }],
+    triggered: [{ trigger: { event: 'toGraveyard', self: true }, effect: [{ op: 'draw', amount: 1 }] }]
+  },
+  'Prophetic Prism': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'draw', amount: 1 }] }],
+    activated: [{ manaAbility: true, colors: ['W', 'U', 'B', 'R', 'G'], cost: { mana: '{1}', tap: true }, label: 'Add one mana of any color', effect: [{ op: 'addMana', mana: 'chosen' }] }]
+  },
+  "Black Mage's Rod": {
+    // Job select: enters with a Hero token and attaches to it. The granted trigger is
+    // modelled on the Rod while attached (same effect, same timing).
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'createToken', token: { name: 'Hero', types: ['Creature'], subtypes: ['Hero'], colors: [], power: 1, toughness: 1 }, attachSelf: true }] },
+      { trigger: { event: 'castSpell', filter: { controller: 'you', noncreature: true }, if: { attached: true } }, effect: [{ op: 'dealDamageEachOpponent', amount: 1 }] }
+    ],
+    static: [{ affects: { scope: 'attached' }, modifyPT: { power: 1, toughness: 0 }, addSubtypes: ['Wizard'] }],
+    activated: [{ equip: true, sorcerySpeed: true, cost: { mana: '{3}' }, targets: [{ type: 'creature', controller: 'you' }], label: 'Equip {3}', effect: [{ op: 'attach', to: 'target0' }] }]
+  },
+  'Unexpected Fangs': { spell: { targets: [{ type: 'creature' }], effect: [{ op: 'addCounter', to: 'target0', counter: '+1/+1', amount: 1 }, { op: 'addCounter', to: 'target0', counter: 'lifelink', amount: 1 }] } },
+  'Extract a Confession': {
+    spell: { additionalCost: { evidence: 6 }, effect: [{ op: 'eachOpponentSacrifices', greatestPowerIfEvidence: true }] }
+  },
+  // Mono Red Madness
+  'Kessig Flamebreather': { triggered: [{ trigger: { event: 'castSpell', filter: { controller: 'you', noncreature: true } }, effect: [{ op: 'dealDamageEachOpponent', amount: 1 }] }] },
+  "Sazacap's Brew": {
+    gift: { targets: [{ type: 'creature', controller: 'you' }] },
+    spell: {
+      additionalCost: { discard: 1 },
+      targets: [{ type: 'player' }],
+      effect: [
+        { op: 'createTokenForOpponent', token: { name: 'Fish', types: ['Creature'], subtypes: ['Fish'], colors: ['U'], power: 1, toughness: 1 }, tapped: true, if: { gifted: true } },
+        { op: 'draw', amount: 2, to: 'target0' },
+        { op: 'pump', to: 'target1', power: 2, toughness: 0, if: { gifted: true } }
+      ]
+    }
+  },
+  'Crimson Fleet Commodore': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'becomeMonarch' }] }] },
+  'Searing Blaze': {
+    spell: {
+      targets: [{ type: 'player' }, { type: 'creature', sameControllerAs: 0 }],
+      effect: [
+        { op: 'dealDamage', to: 'target0', amount: { if: { landfall: true }, then: 3, else: 1 } },
+        { op: 'dealDamage', to: 'target1', amount: { if: { landfall: true }, then: 3, else: 1 } }
+      ]
+    }
+  },
+  // Mono Blue Terror
+  'Murmuring Mystic': {
+    triggered: [{ trigger: { event: 'castSpell', filter: { controller: 'you', types: ['Instant', 'Sorcery'] } }, effect: [{ op: 'createToken', token: { name: 'Bird Illusion', types: ['Creature'], subtypes: ['Bird', 'Illusion'], colors: ['U'], power: 1, toughness: 1, keywords: ['Flying'] } }] }]
+  },
+  'Delver of Secrets': { triggered: [{ trigger: { event: 'upkeep', yourTurn: true }, effect: [{ op: 'revealTopTransform', types: ['Instant', 'Sorcery'] }] }] },
+  'Deem Inferior': {
+    costReduction: { per: 'drewThisTurn' },
+    spell: {
+      targets: [{ type: 'permanent', nonland: true }],
+      effect: [{ op: 'chooseOption', to: 'target0', options: ['Second from the top', 'Bottom of library'], label: 'Deem Inferior — where does it go?' }, { op: 'putIntoLibrary', to: 'target0' }]
+    }
+  },
+  'Sleep of the Dead': { spell: { targets: [{ type: 'creature' }], effect: [{ op: 'tap', to: 'target0' }, { op: 'skipNextUntap', to: 'target0' }] } }, // escape parsed
+  Envelop: { spell: { targets: [{ type: 'spell', spellType: 'Sorcery' }], effect: [{ op: 'counter', to: 'target0' }] } },
+  Annul: { spell: { targets: [{ type: 'spell', spellTypes: ['Artifact', 'Enchantment'] }], effect: [{ op: 'counter', to: 'target0' }] } },
+  'Gut Shot': { spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', to: 'target0', amount: 1 }] } },
+
   // ---- exile until this leaves ----
   'Journey to Nowhere': {
     triggered: [
@@ -1539,6 +1738,12 @@ export function loadBehavior(printed) {
   const suspend = authored.suspend || (susMatch ? { count: Number(susMatch[1]), cost: susMatch[2] } : null)
   const overload = authored.overload || costKw('Overload')
   const miracle = authored.miracle || costKw('Miracle')
+  // Escape (702.138): "Escape—{2}{U}, Exile three other cards from your graveyard."
+  const escMatch = /^Escape\s*[—-]\s*((?:\{[^}]+\})+),\s*Exile (\w+) other cards? from your graveyard/im.exec(text)
+  const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 }
+  const escape = authored.escape || (escMatch ? { cost: escMatch[1], exile: WORDS[escMatch[2].toLowerCase()] || Number(escMatch[2]) || 1 } : null)
+  // Bargain (702.166): an optional additional cost — sacrifice an artifact, enchantment or token.
+  const bargain = authored.bargain ?? /^Bargain\b/m.test(text)
   const dredgeMatch = /^Dredge (\d+)/m.exec(text)
   const dredge = authored.dredge ?? (dredgeMatch ? Number(dredgeMatch[1]) : null)
   const mutate = authored.mutate || costKw('Mutate')
@@ -1572,6 +1777,9 @@ export function loadBehavior(printed) {
     attachedManaBonus: authored.attachedManaBonus || null, // Aura: { color | 'chosen' } — the enchanted permanent taps for one extra (Wild Growth)
     costReduction: authored.costReduction || null, // { per: countFilter } — "costs {1} less for each …" (Tolarian Terror)
     minBlockers,
+    escape, // { cost, exile } — cast from the graveyard, exiling N other cards
+    bargain, // may sacrifice an artifact/enchantment/token as it's cast; `o.bargained`
+    gift: authored.gift || null, // { token, tapped, targets } — "Gift a tapped Fish" (Sazacap's Brew)
     saga: authored.saga || null, // { chapters: [effects | { targets, effect }] } (714)
     cantBeBlocked,
     cantBlock,
@@ -1644,9 +1852,11 @@ export function manaAbilityColors(obj) {
     }
   }
   for (const a of obj.behavior?.activated || []) {
-    if (a.manaAbility && a.cost?.tap) {
+    // Only a plain {T} mana ability taps automatically; one with a further cost
+    // ({1}, {T}: Prophetic Prism) is an explicit activation.
+    if (a.manaAbility && a.cost?.tap && !a.cost.mana && !a.cost.sacrifice && !a.cost.discard) {
       const add = a.effect.find((e) => e.op === 'addMana')
-      if (add) out.push(add.mana)
+      if (add && add.mana !== 'chosen') out.push(add.mana)
     }
   }
   return [...new Set(out)]

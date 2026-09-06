@@ -1,4 +1,4 @@
-// The decks the app starts with. On first start they are saved into the deck
+// The decks the app starts with (mainboards and sideboards). On first start they are saved into the deck
 // store as ordinary decks (src/renderer/src/store/decks.js), so the player can
 // edit, rename or delete them; "Restore default decks" brings back any that are
 // missing. Every card here is engine-supported: basic lands, vanilla/keyword
@@ -40,6 +40,15 @@ export const DEFAULT_DECKS = [
       [3, 'Swamp'],
       [1, 'Mountain'],
       [2, 'Forest']
+    ],
+    sideboard: [
+      [2, 'Faerie Macabre'],
+      [2, 'Pyroblast'],
+      [3, 'Duress'],
+      [3, 'Weather the Storm'],
+      [2, 'Troublemaker Ouphe'],
+      [1, 'Terminate'],
+      [2, 'Breath Weapon']
     ]
   },
   {
@@ -72,6 +81,15 @@ export const DEFAULT_DECKS = [
       [2, 'Seat of the Synod'],
       [4, 'Drossforge Bridge'],
       [1, 'Mountain']
+    ],
+    sideboard: [
+      [1, 'Unexpected Fangs'],
+      [2, 'Extract a Confession'],
+      [1, 'Krark-Clan Shaman'],
+      [1, 'Red Elemental Blast'],
+      [4, 'Pyroblast'],
+      [4, 'Hydroblast'],
+      [2, 'Blue Elemental Blast']
     ]
   },
   {
@@ -96,6 +114,13 @@ export const DEFAULT_DECKS = [
       [4, 'Highway Robbery'], // may discard -> draw 2
       // Lands
       [18, 'Mountain']
+    ],
+    sideboard: [
+      [1, 'Crimson Fleet Commodore'],
+      [4, 'Pyroblast'],
+      [3, 'Red Elemental Blast'],
+      [4, 'Relic of Progenitus'],
+      [3, 'Searing Blaze']
     ]
   },
 
@@ -120,6 +145,13 @@ export const DEFAULT_DECKS = [
       [4, 'Battle Screech'],
       [17, 'Plains'],
       [2, 'Idyllic Grange']
+    ],
+    sideboard: [
+      [4, 'Dust to Dust'],
+      [3, 'Journey to Nowhere'],
+      [3, 'Standard Bearer'],
+      [1, 'Holy Light'],
+      [4, 'Martyr of Sands']
     ]
   },
   {
@@ -142,9 +174,50 @@ export const DEFAULT_DECKS = [
       [1, "Wrenn's Resolve"],
       [4, 'Great Furnace'],
       [14, 'Mountain']
+    ],
+    sideboard: [
+      [4, 'Cast into the Fire'],
+      [1, 'Flaring Pain'],
+      [4, 'Pyroblast'],
+      [3, 'Relic of Progenitus'],
+      [3, 'Tectonic Hazard']
     ]
   },
   // ---- Sample decks (showcase engine mechanics; not tuned to the metagame) ----
+  {
+    slug: 'pauper-mono-blue-terror',
+    name: 'Mono Blue Terror (Pauper)',
+    description:
+      'Paupergeddon Summer 2026 Top 64 (Matteo Conte). Fill the graveyard with cantrips (Brainstorm, Ponder, Thought Scour, Mental Note) so Tolarian Terror and Cryptic Serpent cost almost nothing, Delver flips early, and counterspells protect the threats.',
+    cards: [
+      // Creatures
+      [4, 'Tolarian Terror'],
+      [4, 'Cryptic Serpent'],
+      [1, 'Murmuring Mystic'],
+      [4, 'Delver of Secrets'],
+      // Instants / sorceries
+      [4, 'Brainstorm'],
+      [4, 'Thought Scour'],
+      [4, 'Mental Note'],
+      [4, 'Counterspell'],
+      [1, 'Dispel'],
+      [3, 'Ponder'],
+      [1, 'Deep Analysis'],
+      [4, 'Deem Inferior'],
+      [2, 'Sleep of the Dead'],
+      [4, 'Lórien Revealed'],
+      // Lands
+      [16, 'Island']
+    ],
+    sideboard: [
+      [4, 'Hydroblast'],
+      [3, 'Blue Elemental Blast'],
+      [1, 'Envelop'],
+      [4, 'Annul'],
+      [2, 'Gut Shot'],
+      [1, 'Murmuring Mystic']
+    ]
+  },
   {
     slug: 'sample-faeries',
     name: 'Mono-Blue Faeries (sample)',
@@ -273,7 +346,7 @@ export const DEFAULT_DECKS = [
   }
 ]
 
-// Flatten a deck's cards into a de-duplicated list of names for resolution.
+// Flatten a deck's cards (main and sideboard) into a de-duplicated list of names.
 export function deckCardNames(deck) {
-  return [...new Set(deck.cards.map(([, name]) => name))]
+  return [...new Set([...deck.cards, ...(deck.sideboard || [])].map(([, name]) => name))]
 }

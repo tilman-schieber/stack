@@ -65,7 +65,7 @@ section('The view carries inspector data and payment previews')
   const v = projectGame(e, 0)
   const bf = v.players[0].battlefield
   const d = bf.find((c) => c.oid === delver.oid)
-  assert(d.supported === false && /upkeep/.test(d.oracleText), 'Delver: flagged as not fully enforced, with its rules text')
+  assert(d.supported === true && /upkeep/.test(d.oracleText), 'Delver: now fully enforced (its upkeep trigger is authored), with its rules text')
   const a = bf.find((c) => c.oid === victim.oid)
   assert(a.keywords.includes('Haste') && !a.printedKeywords.includes('Haste') && a.printedKeywords.includes('Flying'), 'granted vs printed keywords are distinguishable')
   assert(a.restrictions.includes('attack') && a.restrictions.includes('block'), "Pacifism: can't attack or block")
