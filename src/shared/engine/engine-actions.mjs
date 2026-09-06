@@ -120,6 +120,10 @@ export const actionsMethods = {
           // the required sacrifices / creatures to tap.
           o.xValue = 0
           const alt = o.behavior.spell.alternativeCost
+          if (alt.payLife) {
+            s.players[pid].life -= alt.payLife
+            this._log(`${this._nameOf(pid)} pays ${alt.payLife} life`)
+          }
           if (alt.sacrifice)
             for (const so of this._sacrificeCandidates(pid, alt.sacrifice).slice(0, alt.sacrifice.count || 1)) this._sacrifice(so)
           if (alt.tapCreatures) this._payTapCreatures(pid, alt.tapCreatures)
@@ -160,6 +164,7 @@ export const actionsMethods = {
             const so = s.objects[action.sacrifice]
             if (so && so.controller === pid && so.zoneName === 'battlefield') {
               o._sacrificedMV = so.printed.manaValue
+              o._sacrificedPower = so.chars?.power ?? so.printed.power ?? 0
               this._sacrifice(so)
             }
           }
@@ -301,6 +306,29 @@ export const actionsMethods = {
         this._countSpellCast(copy)
         this._fireTriggers('castSpell', copy)
         this._checkWard(copy.oid, pid, copy.targets)
+        break
+      }
+      case 'embalm': {
+        // Embalm (702.87): exile the card, create a token copy that's a white
+        // Zombie of its creature types with no mana cost.
+        const o = s.objects[action.oid]
+        this._pay(pid, parseManaCost(o.behavior.embalm.cost))
+        this._log(`${this._nameOf(pid)} embalms ${this._objName(o)}`)
+        const p = o.printed
+        this._createTokens(
+          {
+            name: p.name,
+            types: [...p.types],
+            subtypes: [...new Set(['Zombie', ...p.subtypes])],
+            colors: ['W'],
+            power: p.power,
+            toughness: p.toughness,
+            keywords: [...(p.keywords || [])]
+          },
+          pid,
+          1
+        )
+        this._relocate(o, 'exile')
         break
       }
       case 'castEscape': {
@@ -459,6 +487,7 @@ export const actionsMethods = {
   // Can `pid` currently pay ability `ab`'s activation cost with source `o`?
   _canActivate(pid, o, ab) {
     const s = this.state
+    if (ab.fromGraveyard || ab.fromHand) return true // legality checked where they're offered
     // Loyalty abilities: sorcery speed, one per planeswalker per turn, and you
     // must have enough loyalty to pay an activation that removes loyalty.
     if (ab.loyalty != null) {
@@ -484,6 +513,11 @@ export const actionsMethods = {
     const cost = ab.cost || {}
     // Discard N as a cost needs that many cards in hand.
     if (cost.discard && zone(s, 'hand', pid).length < cost.discard) return false
+    // "Tap an untapped Gate you control": one must be available.
+    if (cost.tapOther && !objectsIn(s, 'battlefield').some((x) => x.controller === pid && x.oid !== o.oid && !x.status.tapped && this._sacMatches(x, cost.tapOther))) return false
+    if (cost.bounceOwn && !objectsIn(s, 'battlefield').some((x) => x.controller === pid && x.oid !== o.oid && this._sacMatches(x, cost.bounceOwn))) return false
+    if (cost.sacrificeOther && !objectsIn(s, 'battlefield').some((x) => x.controller === pid && x.oid !== o.oid && this._sacMatches(x, cost.sacrificeOther))) return false
+    if (cost.exileCreature && !objectsIn(s, 'battlefield').some((x) => x.controller === pid && x.chars.types.includes('Creature')) && !zone(s, 'graveyard', pid).some((x) => s.objects[x].printed.types.includes('Creature'))) return false
     if (cost.tap) {
       if (o.status.tapped) return false
       if (o.printed.types.includes('Creature') && !this._canTap(o)) return false
@@ -554,6 +588,41 @@ export const actionsMethods = {
     }
     if (cost.tap) this._setTapped(o, true)
     if (cost.untap) this._setTapped(o, false)
+    // "Return a Forest you control to its owner's hand" (Quirion Ranger).
+    if (cost.bounceOwn) {
+      const cand = objectsIn(s, 'battlefield').find((x) => x.controller === pid && x.oid !== o.oid && this._sacMatches(x, cost.bounceOwn))
+      if (cand) {
+        this._log(`${this._objName(cand)} returns to its owner's hand`)
+        this._relocate(cand, 'hand')
+      }
+    }
+    // "Sacrifice a Food" (Cauldron Familiar): another permanent pays.
+    if (cost.sacrificeOther) {
+      const cand = objectsIn(s, 'battlefield').find((x) => x.controller === pid && x.oid !== o.oid && this._sacMatches(x, cost.sacrificeOther))
+      if (cand) this._sacrifice(cand)
+    }
+    // "Exile this artifact" as a cost (craft).
+    if (cost.exileSelf) this._relocate(o, 'exile')
+    // Craft also exiles a creature you control or one from your graveyard.
+    if (cost.exileCreature) {
+      const bf = objectsIn(s, 'battlefield').filter((x) => x.controller === pid && x.chars.types.includes('Creature'))
+      const gy = zone(s, 'graveyard', pid).map((x) => s.objects[x]).filter((x) => x.printed.types.includes('Creature'))
+      const cand = gy[0] || bf.sort((a, b) => (a.chars.power || 0) - (b.chars.power || 0))[0]
+      if (cand) {
+        this._log(`${this._nameOf(pid)} exiles ${this._objName(cand)}`)
+        this._relocate(cand, 'exile')
+      }
+    }
+    // "Tap an untapped Gate you control" (Heap Gate): another permanent pays.
+    if (cost.tapOther) {
+      const cand = objectsIn(s, 'battlefield').find(
+        (x) => x.controller === pid && x.oid !== o.oid && !x.status.tapped && this._sacMatches(x, cost.tapOther)
+      )
+      if (cand) {
+        this._setTapped(cand, true)
+        this._log(`${this._nameOf(pid)} taps ${this._objName(cand)} to pay a cost`)
+      }
+    }
     if (cost.payLife != null) s.players[pid].life -= cost.payLife
     if (cost.energy) s.players[pid].counters.energy -= cost.energy
     if (cost.removeCounters) {
@@ -786,6 +855,19 @@ export const actionsMethods = {
 
   _applyChooseValue(pending, answer) {
     const s = this.state
+    if (pending._triggerModes) {
+      // A modal triggered ability's mode, chosen as it goes on the stack.
+      const { trigger, choices } = pending._triggerModes
+      const idx = Math.max(0, pending.options.indexOf(answer?.value))
+      const pick = choices[idx] || choices[0]
+      trigger.mode = pick.i
+      trigger.effect = pick.m.effect
+      trigger.targetSpec = pick.m.targets || []
+      this._log(`${this._nameOf(pending.player)} chooses ${pick.m.label}`)
+      s.pending = null
+      this._advanceTriggerPlacement()
+      return
+    }
     if (pending._holder) {
       // A value chosen mid-resolution (Prismatic Strands' colour).
       pending._holder.chosen = pending.options.includes(answer?.value) ? answer.value : pending.options[0]

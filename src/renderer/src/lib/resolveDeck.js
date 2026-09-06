@@ -14,17 +14,20 @@ export function buildLookup(cards) {
   return (name) => map.get(String(name).toLowerCase())
 }
 
-// Resolve a saved deck (by slug; main section only — the sideboard is ignored)
-// into { name, cards, commander, coverage, commanderIssues } for the engine.
+// Resolve a saved deck (by slug) into { name, cards, sideboard, commander,
+// coverage, commanderIssues } for the engine. `cards` is the main deck, one
+// entry per copy; `sideboard` likewise, for between-games sideboarding.
 export async function resolveSavedDeck(slug) {
   const record = await window.api.loadDeck(slug)
   const main = (record.entries || []).filter((e) => (e.section || 'main') === 'main')
+  const side = (record.entries || []).filter((e) => e.section === 'sideboard')
   const cmdEntries = (record.entries || []).filter((e) => e.section === 'commander')
-  const { cards } = await window.api.ensureCards([...main, ...cmdEntries].map((e) => e.scryfallId))
+  const { cards } = await window.api.ensureCards([...main, ...side, ...cmdEntries].map((e) => e.scryfallId))
   const byId = new Map(cards.map((c) => [c.id, c]))
   // Commander (903): the first card of the commander section, if any.
   const commander = cmdEntries.length ? byId.get(cmdEntries[0].scryfallId) || null : null
   const out = []
+  const sideOut = []
   const missing = []
   const pairs = []
   for (const e of main) {
@@ -36,9 +39,13 @@ export async function resolveSavedDeck(slug) {
     for (let i = 0; i < e.qty; i++) out.push(card)
     pairs.push([e.qty, card])
   }
+  for (const e of side) {
+    const card = byId.get(e.scryfallId)
+    if (card) for (let i = 0; i < e.qty; i++) sideOut.push(card)
+  }
   if (missing.length) throw new Error(`Could not resolve: ${missing.join(', ')}`)
   if (out.length === 0) throw new Error('That deck has no cards in its main section')
-  return { name: record.name, cards: out, commander, coverage: coverageOf(pairs), commanderIssues: commander ? commanderIssues(out, commander) : [] }
+  return { name: record.name, cards: out, sideboard: sideOut, commander, coverage: coverageOf(pairs), commanderIssues: commander ? commanderIssues(out, commander) : [] }
 }
 
 // Deck-construction problems for Commander (903.5): colour identity, singleton,

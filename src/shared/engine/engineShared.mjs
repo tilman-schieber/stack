@@ -32,7 +32,16 @@ export const MAIN_STEPS = new Set(['main1', 'main2'])
 
 // What a source "is" for protection purposes (702.16): its colours and its types,
 // matched against a permanent's `protections` list ('B', 'Creature', 'everything').
-export const tags = (c) => (c ? [...(c.colors || []), ...(c.types || [])] : [])
+// The characteristics protection can name: colours, types, and whether the source
+// is mono- or multicolored (702.16e — "protection from monocolored").
+export const tags = (c) => {
+  if (!c) return []
+  const colors = c.colors || []
+  const out = [...colors, ...(c.types || [])]
+  if (colors.length === 1) out.push('monocolored')
+  if (colors.length > 1) out.push('multicolored')
+  return out
+}
 
 // Sum two parsed mana costs (a spell's cost plus a kicker cost, …).
 export function addCosts(a, b) {

@@ -43,7 +43,11 @@ const SUPPORTED_KEYWORDS = new Set(
     'split second',
     'cascade',
     'storm',
-    'extort'
+    'extort',
+    'delve',
+    'convoke',
+    'flash',
+    'bargain'
   ]
 )
 
@@ -60,6 +64,9 @@ const SUPPORTED_PATTERNS = [
   /^cycling\s*[—-]?\s*((\{[^}]+\})+|pay \d+ life)$/i,
   /^(echo|unearth)\s*(\{[^}]+\})+$/i,
   /^(toxic|dredge) \d+$/i,
+  /^embalm\s*[—-]?\s*(\{[^}]+\})+$/i,
+  /^job select$/i,
+  /^protection from (monocolored|multicolored)$/i,
   /^(plains|island|swamp|mountain|forest|nonbasic land|desert)walk$/i,
   /^(?:this creature|[a-z][^.]*?) can't be countered\.?$/i,
   /^(?:this creature|[a-z][^.]*?) can't be blocked\.?$/i,

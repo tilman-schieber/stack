@@ -77,6 +77,11 @@ export const triggersMethods = {
     return !!o?.chars?.keywords?.includes(kw)
   },
 
+  // Morbid (Tragic Slip): whether a creature has died this turn. Reset at untap.
+  _noteCreatureDied(o) {
+    if (o?.chars?.types?.includes('Creature') || o?.printed?.types?.includes('Creature')) this.state.creatureDiedThisTurn = true
+  },
+
   // ---- state-based actions (rule 704) ---------------------------------
 
   _checkSBA() {
@@ -398,6 +403,7 @@ export const triggersMethods = {
           subjectOid: subject.oid,
           effect: ab.effect,
           targetSpec: ab.targets || [], // targets chosen when placed on the stack
+          modes: ab.modes || null, // a modal trigger picks its mode as it goes on the stack
           optional: !!ab.optional, // "you may …"
           condition: ab.trigger.if || null,
           extra
@@ -465,6 +471,7 @@ export const triggersMethods = {
           subjectOid: w.oid,
           effect: ab.effect,
           targetSpec: ab.targets || [],
+          modes: ab.modes || null,
           optional: !!ab.optional,
           condition: ab.trigger.if || null
         })
@@ -555,13 +562,27 @@ export const triggersMethods = {
 
   // A permanent leaving the battlefield for the graveyard (death/destroy).
   _bury(o) {
+    this._noteCreatureDied(o)
     this._relocate(o, 'graveyard')
+  },
+
+  // Umbra armor (Hyena Umbra): an attached Aura is destroyed instead of the
+  // creature. Checked with regeneration, before the creature is put away.
+  _tryUmbraArmor(o) {
+    const aura = objectsIn(this.state, 'battlefield').find((a) => a.status.attachedTo === o.oid && a.behavior?.umbraArmor)
+    if (!aura) return false
+    o.status.damage = 0
+    o.status.markedDeath = false
+    this._log(`${this._objName(aura)} is destroyed instead of ${this._objName(o)}`)
+    this._bury(aura)
+    return true
   },
 
   // Regeneration (701.15 / 614.8): if `o` has a regeneration shield, consume it to
   // replace a destruction — remove all damage, tap it, and pull it out of combat —
   // instead of putting it in the graveyard. Returns true if a shield was used.
   _tryRegenerate(o) {
+    if (this._tryUmbraArmor(o)) return true
     if ((o.status.regenShields || 0) <= 0) return false
     o.status.regenShields--
     o.status.damage = 0

@@ -143,6 +143,7 @@ export const effectsMethods = {
           tapped: !!e.tapped,
           optional: e.optional !== false,
           reveal: !!e.reveal, // "reveal it": the log names the card
+          count: e.count || 1, // "up to three cards named …" — taken together
           shuffle: true
         }
         return true
@@ -297,8 +298,21 @@ export const effectsMethods = {
         return this._nextSacrificeChoice(this._apnap(), e.filter, 1, { elseLoseLife: e.life })
       case 'bounceChoose': {
         // "Return a permanent you control to its owner's hand" — chosen on resolution.
+        // With `elseSacrificeSelf`, declining sacrifices the source instead (Glint
+        // Hawk: "sacrifice it unless you return an artifact you control").
         const pid = this._resolvePlayerRef(source, e.to || 'controller')
-        return this._nextSacrificeChoice([pid], e.filter || {}, 1, { action: 'bounce' })
+        const opts = { action: 'bounce' }
+        if (e.elseSacrificeSelf) {
+          opts.elseSacrificeSelf = source.sourceOid
+          opts.optional = true
+        }
+        const started = this._nextSacrificeChoice([pid], e.filter || {}, 1, opts)
+        // Nothing to return: the source is sacrificed straight away.
+        if (!started && e.elseSacrificeSelf) {
+          const self = s.objects[source.sourceOid]
+          if (self?.zoneName === 'battlefield') this._sacrifice(self)
+        }
+        return started
       }
       case 'ringTempt':
         // "The Ring tempts you" (701.54): may pause to choose a Ring-bearer.
@@ -464,9 +478,13 @@ export const effectsMethods = {
           // "Creatures you control get +N/+N [and gain …] until end of turn" — the
           // affected set is locked in as the effect is created (611.2c).
           const f = e.filter || { type: 'Creature', controller: 'you' }
+          // "Creatures target player controls" (Arms of Hadar): the controller is
+          // whichever player a target names.
+          const refPid = f.controller?.startsWith?.('target') ? this._resolvePlayerRef(source, f.controller) : null
           const targets = objectsIn(s, 'battlefield')
             .filter(
               (o) =>
+                (refPid == null || o.controller === refPid) &&
                 (f.controller !== 'you' || o.controller === source.controller) &&
                 (f.controller !== 'opponent' || o.controller !== source.controller) &&
                 (!f.type || o.chars.types.includes(f.type)) &&
@@ -788,10 +806,19 @@ export const effectsMethods = {
             s.continuous.push({
               timestamp: ++s.tsCounter,
               targets: [t.obj.oid],
-              grantKeywords: [e.keyword],
+              grantKeywords: e.keywords ? [...e.keywords] : [e.keyword],
               duration: e.duration || 'eot',
               owner: source.controller
             })
+          break
+        }
+        case 'returnSelfFromGraveyard': {
+          // "{2}{G}: Return this card from your graveyard to your hand."
+          const o = s.objects[source.sourceOid]
+          if (o?.zoneName === 'graveyard') {
+            this._log(`${this._objName(o)} returns to its owner's hand`)
+            this._relocate(o, 'hand')
+          }
           break
         }
         case 'preventAllCombat':
@@ -1081,6 +1108,50 @@ export const effectsMethods = {
           }
           break
         }
+        case 'blink': {
+          // "Exile target permanent, then return it to the battlefield" (Ephemerate,
+          // Ghostly Flicker): it comes back as a new object, so ETB triggers fire.
+          for (const ref of e.each ? source.targets || [] : [source.targets?.[Number((e.to || 'target0').slice(6))]]) {
+            if (ref?.kind !== 'object') continue
+            const o = s.objects[ref.oid]
+            if (!o || o.zoneName !== 'battlefield') continue
+            const owner = o.owner
+            moveObject(s, o.oid, 'exile')
+            moveObject(s, o.oid, 'battlefield')
+            this._enterBattlefield(o, owner)
+            this._log(`${this._objName(o)} is exiled and returns`)
+          }
+          break
+        }
+        case 'graveyardToTop': {
+          // "You may put target creature card from your graveyard on top of your
+          // library" (Mortuary Mire).
+          const t = source.targets?.[0]
+          const o = t?.oid ? s.objects[t.oid] : null
+          if (o && o.zoneName === 'graveyard') {
+            moveObject(s, o.oid, 'library', { toTop: true })
+            this._log(`${this._objName(o)} goes on top of its owner's library`)
+          }
+          break
+        }
+        case 'skipNextCombat': {
+          // "Target opponent skips their next combat phase" (Stonehorn Dignitary).
+          const pid = this._resolvePlayerRef(source, e.to || 'target0')
+          s.players[pid].skipCombats = (s.players[pid].skipCombats || 0) + 1
+          this._log(`${this._nameOf(pid)} will skip their next combat phase`)
+          break
+        }
+        case 'returnSelfTransformed': {
+          // Craft (702.171): the exiled artifact returns transformed.
+          const o = s.objects[source.sourceOid]
+          if (o && o.faces?.length > 1) {
+            moveObject(s, o.oid, 'battlefield')
+            setFace(o, 1)
+            this._enterBattlefield(o, o.owner)
+            this._log(`${this._objName(o)} returns transformed`)
+          }
+          break
+        }
         case 'returnLinked': {
           // "…return the exiled card to the battlefield under its owner's control."
           const src = s.objects[source.sourceOid]
@@ -1273,6 +1344,10 @@ export const effectsMethods = {
         this._relocate(o, 'hand')
       } else this._sacrifice(o)
     }
+    if (declined && pending.elseSacrificeSelf) {
+      const self = s.objects[pending.elseSacrificeSelf]
+      if (self?.zoneName === 'battlefield') this._sacrifice(self)
+    }
     if (declined && pending.elseLoseLife) {
       this._loseLife(pending.player, pending.elseLoseLife)
       this._log(`${this._nameOf(pending.player)} loses ${pending.elseLoseLife} life (${s.players[pending.player].life})`)
@@ -1307,8 +1382,9 @@ export const effectsMethods = {
         player: pid,
         choices,
         count: Math.min(count, choices.length),
-        optional: !!opts?.elseLoseLife,
+        optional: !!(opts?.elseLoseLife || opts?.optional),
         elseLoseLife: opts?.elseLoseLife || 0,
+        elseSacrificeSelf: opts?.elseSacrificeSelf || null, // declined: sacrifice the source
         action: opts?.action || 'sacrifice', // what happens to the chosen permanent(s)
         _queue: queue,
         _filter: filter,
@@ -1363,6 +1439,17 @@ export const effectsMethods = {
     const s = this.state
     const pid = pending.player
     const pick = answer?.pick
+    // "Search your library for up to N cards named X" (Squadron Hawk): the pick
+    // brings its namesakes along.
+    if (pick && (pending.count || 1) > 1 && pending.cards.includes(pick)) {
+      const name = s.objects[pick].printed.name
+      const take = pending.cards.filter((oid) => s.objects[oid].printed.name === name).slice(0, pending.count)
+      for (const oid of take) moveObject(s, oid, pending.to)
+      this._log(`${this._nameOf(pid)} puts ${take.length} ${name} into their hand`)
+      if (pending.shuffle) s.zones[zoneKey('library', pid)] = s.rng.shuffle(s.zones[zoneKey('library', pid)])
+      this._resumeResolution()
+      return
+    }
     if (pick && pending.cards.includes(pick)) {
       const o = s.objects[pick]
       if (pending.to === 'battlefield') {

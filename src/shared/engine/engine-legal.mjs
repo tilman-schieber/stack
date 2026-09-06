@@ -235,6 +235,25 @@ export const legalMethods = {
       if (targets.length && !targets.every((t) => this._legalTargetsExist(t, fctx))) continue
       actions.push({ type: 'castFlashback', oid, targets, needsTargets: targets.length })
     }
+    // Embalm (702.87): exile a creature card from your graveyard for a token copy
+    // that's a white Zombie with no mana cost. Sorcery speed.
+    for (const oid of zone(s, 'graveyard', pid)) {
+      const o = s.objects[oid]
+      const emb = o.behavior?.embalm
+      if (!emb || !sorcerySpeed || !this._canPay(pid, parseManaCost(emb.cost))) continue
+      actions.push({ type: 'embalm', oid, label: `Embalm ${o.printed.name} (${emb.cost})` })
+    }
+    // Abilities that work from the graveyard ("{2}{G}: Return this card from your
+    // graveyard to your hand" — Talons of Wildwood).
+    for (const oid of zone(s, 'graveyard', pid)) {
+      const o = s.objects[oid]
+      ;(o.behavior?.activated || []).forEach((ab, i) => {
+        if (!ab.fromGraveyard) return
+        if (ab.sorcerySpeed && !sorcerySpeed) return
+        if (ab.cost?.mana && !this._canPay(pid, parseManaCost(ab.cost.mana))) return
+        actions.push({ type: 'activate', oid, ability: i, targets: [], needsTargets: 0, label: ab.label || this._describeAbility(ab), fromGraveyard: true })
+      })
+    }
     // Escape (702.138): cast from your graveyard, exiling N other cards from it.
     for (const oid of zone(s, 'graveyard', pid)) {
       const o = s.objects[oid]
@@ -445,6 +464,7 @@ export const legalMethods = {
     const altOk =
       alt &&
       (!alt.if || this._cond(alt.if, { controller: pid, oid })) &&
+      (!alt.payLife || s.players[pid].life > alt.payLife) &&
       (!alt.sacrifice || this._sacrificeCandidates(pid, alt.sacrifice).length >= (alt.sacrifice.count || 1)) &&
       (!alt.tapCreatures || this._tapCandidates(pid, alt.tapCreatures).length >= (alt.tapCreatures.count || 1))
     if (altOk && targetsOk) {

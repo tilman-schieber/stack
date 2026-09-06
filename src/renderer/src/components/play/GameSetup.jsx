@@ -30,6 +30,7 @@ export default function GameSetup() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [commander, setCommander] = useState(false) // play the Commander format (903)
+  const [bestOfThree, setBestOfThree] = useState(false) // a match, with sideboarding between games
   const [vsBot, setVsBot] = useState(true) // player 2 is the computer
 
   async function startLocal() {
@@ -40,7 +41,7 @@ export default function GameSetup() {
       if (commander && (!d0.commander || !d1.commander))
         throw new Error("Commander needs a commander in each deck (a card in the deck's Commander section).")
       if (vsBot) d1.name = `Computer (${d1.name})`
-      startEngineGame({ decks: [d0, d1], format: commander ? 'commander' : null, bots: vsBot ? [1] : [] })
+      startEngineGame({ decks: [d0, d1], format: commander ? 'commander' : null, bots: vsBot ? [1] : [], bestOf: bestOfThree ? 3 : 1 })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -88,6 +89,10 @@ export default function GameSetup() {
             <label className="setup-check">
               <input type="checkbox" checked={commander} onChange={(ev) => setCommander(ev.target.checked)} />
               Commander — 40 life, commanders start in the command zone (both decks need one)
+            </label>
+            <label className="setup-check">
+              <input type="checkbox" checked={bestOfThree} onChange={(ev) => setBestOfThree(ev.target.checked)} />
+              Best of three — play a match, sideboarding between games (the loser of each game chooses to play or draw)
             </label>
             {decks.length === 0 && (
               <div className="deck-coverage warn">

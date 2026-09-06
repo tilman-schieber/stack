@@ -77,17 +77,22 @@ export const useEngineGame = create((set, get) => ({
   stops: defaultStops(),
   yields: {}, // per seat: { kind: 'turn' | 'all', turn } — see YIELD_KINDS
   holds: {}, // per seat: true while a hold-priority request is outstanding
+  match: null, // best-of-N match state: { bestOf, wins, game, decks, format, bots, over }
+  sideboarding: false, // between games of a match
   _engine: null,
   _transport: null,
   _botTimer: null,
 
   // ---- local hot-seat / vs. computer ---------------------------------------
-  // decks: [{ name, cards: [scryfallCard…], commander? }, …]; format: null | 'commander';
-  // bots: seat ids the computer plays (their hands are hidden like an opponent's).
-  startEngineGame: ({ decks, format = null, bots = [] }) => {
+  // decks: [{ name, cards: [scryfallCard…], sideboard?, commander? }, …];
+  // format: null | 'commander'; bots: seat ids the computer plays (their hands
+  // are hidden like an opponent's). `bestOf` (3) plays a match with sideboarding
+  // between games; `chooser` is the seat that picks play/draw (games 2+, 103.6).
+  startEngineGame: ({ decks, format = null, bots = [], bestOf = 1, chooser = null }) => {
     const engine = new GameEngine({
       seed: 'game-' + Date.now(),
       format,
+      playDrawChooser: chooser ?? undefined,
       players: decks.map((d) => ({ name: d.name, deck: d.cards, commander: format === 'commander' ? d.commander : null }))
     })
     engine.start()
@@ -96,8 +101,51 @@ export const useEngineGame = create((set, get) => ({
     const yields = {}
     const holds = {}
     settle(engine, stops, bots, yields, holds)
-    set({ started: true, mode: 'local', netSeat: 0, botSeats: bots, stops, yields, holds, _engine: engine, error: null, notice: null })
+    const prior = get().match
+    // A match keeps the decks (with sideboards) and the running score across games.
+    const match =
+      bestOf > 1 || prior
+        ? {
+            bestOf: prior?.bestOf ?? bestOf,
+            wins: prior?.wins ?? decks.map(() => 0),
+            game: prior ? prior.game + 1 : 1,
+            decks,
+            format,
+            bots,
+            recorded: false,
+            over: false
+          }
+        : null
+    set({ started: true, mode: 'local', netSeat: 0, botSeats: bots, stops, yields, holds, match, sideboarding: false, _engine: engine, error: null, notice: null })
     get()._commit()
+  },
+
+  // A game of a match has ended: record it, and either finish the match or open
+  // sideboarding for the next game.
+  _recordMatchGame: () => {
+    const { match, view } = get()
+    if (!match || match.recorded || view?.pending?.kind !== 'gameOver') return
+    const wins = [...match.wins]
+    const winner = view.pending.winner
+    if (Number.isInteger(winner) && wins[winner] != null) wins[winner]++
+    const need = Math.floor(match.bestOf / 2) + 1
+    const over = wins.some((w) => w >= need) || match.game >= match.bestOf
+    set({ match: { ...match, wins, recorded: true, over, lastWinner: Number.isInteger(winner) ? winner : null } })
+  },
+
+  // Between games: open / close the sideboarding screen.
+  openSideboard: () => set({ sideboarding: true }),
+
+  // Start the next game of the match with the (re-sideboarded) decks. The loser
+  // of the last game chooses to play or draw (103.6).
+  nextGame: (decks) => {
+    const { match, _engine, _botTimer } = get()
+    if (!match) return
+    if (_botTimer) clearTimeout(_botTimer)
+    void _engine
+    const loser = match.lastWinner == null ? 0 : decks.findIndex((_, i) => i !== match.lastWinner)
+    set({ sideboarding: false, _engine: null, view: null })
+    get().startEngineGame({ decks, format: match.format, bots: match.bots, chooser: loser < 0 ? 0 : loser })
   },
 
   // Let the computer take its decisions, one every BOT_DELAY_MS, until a human
@@ -175,6 +223,7 @@ export const useEngineGame = create((set, get) => ({
     const viewer = mode === 'host' ? 0 : botSeats.length ? netSeat : null
     set({ view: projectGame(_engine, viewer), error: null, yields: { ...get().yields }, holds: { ...get().holds } })
     if (mode === 'host') _transport?.send({ t: 'view', view: projectGame(_engine, 1) })
+    get()._recordMatchGame()
     get()._scheduleBot()
   },
 
@@ -341,6 +390,8 @@ export const useEngineGame = create((set, get) => ({
       botSeats: [],
       yields: {},
       holds: {},
+      match: null,
+      sideboarding: false,
       view: null,
       error: null,
       notice: typeof reason === 'string' ? reason : null

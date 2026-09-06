@@ -55,10 +55,9 @@ printings round-trip) and **Delete**. **Import…** a decklist by pasting Arena/
 opening a `.txt` file; it is resolved against Scryfall and saved (*Import & edit* opens it in
 the builder).
 
-The app starts with eleven **default decks** (`src/renderer/src/lib/defaultDecks.mjs`) — six
-exact Paupergeddon Summer 2026 Top 64 lists with their sideboards (Jund Wildfire, Grixis
-Affinity, Mono-Red Madness, White Weenie, Mono Red Rally, Mono Blue Terror) and five sample
-decks: on first start they are resolved against Scryfall and saved as ordinary decks, so you
+The app starts with a set of **default decks** (`src/renderer/src/lib/defaultDecks.mjs`) — exact
+Paupergeddon Summer 2026 Top 64 lists with their sideboards, every card enforced by the rules
+engine: on first start they are resolved against Scryfall and saved as ordinary decks, so you
 can edit, rename or delete them like any other. **Restore default decks** (shown whenever one is missing) adds
 back the ones you deleted; it never touches decks you kept or changed. A deck's **notes**
 (edited in the builder) show under its name.
@@ -130,6 +129,12 @@ the rest of the turn but still stops if the opponent does something you could re
 **Yield all** (F6) passes everything for the rest of the turn; F3 cancels. **Hold priority** (or
 shift-click the card you cast) keeps priority after your next spell or ability so you can respond
 to it yourself; it is used up once.
+
+**Best of three** (a checkbox in the game setup) plays a match. Between games a sideboarding
+screen lists each deck and its sideboard side by side; click a card to move one copy across, then
+start the next game. A deck may not get smaller than it started. The loser of each game chooses
+to play or draw (103.6), and the running score shows in the turn bar. The computer keeps its deck
+as it is between games.
 
 ## Rules engine (`src/shared/engine/`)
 

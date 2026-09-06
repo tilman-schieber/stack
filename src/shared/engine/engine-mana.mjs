@@ -36,15 +36,21 @@ export const manaMethods = {
       for (const m of o.behavior?.manaOptions || []) {
         if (m.if && !this._cond(m.if, o)) continue
         if (m.pips) opts.push({ colors: [...new Set(m.pips)], amount: m.pips.length, only: null, pips: [...m.pips] })
-        else opts.push({ colors: [...m.colors], amount: m.amount || 1, only: m.only || null })
+        // `amountCount`: "add {G} for each Elf on the battlefield" (Priest of Titania).
+        else opts.push({ colors: [...m.colors], amount: m.amountCount ? this._amount({ controller: o.controller, oid: o.oid }, { count: m.amountCount }) : m.amount || 1, only: m.only || null })
       }
     const bonus = []
+    let anyColor = false
     for (const aura of objectsIn(this.state, 'battlefield')) {
+      if (aura.status.attachedTo !== o.oid || aura.chars?.lostAbilities) continue
+      // "Enchanted land has '{T}: Add one mana of any color'" (Abundant Growth).
+      if (aura.behavior?.attachedManaAny) anyColor = true
       const b = aura.behavior?.attachedManaBonus
-      if (!b || aura.status.attachedTo !== o.oid || aura.chars?.lostAbilities) continue
+      if (!b) continue
       const color = b.color === 'chosen' ? aura.chosen : b.color
       if (color) bonus.push(color)
     }
+    if (anyColor) opts.push({ colors: ['W', 'U', 'B', 'R', 'G'], amount: 1, only: null })
     if (bonus.length) for (const opt of opts) opt.extra = [...(opt.extra || []), ...bonus]
     return opts
   },
@@ -361,6 +367,7 @@ export const manaMethods = {
   _amount(source, v) {
     if (v === 'X') return source?.xValue || 0
     if (v === 'sacrificedMV') return source?._sacrificedMV || 0
+    if (v === 'sacrificedPower') return source?._sacrificedPower || 0
     if (v && typeof v === 'object' && v.x) return (source?.xValue || 0) * v.x // "three times X" (Martyr of Sands)
     if (v && typeof v === 'object' && v.if) {
       // "N, or M instead if [condition]" (Searing Blaze's landfall).
@@ -445,6 +452,8 @@ export const manaMethods = {
         objectsIn(s, 'battlefield').some((o) => o.controller === pid && o.oid !== w?.oid && (!f.type || o.chars.types.includes(f.type)) && (!f.subtype || hasSub(o.chars, f.subtype)))
       )
     if (cond.landfall != null) return !!s.players[pid]?.landfall === cond.landfall // a land entered under your control this turn
+    if (cond.morbid != null) return !!s.creatureDiedThisTurn === cond.morbid // "if a creature died this turn"
+    if (cond.noLandsInHand != null) return zone(s, 'hand', pid).every((h) => !s.objects[h].printed.types.includes('Land')) === cond.noLandsInHand
     if (cond.gifted != null) return !!w?.gifted === cond.gifted // "if the gift was promised"
     if (cond.bargained != null) return !!w?.bargained === cond.bargained // "if it was bargained"
     if (cond.evidence != null) return !!w?.evidenceCollected === cond.evidence

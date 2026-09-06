@@ -1642,6 +1642,91 @@ export const BEHAVIORS = {
   Annul: { spell: { targets: [{ type: 'spell', spellTypes: ['Artifact', 'Enchantment'] }], effect: [{ op: 'counter', to: 'target0' }] } },
   'Gut Shot': { spell: { targets: [{ type: 'any' }], effect: [{ op: 'dealDamage', to: 'target0', amount: 1 }] } },
 
+  // ---- Dimir Terror / Naya Gates / Boros Synth (Top 64) ----
+  'Gurmag Angler': {}, // Delve is a keyword the payment planner already handles
+  'Abandon Attachments': { spell: { effect: [{ op: 'discard', amount: 1, optional: true, draw: 2 }] } },
+  'Snuff Out': {
+    spell: {
+      alternativeCost: { payLife: 4, if: { controls: { subtype: 'Swamp', min: 1 } }, label: 'pay 4 life' },
+      targets: [{ type: 'creature', excludeColor: 'B' }],
+      effect: [{ op: 'destroy', to: 'target0', noRegen: true }]
+    }
+  },
+  'Arms of Hadar': { spell: { targets: [{ type: 'player' }], effect: [{ op: 'pumpEach', filter: { type: 'Creature', controller: 'target0' }, power: -2, toughness: -2 }] } },
+  'Suffocating Fumes': { spell: { effect: [{ op: 'pumpEach', filter: { type: 'Creature', controller: 'opponent' }, power: -1, toughness: -1 }] } }, // cycling {2} parsed
+  'Steel Sabotage': {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        { label: 'Counter target artifact spell', targets: [{ type: 'spell', spellTypes: ['Artifact'] }], effect: [{ op: 'counter', to: 'target0' }] },
+        { label: "Return target artifact to its owner's hand", targets: [{ type: 'artifact' }], effect: [{ op: 'bounce', to: 'target0' }] }
+      ]
+    }
+  },
+  'Outlaw Medic': { triggered: [{ trigger: { event: 'dies', self: true }, effect: [{ op: 'draw', amount: 1 }] }] },
+  'Sacred Cat': {}, // lifelink + embalm {W}, both parsed
+  'Bitter Reunion': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'discard', amount: 1, optional: true, draw: 2 }] }],
+    activated: [{ cost: { mana: '{1}', sacrifice: 'self' }, label: 'Sacrifice: creatures you control gain haste', effect: [{ op: 'pumpEach', filter: { type: 'Creature', controller: 'you' }, keywords: ['Haste'] }] }]
+  },
+  'Talons of Wildwood': {
+    enchant: { type: 'creature' },
+    static: [{ affects: { scope: 'attached' }, modifyPT: { power: 1, toughness: 1 }, grantKeywords: ['Trample'] }],
+    activated: [{ fromGraveyard: true, cost: { mana: '{2}{G}' }, label: 'Return this card from your graveyard to your hand', effect: [{ op: 'returnSelfFromGraveyard' }] }]
+  },
+  'Heap Gate': {
+    mana: ['C'],
+    activated: [
+      { manaAbility: true, colors: ['W', 'U', 'B', 'R', 'G'], cost: { mana: '{1}', tap: true }, label: 'Add one mana of any color', effect: [{ op: 'addMana', mana: 'chosen' }] },
+      { cost: { mana: '{1}', tap: true, tapOther: { subtype: 'Gate' } }, label: 'Tap another Gate: create a Treasure', effect: [{ op: 'createToken', token: TREASURE_TOKEN }] }
+    ]
+  },
+  'Ancient Grudge': { spell: { targets: [{ type: 'artifact' }], effect: [{ op: 'destroy', to: 'target0' }] }, flashback: { cost: '{G}' } },
+  "Tamiyo's Safekeeping": {
+    spell: {
+      targets: [{ type: 'permanent', controller: 'you' }],
+      effect: [{ op: 'grantKeyword', to: 'target0', keywords: ['Hexproof', 'Indestructible'], duration: 'eot' }, { op: 'gainLife', amount: 2 }]
+    }
+  },
+  'Shattered Acolyte': {
+    activated: [{ cost: { mana: '{1}', sacrifice: 'self' }, targets: [{ type: 'permanent', types: ['Artifact', 'Enchantment'] }], label: 'Sacrifice: destroy target artifact or enchantment', effect: [{ op: 'destroy', to: 'target0' }] }]
+  },
+  'Dawnbringer Cleric': {
+    triggered: [
+      {
+        trigger: { event: 'etb', self: true },
+        modal: { count: 1 },
+        modes: [
+          { label: 'Cure Wounds — you gain 2 life', effect: [{ op: 'gainLife', amount: 2 }] },
+          { label: 'Dispel Magic — destroy target enchantment', targets: [{ type: 'enchantment' }], effect: [{ op: 'destroy', to: 'target0' }] },
+          { label: 'Gentle Repose — exile target card from a graveyard', targets: [{ type: 'graveyardCard' }], effect: [{ op: 'exile', to: 'target0' }] }
+        ]
+      }
+    ]
+  },
+  'Glint Hawk': {
+    triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'bounceChoose', filter: { type: 'Artifact' }, elseSacrificeSelf: true }] }]
+  },
+  "Red Mage's Rapier": {
+    triggered: [
+      { trigger: { event: 'etb', self: true }, effect: [{ op: 'createToken', token: { name: 'Hero', types: ['Creature'], subtypes: ['Hero'], colors: [], power: 1, toughness: 1 }, attachSelf: true }] },
+      { trigger: { event: 'castSpell', filter: { controller: 'you', noncreature: true }, if: { attached: true } }, effect: [{ op: 'pump', to: 'attached', power: 2, toughness: 0, duration: 'eot' }] }
+    ],
+    static: [{ affects: { scope: 'attached' }, addSubtypes: ['Wizard'] }],
+    activated: [{ equip: true, sorcerySpeed: true, cost: { mana: '{3}' }, targets: [{ type: 'creature', controller: 'you' }], label: 'Equip {3}', effect: [{ op: 'attach', to: 'target0' }] }]
+  },
+  'Destroy Evil': {
+    spell: {
+      modal: { count: 1 },
+      modes: [
+        { label: 'Destroy target creature with toughness 4 or greater', targets: [{ type: 'creature', minToughness: 4 }], effect: [{ op: 'destroy', to: 'target0' }] },
+        { label: 'Destroy target enchantment', targets: [{ type: 'enchantment' }], effect: [{ op: 'destroy', to: 'target0' }] }
+      ]
+    }
+  },
+  'Temple Acolyte': { triggered: [{ trigger: { event: 'etb', self: true }, effect: [{ op: 'gainLife', amount: 3 }] }] },
+  'Guardian of the Guildpact': {}, // protection from monocolored, parsed
+
   // ---- exile until this leaves ----
   'Journey to Nowhere': {
     triggered: [
@@ -1744,6 +1829,10 @@ export function loadBehavior(printed) {
   const escape = authored.escape || (escMatch ? { cost: escMatch[1], exile: WORDS[escMatch[2].toLowerCase()] || Number(escMatch[2]) || 1 } : null)
   // Bargain (702.166): an optional additional cost — sacrifice an artifact, enchantment or token.
   const bargain = authored.bargain ?? /^Bargain\b/m.test(text)
+  // Embalm (702.87): exile from your graveyard to make a token copy that's a
+  // white Zombie <its types> with no mana cost.
+  const embMatch = /^Embalm ((?:\{[^}]+\})+)/m.exec(text)
+  const embalm = authored.embalm || (embMatch ? { cost: embMatch[1] } : null)
   const dredgeMatch = /^Dredge (\d+)/m.exec(text)
   const dredge = authored.dredge ?? (dredgeMatch ? Number(dredgeMatch[1]) : null)
   const mutate = authored.mutate || costKw('Mutate')
@@ -1777,6 +1866,7 @@ export function loadBehavior(printed) {
     attachedManaBonus: authored.attachedManaBonus || null, // Aura: { color | 'chosen' } — the enchanted permanent taps for one extra (Wild Growth)
     costReduction: authored.costReduction || null, // { per: countFilter } — "costs {1} less for each …" (Tolarian Terror)
     minBlockers,
+    embalm, // { cost } — exile from the graveyard for a token copy (702.87)
     escape, // { cost, exile } — cast from the graveyard, exiling N other cards
     bargain, // may sacrifice an artifact/enchantment/token as it's cast; `o.bargained`
     gift: authored.gift || null, // { token, tapped, targets } — "Gift a tapped Fish" (Sazacap's Brew)

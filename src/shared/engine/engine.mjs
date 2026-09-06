@@ -26,6 +26,9 @@ export class GameEngine {
     this.state = createState(opts)
     // Who plays first: a seat index, or (default) a seeded random pick (103.1).
     this._startingPlayer = opts.startingPlayer
+    // Games 2+ of a match (103.6): the loser of the last game decides who plays
+    // first, instead of a die roll.
+    this._playDrawChooser = opts.playDrawChooser
     // Tests: never pause to ask a player to order simultaneous triggers (603.3b).
     this._autoOrder = !!opts.autoOrderTriggers
     // Static abilities with an `if` condition ("as long as …") are evaluated by
@@ -40,13 +43,15 @@ export class GameEngine {
     const s = this.state
     this.handSize = handSize
     const n = s.players.length
-    const explicit = Number.isInteger(this._startingPlayer)
-    s.startingPlayer = explicit ? this._startingPlayer : s.rng.int(n)
+    const chooser = Number.isInteger(this._playDrawChooser) ? this._playDrawChooser : null
+    const explicit = chooser == null && Number.isInteger(this._startingPlayer)
+    s.startingPlayer = chooser ?? (explicit ? this._startingPlayer : s.rng.int(n))
     for (const p of s.players) this.draw(p.id, handSize)
     s.step = 'mulligan'
     if (explicit) return this._beginMulligans()
-    // 103.2/103.7a: the player who won the die roll chooses to play or draw.
-    s.pending = { kind: 'playOrDraw', player: s.startingPlayer }
+    // 103.2/103.7a: the player who won the die roll — or, in games after the first,
+    // the loser of the previous game (103.6) — chooses to play or draw.
+    s.pending = { kind: 'playOrDraw', player: s.startingPlayer, matchLoser: chooser != null }
     return this
   }
 
@@ -769,6 +774,7 @@ export class GameEngine {
         }
         s.players[s.activePlayer].landsPlayed = 0
         for (const p of s.players) p.landfall = false
+        s.creatureDiedThisTurn = false // morbid
         for (const p of s.players) p.drewThisTurn = 0 // draw-count triggers are per turn
         s.spellsCastThisTurn = 0 // storm count is per turn
         break // no priority; _pump advances
@@ -830,6 +836,14 @@ export class GameEngine {
         break
       }
       case 'beginCombat': {
+        // "Skips their next combat phase" (Stonehorn Dignitary): spend one and go
+        // straight to the postcombat main phase (506.1 — the phase is skipped whole).
+        if (s.players[s.activePlayer].skipCombats > 0) {
+          s.players[s.activePlayer].skipCombats--
+          this._log(`${this._nameOf(s.activePlayer)} skips their combat phase`)
+          this._enterStep('main2')
+          break
+        }
         // 507.1: "at the beginning of combat" abilities (Goblin Rabblemaster).
         this._firePhaseTriggers('beginCombat')
         this._grantPriority()
@@ -1109,6 +1123,28 @@ export class GameEngine {
         }
       }
       const t = s.pendingTriggers.shift()
+      // A modal trigger (Dawnbringer Cleric) chooses its mode as it goes on the
+      // stack (603.3c); the chosen mode supplies the effect and target spec.
+      if (t.modes && t.mode == null) {
+        const castable = t.modes.map((m, i) => ({ m, i })).filter(({ m }) => (m.targets || []).every((sp) => this._legalTargetsExist(sp)))
+        if (!castable.length) continue
+        if (castable.length === 1) {
+          const pick = castable[0]
+          t.mode = pick.i
+          t.effect = pick.m.effect
+          t.targetSpec = pick.m.targets || []
+        } else {
+          s.pending = {
+            kind: 'chooseValue',
+            player: t.controller,
+            options: castable.map(({ m }) => m.label),
+            label: `${this._triggerName(t)} — choose one`,
+            _triggerModes: { trigger: t, choices: castable }
+          }
+          s.pendingTriggers.unshift(t)
+          return
+        }
+      }
       const spec = t.targetSpec || []
       // "You may …" with no target: ask before it goes on the stack.
       if (t.optional && !spec.length && !t._accepted) {
@@ -1340,6 +1376,9 @@ export class GameEngine {
     if (spec.color && !(o.chars.colors || []).includes(spec.color)) return false // "target blue permanent"
     if (spec.nonland && o.chars.types.includes('Land')) return false // "target nonland permanent"
     if (spec.tapped && !o.status.tapped) return false // "target tapped creature"
+    if (spec.type === 'enchantment' && !o.chars.types.includes('Enchantment')) return false
+    if (spec.minToughness != null && (o.chars.toughness ?? 0) < spec.minToughness) return false // "toughness 4 or greater"
+    if (spec.maxPower != null && (o.chars.power ?? 0) > spec.maxPower) return false // "power 2 or less"
     return true
   }
 
@@ -1367,7 +1406,7 @@ export class GameEngine {
     if (spec.type === 'spell') return zone(s, 'stack').some((oid) => this._spellSpecOk(spec, s.objects[oid]))
     if (spec.optional) return true // "up to one" — the spell is castable without it
     if (spec.type === 'graveyardCard') return s.players.some((p) => zone(s, 'graveyard', p.id).length > 0)
-    if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact' || spec.type === 'permanent') {
+    if (spec.type === 'creature' || spec.type === 'land' || spec.type === 'artifact' || spec.type === 'enchantment' || spec.type === 'permanent') {
       // A variadic slot ("N target creatures", "up to N…") needs at least `min`
       // legal targets to be cast (601.2c); a normal slot needs one.
       const min = spec.min ?? 1

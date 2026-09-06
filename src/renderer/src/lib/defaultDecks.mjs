@@ -219,129 +219,121 @@ export const DEFAULT_DECKS = [
     ]
   },
   {
-    slug: 'sample-faeries',
-    name: 'Mono-Blue Faeries (sample)',
+    slug: 'pauper-dimir-terror',
+    name: 'Dimir Terror (Pauper)',
     description:
-      'Not a current metagame deck — a showcase for Spellstutter Sprite (flash-counter by Faerie count), Ninjutsu, Snap (tempo bounce), Ray of Command (a layer-2 control steal), Clone (enter as a copy — a layer-1 copy effect), Cryptic Command (a choose-two modal), and two more copy effects (rule 707): Twincast (copy a spell on the stack) and Cackling Counterpart (token copy), an extra turn (Time Walk), and Claustrophobia (taps a creature and stops it untapping).',
+      'Paupergeddon Summer 2026 Top 64 (Lorenzo Pucci). Cantrips fill the graveyard so Tolarian Terror and a delved Gurmag Angler come down cheap; Snuff Out kills for free off a Swamp and counterspells hold the rest back.',
     cards: [
-      [20, 'Island'],
-      [4, 'Faerie Seer'], // 1/1 flying Faerie, ETB scry 2 — enabler + Spellstutter fuel
-      [4, 'Spellstutter Sprite'], // flash 1/1 flying Faerie; ETB counters by Faerie count
-      [4, 'Ninja of the Deep Hours'], // Ninjutsu {1}{U}; combat damage -> draw
-      [3, 'Wind Drake'], // 2/2 flying
-      [2, 'Snapping Drake'], // 3/2 flying
+      // Creatures
+      [4, 'Tolarian Terror'],
+      [4, 'Sneaky Snacker'],
+      [2, 'Gurmag Angler'],
+      [1, 'Murmuring Mystic'],
+      // Instants / sorceries
+      [4, 'Brainstorm'],
+      [4, 'Mental Note'],
+      [4, 'Thought Scour'],
       [4, 'Counterspell'],
-      [4, 'Snap'], // bounce a creature, untap two lands — tempo
-      [3, 'Ray of Command'], // layer 2: gain control of a creature until end of turn
-      [2, 'Clone'], // layer 1: enter as a copy of any creature on the battlefield
-      [2, 'Cryptic Command'], // modal: choose two of counter / bounce / tap-all / draw
-      [2, 'Twincast'], // 707.10: copy target instant or sorcery spell on the stack
-      [2, 'Cackling Counterpart'], // 707.2: create a token that's a copy of your creature
-      [1, 'Time Walk'], // 720: take an extra turn after this one
-      [2, 'Claustrophobia'], // aura: taps + doesn't untap (a can't-untap restriction)
-      [1, 'Vedalken Orrery'], // permission: cast spells as though they had flash
-      [1, 'Spreading Seas'], // layer 3: enchanted land becomes an Island
-      [2, 'Preordain']
+      [4, 'Snuff Out'],
+      [2, 'Cast Down'],
+      [2, 'Spell Pierce'],
+      [2, 'Abandon Attachments'],
+      [2, 'Unexpected Fangs'],
+      [4, 'Lórien Revealed'],
+      [1, 'Deep Analysis'],
+      // Lands
+      [4, 'Contaminated Aquifer'],
+      [2, 'Ice Tunnel'],
+      [10, 'Island']
+    ],
+    sideboard: [
+      [2, 'Annul'],
+      [2, 'Arms of Hadar'],
+      [3, 'Blue Elemental Blast'],
+      [2, 'Hydroblast'],
+      [2, 'Nihil Spellbomb'],
+      [3, 'Steel Sabotage'],
+      [1, 'Thorn of the Black Rose']
     ]
   },
   {
-    slug: 'sample-goblins',
-    name: 'Goblins (sample)',
+    slug: 'pauper-naya-gates',
+    name: 'Naya Gates (Pauper)',
     description:
-      'Mono-red goblins — a lord, sac-for-damage, firebreathing, Storm (Empty the Warrens), a planeswalker, burn, Furnace of Rath to double every point of damage (a replacement effect), Ball Lightning (an end-step self-sacrifice — a phase-boundary trigger), Abrade (a choose-one modal spell), Goblin Warchief, whose "Goblin spells cost {1} less" is a rule-modifying static, Lightning Greaves, which grants shroud (nothing can target the equipped creature — not even you) and haste for equip {0}, and Adaptive Automaton, which remembers a creature type chosen as it enters and pumps that type.',
+      'Paupergeddon Summer 2026 Top 64 (Pietro Malevolti). Cheap lifelinkers and recursive threats hold the ground while the Gates pile up, until Basilisk Gate turns one of them into a game-ending attacker.',
     cards: [
-      [14, 'Mountain'],
-      [2, 'Mogg Fanatic'],
-      [1, 'Chandra Nalaar'],
-      [2, 'Goblin Warchief'], // static rule-modifier: Goblin spells cost {1} less; grants haste
-      [2, 'Lightning Greaves'], // grants shroud (untargetable by anyone) + haste; equip {0}
-      [2, 'Adaptive Automaton'], // as it enters, choose a type (Goblin) -> that type gets +1/+1
-      [2, 'Raging Goblin'],
-      [2, 'Goblin Piker'],
-      [3, 'Boggart Brute'],
-      [2, 'Goblin King'],
-      [2, 'Flametongue Kavu'],
-      [2, 'Ball Lightning'], // end-step trigger: sacrifice itself
-      [2, 'Dragon Fodder'],
-      [2, 'Empty the Warrens'], // Storm: two Goblins, plus a copy per earlier spell
-      [1, 'Bonesplitter'],
-      [2, 'Act of Treason'], // layer 2: steal a creature until end of turn
-      [2, 'Furnace of Rath'], // replacement: doubles all damage
-      [2, 'Abrade'], // modal: 3 damage to a creature, or destroy an artifact
-      [2, 'Forked Bolt'], // divided: 2 damage split among one or two targets
-      [1, 'Relentless Assault'], // 505/506: an additional combat phase this turn
-      [3, 'Lightning Bolt']
+      // Creatures
+      [4, 'Outlaw Medic'],
+      [4, 'Sacred Cat'],
+      [4, 'Sneaky Snacker'],
+      [4, 'Writhing Chrysalis'],
+      // Artifacts / enchantments
+      [2, 'Melded Moxite'],
+      [2, 'Bitter Reunion'],
+      [1, 'Talons of Wildwood'],
+      // Instants / sorceries
+      [3, 'Lightning Bolt'],
+      [4, 'Prismatic Strands'],
+      [3, 'Thraben Charm'],
+      [4, 'Malevolent Rumble'],
+      [4, 'Pursue the Past'],
+      // Lands
+      [4, 'Basilisk Gate'],
+      [4, 'Citadel Gate'],
+      [4, 'Cliffgate'],
+      [1, 'Heap Gate'],
+      [3, 'Manor Gate'],
+      [3, 'Mountain'],
+      [2, 'Plains']
+    ],
+    sideboard: [
+      [2, 'Ancient Grudge'],
+      [1, 'Electrickery'],
+      [4, 'Red Elemental Blast'],
+      [4, 'Spellstutter Sprite'],
+      [4, "Tamiyo's Safekeeping"]
     ]
   },
   {
-    slug: 'sample-green-stompy',
-    name: 'Green Stompy (sample)',
+    slug: 'pauper-boros-synth',
+    name: 'Boros Synth (Pauper)',
     description:
-      'Mono-green fatties with ramp, trample, reach, a combat trick, an aura and Fog — plus Gladecover Scout (hexproof: opponents can\'t target it) and Tomakul Honor Guard (Ward {2}), Great Sable Stag (can\'t be countered), Patron of the Wild, a Morph creature you can cast face down as a 2/2 and later flip up, Avenging Hunter (take the initiative: venture into Undercity), Hardened Scales (one more +1/+1 counter every time) and Courser of Kruphix (play lands from the top of your library, revealed).',
+      'Paupergeddon Summer 2026 Top 64 (Tom Pařez). Cheap artifacts and creatures that bounce them for value — Kor Skyfisher, Glint Hawk, Melded Moxite — with Galvanic Blast and Lightning Bolt as the reach.',
     cards: [
-      [14, 'Forest'],
-      [4, 'Llanowar Elves'],
-      [1, 'Avenging Hunter'], // the initiative (726)
-      [1, 'Hardened Scales'], // counter replacement (614): +1/+1 counters come with one more
-      [1, 'Courser of Kruphix'], // play lands from the top of your library; the top card is revealed
-      [2, 'Gladecover Scout'], // hexproof: can't be targeted by opponents (Bogles-style aura carrier)
-      [2, 'Tomakul Honor Guard'], // ward {2}: opponents pay {2} or their spell/ability is countered
-      [2, 'Great Sable Stag'], // "This spell can't be countered" + protection
-      [2, 'Patron of the Wild'], // Morph: cast face down as a 2/2, turn up for {2}{G}
-      [1, 'Grizzly Bears'],
-      [3, 'Elvish Visionary'],
-      [3, 'Servant of the Scale'],
-      [3, 'Rumbling Baloth'],
-      [2, 'Giant Spider'],
-      [2, 'Craw Wurm'],
-      [2, 'Giant Growth'],
-      [2, 'Rancor'],
-      [2, 'Fog']
-    ]
-  },
-  {
-    slug: 'sample-white-skies',
-    name: 'White Skies (sample)',
-    description:
-      'Anthem + evasion — Glorious Anthem and Levitation turn the team into buffed fliers, with two replacement effects (Rhox Faithmender doubles life gained, Samite Healer prevents damage), Flickerwisp (a delayed-trigger blink), two rule-modifying statics — Pacifism ("enchanted creature can\'t attack or block") and Thalia, Guardian of Thraben (noncreature spells cost {1} more) — White Knight, whose protection from black now also stops black removal (Doom Blade, Murder) from even targeting it, not just from blocking/damage, Palace Sentinels (you become the monarch: draw at your end step, lose the crown to combat damage) and Goliath Paladin (you take the initiative and venture into Undercity, room by room).',
-    cards: [
-      [15, 'Plains'],
-      [4, 'Soul Warden'],
-      [2, 'Palace Sentinels'], // the monarch (725): a designation with the real Monarch card on the board
-      [1, 'Goliath Paladin'], // the initiative (726): venture into Undercity each upkeep
-      [2, 'Samite Healer'], // replacement: prevent the next 1 damage to any target
-      [3, 'Flickerwisp'], // delayed trigger: exile a creature, return it at end step
-      [3, 'White Knight'],
-      [2, 'Rhox Faithmender'], // replacement: doubles life you gain
-      [4, 'Serra Angel'],
-      [2, 'Thalia, Guardian of Thraben'], // static rule-modifier: noncreature spells cost {1} more
-      [3, 'Pacifism'], // static rule-modifier: enchanted creature can't attack or block
-      [2, 'Raise the Alarm'],
-      [3, 'Glorious Anthem'],
-      [2, 'Levitation']
-    ]
-  },
-  {
-    slug: 'sample-black-midrange',
-    name: 'Black Midrange (sample)',
-    description:
-      'Removal-heavy black — deathtouch, lifelink fliers, Blood Artist, and card draw, with Phyrexian Arena (an upkeep trigger), Nightmare (a */* whose P/T equals the Swamps you control — a characteristic-defining P/T, layer 7a), Aphotic Wisps (a layer-5 color change), Drudge Skeletons ({B}: Regenerate — a replacement shield), Platinum Angel (you can\'t lose the game while it\'s out), Thorn of the Black Rose (Pauper\'s monarch enabler), and Cabal Therapy (name a card; that player reveals their hand and discards every copy).',
-    cards: [
-      [16, 'Swamp'],
-      [2, 'Walking Corpse'],
-      [2, 'Thorn of the Black Rose'], // the monarch (725)
-      [2, 'Cabal Therapy'], // choose a card name (201.3); flashback by sacrificing a creature
-      [2, 'Drudge Skeletons'], // {B}: Regenerate — a regeneration replacement shield
-      [1, 'Platinum Angel'], // you can't lose the game while it's out
-      [4, 'Typhoid Rats'],
-      [4, 'Vampire Nighthawk'],
-      [2, 'Blood Artist'],
-      [2, 'Nightmare'], // layer 7a: P/T each equal to the number of Swamps you control
-      [2, 'Aphotic Wisps'], // layer 5: target creature becomes black, gains fear, draw
-      [2, 'Phyrexian Arena'], // upkeep trigger: draw a card, lose 1 life
-      [3, 'Doom Blade'],
-      [2, 'Murder'],
-      [3, 'Sign in Blood']
+      // Creatures
+      [4, 'Kor Skyfisher'],
+      [4, 'Sneaky Snacker'],
+      [4, 'Thraben Inspector'],
+      [2, 'Glint Hawk'],
+      [1, 'Dawnbringer Cleric'],
+      // Artifacts / enchantments
+      [4, 'Melded Moxite'],
+      [3, 'Relic of Progenitus'],
+      [2, "Red Mage's Rapier"],
+      [2, 'Lembas'],
+      [3, 'Journey to Nowhere'],
+      // Instants / sorceries
+      [4, 'Galvanic Blast'],
+      [4, 'Lightning Bolt'],
+      [4, 'Pursue the Past'],
+      // Lands
+      [4, 'Wind-Scarred Crag'],
+      [3, 'Dimension X'],
+      [2, 'Ancient Den'],
+      [2, 'Great Furnace'],
+      [1, 'Boros Garrison'],
+      [1, 'Forgotten Cave'],
+      [1, 'Kabira Crossroads'],
+      [3, 'Mountain'],
+      [2, 'Plains']
+    ],
+    sideboard: [
+      [2, 'Cast into the Fire'],
+      [3, 'Destroy Evil'],
+      [3, 'Dust to Dust'],
+      [2, 'Electrickery'],
+      [3, 'Pyroblast'],
+      [2, 'Temple Acolyte']
     ]
   }
 ]

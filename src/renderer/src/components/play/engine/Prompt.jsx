@@ -30,7 +30,7 @@ function ModalPicker({ modal, cancelCast }) {
 }
 
 // The contextual action bar at the bottom — what the current decision needs.
-export default function Prompt({ view, pending, myTurn, targeting, sacrificing, discarding, choosingX, choosingPips, attackPreview, modal, attackers, band, proliferate, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
+export default function Prompt({ view, pending, myTurn, match, openSideboard, targeting, sacrificing, discarding, choosingX, choosingPips, attackPreview, modal, attackers, band, proliferate, attackTargetName, blocks, discardSel, bottomSel, ninjutsu, cancelNinjutsu, error, choose, endGame, onMadnessCast, cancelCast }) {
   const kind = pending.kind
   const nameOf = (pid) => view.players[pid]?.name
 
@@ -193,7 +193,7 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
     body = (
       <>
         <span>
-          <b>{nameOf(pending.player)}</b> won the die roll — play first, or draw?
+          <b>{nameOf(pending.player)}</b> {pending.matchLoser ? 'lost the last game' : 'won the die roll'} — play first, or draw?
         </span>
         <button className="primary" onClick={() => choose({ play: true })}>
           Play
@@ -535,12 +535,20 @@ export default function Prompt({ view, pending, myTurn, targeting, sacrificing, 
       </>
     )
   } else if (kind === 'gameOver') {
+    const m = match
     body = (
       <>
-        <span className="eng-win">{pending.draw ? '🤝 The game is a draw.' : `🏆 ${nameOf(pending.winner)} wins!`}</span>
-        <button className="primary" onClick={endGame}>
-          New game
-        </button>
+        <span className="eng-win">{pending.draw ? '🤝 The game is a draw.' : `🏆 ${nameOf(pending.winner)} wins${m ? ` game ${m.game}` : ''}!`}</span>
+        {m && <span className="muted">Match {m.wins.join(' – ')}{m.over ? '' : ` (best of ${m.bestOf})`}</span>}
+        {m && !m.over ? (
+          <button className="primary" onClick={openSideboard}>
+            Sideboard → game {m.game + 1}
+          </button>
+        ) : (
+          <button className="primary" onClick={endGame}>
+            {m ? 'New match' : 'New game'}
+          </button>
+        )}
       </>
     )
   }

@@ -285,3 +285,73 @@ select {
   color: var(--muted);
   margin: 4px 0;
 }
+
+/* ---- Sideboarding between games of a match ---- */
+.setup-card.sb-card {
+  max-width: 820px;
+}
+.sb-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 10px 0;
+}
+.sb-col {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 0;
+}
+.sb-col-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.sb-list {
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.sb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  font-size: 13px;
+}
+.sb-row.clickable {
+  cursor: pointer;
+}
+.sb-row.clickable:hover {
+  background: #2b2f3a;
+}
+.sb-qty {
+  color: var(--muted);
+  min-width: 16px;
+  text-align: right;
+}
+.sb-thumb {
+  width: 22px;
+  height: 30px;
+  object-fit: cover;
+  object-position: 50% 12%;
+  border-radius: 2px;
+}
+.sb-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+@media (max-width: 720px) {
+  .sb-columns {
+    grid-template-columns: 1fr;
+  }
+}

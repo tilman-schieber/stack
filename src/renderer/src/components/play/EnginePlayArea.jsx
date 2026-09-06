@@ -34,6 +34,8 @@ export default function EnginePlayArea() {
   const setYield = useEngineGame((s) => s.setYield)
   const holds = useEngineGame((s) => s.holds)
   const setHold = useEngineGame((s) => s.setHold)
+  const match = useEngineGame((s) => s.match)
+  const openSideboard = useEngineGame((s) => s.openSideboard)
   const mode = useEngineGame((s) => s.mode)
   const mySeat = useEngineGame((s) => s.netSeat)
   const botSeats = useEngineGame((s) => s.botSeats)
@@ -844,6 +846,11 @@ export default function EnginePlayArea() {
             <span className="eng-turn" title={`Active player: ${view.players[view.activePlayer].name}`}>
               Turn {view.turnNumber}
             </span>
+            {match && (
+              <span className="eng-match" title={`Best of ${match.bestOf}`}>
+                Game {match.game} · {match.wins.join('–')}
+              </span>
+            )}
             {(() => {
               // Whose stops the bar shows: in a two-human hot-seat game, the player
               // who is deciding; otherwise the local seat.
@@ -1079,6 +1086,8 @@ export default function EnginePlayArea() {
         view={view}
         pending={pending}
         myTurn={myTurn}
+        match={match}
+        openSideboard={openSideboard}
         targeting={
           targeting
             ? {
