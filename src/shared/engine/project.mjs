@@ -57,6 +57,14 @@ function cardView(o, viewerPid = null, engine = null) {
     attacking: !!o.status?.attacking,
     blocked: !!o.status?.blocked,
     blocking: o.status?.blocking || null,
+    // Every attacker this creature is blocking, and what an attacker is attacking
+    // — enough for the board to draw a line from each blocker to what it stopped.
+    // `blocking` is only the first of them; a creature that may block more than
+    // one keeps the rest in combat.multiBlocks.
+    blockingAll: o.status?.blocking
+      ? engine?.state?.combat?.multiBlocks?.[o.oid] || [o.status.blocking]
+      : [],
+    attackingTarget: o.status?.attackingTarget || null,
     damage: o.status?.damage || 0,
     counters: o.status?.counters || {},
     // What this card is attached to, if it is an Aura, an Equipment or a

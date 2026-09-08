@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
 import { cardImageUrl, boardImageSize } from '../../../lib/cardUtils.js'
-import { moveKept, canMoveKept, keptOrder } from '../../../lib/scryOrder.js'
+import { moveTo, keptOrder } from '../../../lib/scryOrder.js'
 
 // Modal / floating overlays of the rules-enforced board.
 
@@ -247,19 +247,50 @@ export function ScryOverlay({ pending, bottom, setBottom, onConfirm }) {
     if (reorder) return
     setBottom((b) => (b.includes(oid) ? b.filter((o) => o !== oid) : [...b, oid]))
   }
-  const move = (oid, by) => setOrder((o) => moveKept(o, bottom, oid, by))
   const dest = pending.surveil ? 'graveyard' : 'bottom'
   const cardBy = (oid) => pending.cards.find((c) => c.oid === oid)
   const kept = keptOrder(order, bottom)
-  const canOrder = kept.length > 1
+  const canOrder = order.length > 1
+  // Dragging a card onto another one drops it into that place, and the row
+  // rearranges as you go, so letting go only ends the drag.
+  //
+  // The card being dragged is a ref, not state: a dragover can arrive in the
+  // same tick as the dragstart that started it, before a re-render, and state
+  // read from the closure would still be null. `dragging` mirrors it purely to
+  // paint the card being moved.
+  const dragOid = useRef(null)
+  const [dragging, setDragging] = useState(null)
+  const startDrag = (oid, ev) => {
+    dragOid.current = oid
+    setDragging(oid)
+    ev.dataTransfer.effectAllowed = 'move'
+    ev.dataTransfer.setData('text/plain', oid) // Firefox starts no drag without it
+  }
+  const endDrag = () => {
+    dragOid.current = null
+    setDragging(null)
+  }
+  const onDragOver = (overOid) => (ev) => {
+    ev.preventDefault()
+    const from = dragOid.current
+    if (!from || from === overOid) return
+    // Swap only once the pointer is past the middle of the card it is over.
+    // Without that, a cursor resting on the seam between two cards flips them
+    // back and forth on every dragover event the browser sends.
+    const r = ev.currentTarget.getBoundingClientRect()
+    const mid = r.left + r.width / 2
+    const rightwards = order.indexOf(overOid) > order.indexOf(from)
+    if (rightwards ? ev.clientX < mid : ev.clientX > mid) return
+    setOrder((o) => moveTo(o, from, overOid))
+  }
   return (
     <div className="eng-scry">
       <div className="eng-scry-panel">
         <div className="eng-scry-title">
           {reorder
-            ? `Look at the top ${pending.cards.length} — put them back in any order (left is the top card)`
+            ? `Look at the top ${pending.cards.length} — drag them into the order they go back (left is the top card)`
             : `${pending.surveil ? 'Surveil' : 'Scry'} ${pending.cards.length} — click a card to send it to the ${dest}${
-                canOrder ? ', arrows to order the ones you keep' : ''
+                canOrder ? ', drag to reorder the ones you keep' : ''
               }`}
         </div>
         <div className="eng-scry-cards">
@@ -269,37 +300,34 @@ export function ScryOverlay({ pending, bottom, setBottom, onConfirm }) {
             const marked = bottom.includes(oid)
             const nth = kept.indexOf(oid)
             return (
-              <div key={oid} className="eng-scry-slot">
+              <div
+                key={oid}
+                className={'eng-scry-slot' + (canOrder ? ' draggable' : '') + (dragging === oid ? ' dragging' : '')}
+                draggable={canOrder}
+                onDragStart={(ev) => startDrag(oid, ev)}
+                onDragEnd={endDrag}
+                onDragOver={onDragOver(oid)}
+                onDrop={(ev) => {
+                  ev.preventDefault()
+                  endDrag()
+                }}
+              >
                 <div
                   className={'eng-scry-card' + (marked ? ' to-bottom' : '')}
                   onClick={() => toggle(oid)}
-                  title={reorder ? c.name : marked ? `${c.name} — to the ${dest}` : `${c.name} — click to send it to the ${dest}`}
+                  title={
+                    reorder
+                      ? `${c.name} — drag to reorder`
+                      : marked
+                        ? `${c.name} — to the ${dest} (click to keep it on top)`
+                        : `${c.name} — click to send it to the ${dest}${canOrder ? ', drag to reorder' : ''}`
+                  }
                 >
                   {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
                   <div className="eng-scry-dest">
                     {marked ? dest : nth === 0 ? 'top' : `#${nth + 1} from the top`}
                   </div>
                 </div>
-                {!marked && canOrder && (
-                  <div className="eng-scry-order">
-                    <button
-                      className="mini"
-                      disabled={!canMoveKept(order, bottom, oid, -1)}
-                      onClick={() => move(oid, -1)}
-                      title="Move nearer the top"
-                    >
-                      ◀
-                    </button>
-                    <button
-                      className="mini"
-                      disabled={!canMoveKept(order, bottom, oid, 1)}
-                      onClick={() => move(oid, 1)}
-                      title="Move further down"
-                    >
-                      ▶
-                    </button>
-                  </div>
-                )}
               </div>
             )
           })}

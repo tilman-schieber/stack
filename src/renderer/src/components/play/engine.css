@@ -1550,18 +1550,64 @@
   margin: 10px 0 4px;
 }
 
-/* A scried card and the buttons that move it up or down the order. */
+/* A scried card, draggable into the order it goes back on top. */
 .eng-scry-slot {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
 }
-.eng-scry-order {
-  display: flex;
-  gap: 4px;
+.eng-scry-slot.draggable {
+  cursor: grab;
 }
-.eng-scry-order .mini {
-  padding: 1px 8px;
-  line-height: 1.4;
+.eng-scry-slot.draggable:active {
+  cursor: grabbing;
+}
+/* The card being dragged stays visible in its new place as the row rearranges
+   under the cursor, so it reads as the thing being moved rather than a gap. */
+.eng-scry-slot.dragging {
+  opacity: 0.55;
+}
+
+/* Which blocker is on which attacker, drawn over the board. The layer sits
+   under the motion layer (a card in flight passes over its own arrow) and takes
+   no clicks — the cards underneath still do the work. */
+.eng-combat-arrows {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1700;
+  pointer-events: none;
+  overflow: visible;
+}
+.eng-arrow {
+  fill: none;
+  stroke: var(--danger, #c05442);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
+}
+/* A block still being declared: dashed, and crawling towards the attacker, so
+   it reads as a decision in progress rather than one already made. */
+.eng-arrow.pending {
+  stroke: var(--accent, #c9a253);
+  stroke-dasharray: 7 5;
+  animation: eng-arrow-crawl 0.7s linear infinite;
+}
+.eng-arrowhead.made path {
+  fill: var(--danger, #c05442);
+}
+.eng-arrowhead.pending path {
+  fill: var(--accent, #c9a253);
+}
+@keyframes eng-arrow-crawl {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eng-arrow.pending {
+    animation: none;
+  }
 }

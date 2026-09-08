@@ -3,10 +3,12 @@ import { useEngineGame } from '../../store/engineGame.js'
 import { EngineCard, Pile, ManaPool, LifePlate, HelperCard, isCreature, isLand } from './engine/EngineCard.jsx'
 import Prompt from './engine/Prompt.jsx'
 import MotionLayer from './engine/Motion.jsx'
+import CombatArrows from './engine/CombatArrows.jsx'
 import { useBoardMotion } from '../../lib/boardMotion.js'
 import { play as playSound, setSoundEnabled } from '../../lib/sound.js'
 import { loadScale, saveScale, scaleBy, cardWidth, handHoverScale } from '../../lib/cardScale.js'
 import { zoneCardAction, readyCount } from '../../lib/zoneActions.js'
+import { blockPairs } from '../../lib/combatArrows.js'
 import { RulesText } from '../Mana.jsx'
 import { useSettings } from '../../store/settings.js'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
@@ -685,6 +687,26 @@ export default function EnginePlayArea() {
     return cls.join(' ')
   }
 
+  // Who is blocking whom, for the arrows drawn over the board: the blocks this
+  // player is still declaring (not yet sent to the engine) plus the ones already
+  // made. A block being declared is drawn differently — it can still be undone.
+  const combatPairs = (() => {
+    const onBoard = new Set(view.players.flatMap((p) => p.battlefield.map((c) => c.oid)))
+    const known = (oid) => onBoard.has(oid)
+    const declared = kind === 'declareBlockers' && myTurn ? blockPairs(blocks, known) : []
+    const made = blockPairs(
+      Object.fromEntries(
+        view.players.flatMap((p) => p.battlefield.filter((c) => c.blockingAll?.length).map((c) => [c.oid, c.blockingAll]))
+      ),
+      known
+    )
+    const seen = new Set(declared.map((p) => `${p.blocker}>${p.attacker}`))
+    return [
+      ...declared.map((p) => ({ ...p, pending: true })),
+      ...made.filter((p) => !seen.has(`${p.blocker}>${p.attacker}`)).map((p) => ({ ...p, pending: false }))
+    ]
+  })()
+
   // Orient the board so the local player sits at the bottom. In local hot-seat
   // that's seat 0; online, it's whichever seat this client controls (netSeat).
   const bottom = view.players[mySeat]
@@ -1157,6 +1179,7 @@ export default function EnginePlayArea() {
       )}
 
 
+      <CombatArrows pairs={combatPairs} />
       <MotionLayer flights={flights} hits={hits} />
 
       {/* One strip at your end of the table: what the game is asking, and every
