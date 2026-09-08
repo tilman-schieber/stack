@@ -47,7 +47,9 @@ export function GameLog({ log }) {
           {log.length === 0 && <div className="eng-log-line muted">Nothing has happened yet.</div>}
           {log.map((l) => (
             <div key={l.n} className={'eng-log-line' + (l.marker ? ' marker' : '')}>
-              {l.text}
+              {/* The log is game text like any other, so a {U} in it is drawn as
+                  a pip rather than printed with its braces showing. */}
+              <RulesText text={l.text} />
             </div>
           ))}
         </div>

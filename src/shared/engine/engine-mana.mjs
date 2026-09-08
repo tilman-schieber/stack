@@ -163,34 +163,51 @@ export const manaMethods = {
     })
     const all = [...avail] // every unit, to work out later what went unspent
     const chosen = []
+    // Which sources this payment is already tapping. A source that is being
+    // tapped has already made all of its mana, so the rest of it is spent before
+    // anything else is tapped: an Azorius Chancery paying the {W} of {1}{W} pays
+    // the {1} with its own {U} rather than turning an Island sideways too. The
+    // same preference picks the Chancery over a Plains for a {W} in the first
+    // place, since it can then cover more of the cost on its own.
+    const committed = new Set()
+    const units = (oid) => avail.reduce((n, u) => n + (u.oid === oid ? 1 : 0), 0)
+    // How many more units this cost still has to take from sources. The "it can
+    // cover more of the cost" preference only applies while there is more to
+    // cover — for the last pip, a one-mana land is the better thing to tap than
+    // a Karoo whose second pip would then just sit in the pool.
+    let left = COLORS.reduce((n, c) => n + need[c], 0) + hybrid.length + generic
+    const best = (cands) =>
+      cands.sort(
+        (a, b) =>
+          (committed.has(b.oid) ? 1 : 0) - (committed.has(a.oid) ? 1 : 0) ||
+          (left > 1 ? units(b.oid) - units(a.oid) : 0) ||
+          a.colors.length - b.colors.length
+      )[0]
+    const take = (u) => {
+      avail.splice(avail.indexOf(u), 1)
+      chosen.push(u.oid)
+      committed.add(u.oid)
+      left--
+    }
     for (const c of COLORS) {
       let n = need[c]
       while (n-- > 0) {
-        const cands = avail
-          .filter((s) => s.colors.includes(c))
-          .sort((a, b) => a.colors.length - b.colors.length)
-        if (!cands.length) return null
-        const src = cands[0]
-        avail.splice(avail.indexOf(src), 1)
-        chosen.push(src.oid)
+        const src = best(avail.filter((s) => s.colors.includes(c)))
+        if (!src) return null
+        take(src)
       }
     }
     // Hybrid pips: each payable by a source producing any of its options.
     const takeColor = (c) => {
-      const cands = avail.filter((s) => s.colors.includes(c)).sort((a, b) => a.colors.length - b.colors.length)
-      if (!cands.length) return false
-      avail.splice(avail.indexOf(cands[0]), 1)
-      chosen.push(cands[0].oid)
+      const src = best(avail.filter((s) => s.colors.includes(c)))
+      if (!src) return false
+      take(src)
       return true
     }
     for (const options of hybrid) {
-      const cands = avail
-        .filter((s) => options.some((c) => s.colors.includes(c)))
-        .sort((a, b) => a.colors.length - b.colors.length)
-      if (!cands.length) return null
-      const src = cands[0]
-      avail.splice(avail.indexOf(src), 1)
-      chosen.push(src.oid)
+      const src = best(avail.filter((s) => options.some((c) => s.colors.includes(c))))
+      if (!src) return null
+      take(src)
     }
     // Phyrexian pips (107.4f): the colour's mana if we have it, else 2 life —
     // which needs a life total of at least that much (119.4).
@@ -206,7 +223,7 @@ export const manaMethods = {
       else if (!takeColor(c)) generic += 2
     }
     if (avail.length < generic) return null
-    for (let i = 0; i < generic; i++) chosen.push(avail.shift().oid)
+    for (let i = 0; i < generic; i++) take(best(avail))
     // 106.4: a mana ability produces all of its mana. Tapping a Karoo for {W}{U}
     // to pay {W}, or a Sol Ring to pay {1}, leaves the rest floating in the pool
     // rather than throwing it away.

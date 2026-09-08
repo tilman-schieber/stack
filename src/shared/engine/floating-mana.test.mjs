@@ -1,9 +1,10 @@
-// Mana a source produced but the cost didn't need stays in the pool (106.4).
+// A mana ability makes all of its mana (106.4), and both halves of that matter.
 //
 // Tapping Azorius Chancery ({T}: Add {W}{U}) to pay {W} used to throw the {U}
 // away, and the same for every source that makes more than one mana: Sol Ring
-// tapped for {1}, Urza's Tower tapped for {2}. The whole mana ability resolves,
-// so all of it lands in the pool and only what is spent leaves.
+// tapped for {1}, Urza's Tower tapped for {2}. The other half is which sources
+// get tapped at all: paying {1}{W} off a Chancery used to turn an Island
+// sideways for the {1} while the Chancery's own {U} sat unused.
 // Run: node src/shared/engine/floating-mana.test.mjs
 import { makeEngine, put, refresh, advanceToPriorityAt, makeAsserter } from './_testutil.mjs'
 
@@ -101,6 +102,40 @@ section('Tapping a Karoo by hand is one action, not one per colour')
   assert(taps[0].label === 'Tap for {W}{U}', `labelled with both pips (got "${taps[0].label}")`)
   e.choose(taps[0])
   assert(pool(e).W === 1 && pool(e).U === 1, `both pips land in the pool (${JSON.stringify(pool(e))})`)
+}
+
+section('A source already being tapped pays the rest of the cost itself')
+{
+  // {1}{W}: only the Chancery makes white, and its {U} covers the {1}.
+  const { e, sources, card } = scene(['Azorius Chancery', 'Island'], 'Sunscape Familiar')
+  cast(e, card)
+  assert(e.state.objects[sources[0].oid].status.tapped, 'the Chancery pays')
+  assert(!e.state.objects[sources[1].oid].status.tapped, 'and the Island stays untapped')
+  assert(total(pool(e)) === 0, 'with nothing left over')
+}
+{
+  // The same with more to spare: still one land, not three.
+  const { e, sources, card } = scene(['Azorius Chancery', 'Plains', 'Plains'], 'Sunscape Familiar')
+  cast(e, card)
+  assert(!sources.slice(1).some((l) => e.state.objects[l.oid].status.tapped), 'both Plains stay untapped')
+}
+
+section('…but a one-pip cost still taps the one-mana land')
+{
+  // {W} on its own: tapping the Chancery here would strand its {U}, so the
+  // Plains goes instead and the dual stays up.
+  const { e, sources, bear, card } = scene(['Azorius Chancery', 'Plains'], 'Ephemerate')
+  cast(e, card, [{ kind: 'object', oid: bear.oid }])
+  assert(e.state.objects[sources[1].oid].status.tapped, 'the Plains pays')
+  assert(!e.state.objects[sources[0].oid].status.tapped, 'and the Chancery is still available')
+}
+
+section('A Karoo covering both pips of a two-colour spell taps alone')
+{
+  const { e, sources, card } = scene(['Azorius Chancery', 'Island'], 'Meddling Mage') // {W}{U}
+  cast(e, card)
+  assert(e.state.objects[sources[0].oid].status.tapped, 'the Chancery pays both')
+  assert(!e.state.objects[sources[1].oid].status.tapped, 'and the Island stays untapped')
 }
 
 console.log(`\n${stats.passed} passed, ${stats.failed} failed`)
