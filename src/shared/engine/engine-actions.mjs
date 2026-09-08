@@ -142,14 +142,16 @@ export const actionsMethods = {
         } else {
           const xCost = o.printed.manaCost.X || 0
           o.xValue = xCost ? action.x || 0 : 0
-          // Evoke (702.74) / overload (702.96) replace the mana cost entirely.
-          let cost = action.evoke
-            ? parseManaCost(o.behavior.evoke.cost)
+          // Evoke (702.74) / overload (702.96) / mutate (702.140) replace the
+          // mana cost entirely — but cost reductions still apply to what is left.
+          const alt = action.evoke
+            ? o.behavior.evoke.cost
             : action.overload
-              ? parseManaCost(o.behavior.overload.cost)
+              ? o.behavior.overload.cost
               : action.mutate
-                ? parseManaCost(o.behavior.mutate.cost)
-                : this._effectiveCost(pid, o)
+                ? o.behavior.mutate.cost
+                : null
+          let cost = this._effectiveCost(pid, o, o.printed, alt ? parseManaCost(alt) : null)
           // Kicker (702.33) / buyback (702.27): optional additional costs.
           if (action.kicker) cost = addCosts(cost, parseManaCost(o.behavior.kicker.cost))
           if (action.buyback) cost = addCosts(cost, parseManaCost(o.behavior.buyback.cost))

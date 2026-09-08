@@ -238,8 +238,13 @@ export const manaMethods = {
   },
 
   // The mana cost to cast `o`, after cost reductions (affinity for artifacts).
-  _effectiveCost(pid, o, printed = o.printed) {
-    const cost = { ...printed.manaCost }
+  //
+  // `base` replaces the printed mana cost with an alternative one (evoke,
+  // overload, mutate). 601.2f builds the total cost from whichever cost is being
+  // paid and *then* applies increases and reductions, so a Sunscape Familiar
+  // makes an evoked Mulldrifter cost {1}{U}, not {2}{U}.
+  _effectiveCost(pid, o, printed = o.printed, base = null) {
+    const cost = { ...(base || printed.manaCost) }
     const behavior = printed === o.printed ? o.behavior : loadBehavior(printed)
     if (behavior?.affinity === 'artifact') {
       const artifacts = objectsIn(this.state, 'battlefield').filter(

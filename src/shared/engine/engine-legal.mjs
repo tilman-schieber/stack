@@ -3,7 +3,7 @@
 
 import { createState, createObject, createAbility, computeChars, zone, zoneKey, moveObject, objectsIn, setFace } from './state.mjs'
 import { manaAbilityColors, loadBehavior } from './behaviors.mjs'
-import { isPermanent, parseManaCost, manaValue, BASIC_LAND_MANA } from './cards.mjs'
+import { isPermanent, parseManaCost, manaValue, formatManaCost, BASIC_LAND_MANA } from './cards.mjs'
 import { recompute, matchStatic, hasSub } from './layers.mjs'
 import { DUNGEONS, REGULAR_DUNGEONS, roomOf } from './dungeons.mjs'
 import { STEP_ORDER, PRIORITY_STEPS, MAIN_STEPS, tags, addCosts } from './engineShared.mjs'
@@ -451,14 +451,18 @@ export const legalMethods = {
     const kicker = b.kicker
     if (kicker && this._canPay(pid, addCosts(base, parseManaCost(kicker.cost)), extra, null, p)) actions.push(withFace(castAction(true)))
     // Evoke (702.74): an alternative cost; the creature is sacrificed as it enters.
-    if (b.evoke && p.types.includes('Creature') && this._canPay(pid, parseManaCost(b.evoke.cost), extra))
+    // An alternative cost is still subject to cost reductions (601.2f), so what
+    // is offered has to be the reduced cost — otherwise a Sunscape Familiar's
+    // discount was visible on the hard cast and invisible on the evoke.
+    const altCostOf = (c) => this._effectiveCost(pid, o, p, parseManaCost(c))
+    if (b.evoke && p.types.includes('Creature') && this._canPay(pid, altCostOf(b.evoke.cost), extra, null, p))
       actions.push(
         withFace({
           ...castAction(false),
           evoke: true,
           // Spelled out: evoking is cheap and sacrifices the creature, which is
           // not obvious from the word alone.
-          label: `${p.name} — evoke ${b.evoke.cost}, sacrificed as it enters`,
+          label: `${p.name} — evoke ${formatManaCost(altCostOf(b.evoke.cost))}, sacrificed as it enters`,
           hasX: false,
           maxX: 0
         })
@@ -485,11 +489,11 @@ export const legalMethods = {
     // Mutate (702.140): cast for its mutate cost targeting a non-Human creature you own.
     if (b.mutate && p.types.includes('Creature')) {
       const mspec = [{ type: 'creature', nonHuman: true, owner: 'you' }]
-      if (mspec.every((t) => this._legalTargetsExist(t, ctx)) && this._canPay(pid, parseManaCost(b.mutate.cost), extra, null, p))
+      if (mspec.every((t) => this._legalTargetsExist(t, ctx)) && this._canPay(pid, altCostOf(b.mutate.cost), extra, null, p))
         actions.push(withFace({ ...castAction(false), mutate: true, targets: mspec, needsTargets: 1, variadic: null, hasX: false, maxX: 0, label: `${p.name} (mutate)` }))
     }
     // Overload (702.96): an alternative cost that turns "target" into "each".
-    if (b.overload && b.spell?.overloadEffect && this._canPay(pid, parseManaCost(b.overload.cost), extra))
+    if (b.overload && b.spell?.overloadEffect && this._canPay(pid, altCostOf(b.overload.cost), extra, null, p))
       actions.push(withFace({ ...castAction(false), overload: true, targets: [], needsTargets: 0, variadic: null, label: `${p.name} (overload)` }))
     // Alternative cost (e.g. Fireblast: sacrifice two Mountains instead of mana;
     // Ramosian Rally: tap an untapped creature if you control a Plains).

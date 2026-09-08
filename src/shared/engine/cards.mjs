@@ -51,6 +51,20 @@ export function manaValue(cost) {
   )
 }
 
+// A parsed cost back into symbols ("{1}{U}"), in the order costs are printed:
+// generic first, then the coloured pips in WUBRG order. Used for labels that
+// show a cost the card doesn't print — an evoke cost after a discount.
+export function formatManaCost(cost) {
+  const out = []
+  for (let i = 0; i < (cost.X || 0); i++) out.push('{X}')
+  if (cost.generic) out.push(`{${cost.generic}}`)
+  for (const c of ['W', 'U', 'B', 'R', 'G', 'C']) for (let i = 0; i < (cost[c] || 0); i++) out.push(`{${c}}`)
+  for (const h of cost.hybrid || []) out.push(`{${h.join('/')}}`)
+  for (const t of cost.twobrid || []) out.push(`{2/${t}}`)
+  for (const ph of cost.phyrexian || []) out.push(`{${ph}/P}`)
+  return out.join('') || '{0}' // a cost reduced to nothing still prints as {0}
+}
+
 const COLOR_WORD = { white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G' }
 
 // Parse "protection from <quality>" out of oracle text → ['B', 'Creature',
