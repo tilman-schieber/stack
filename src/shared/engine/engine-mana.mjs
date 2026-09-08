@@ -154,11 +154,14 @@ export const manaMethods = {
 
     // A source producing several mana (Sol Ring) is several units sharing one oid;
     // fixed pips ({R}{W}) and an Aura's extra pip are units of one colour each.
+    // `kind` marks a convoke/delve source, which produces nothing to spill.
     const avail = sources.flatMap((s) => {
-      const units = s.pips ? s.pips.map((c) => ({ oid: s.oid, colors: [c] })) : Array.from({ length: s.amount || 1 }, () => ({ oid: s.oid, colors: s.colors }))
-      for (const c of s.extra || []) units.push({ oid: s.oid, colors: [c] })
+      const unit = (colors) => ({ oid: s.oid, colors, only: s.only || null, kind: s.kind || null })
+      const units = s.pips ? s.pips.map((c) => unit([c])) : Array.from({ length: s.amount || 1 }, () => unit(s.colors))
+      for (const c of s.extra || []) units.push(unit([c]))
       return units
     })
+    const all = [...avail] // every unit, to work out later what went unspent
     const chosen = []
     for (const c of COLORS) {
       let n = need[c]
@@ -203,8 +206,18 @@ export const manaMethods = {
       else if (!takeColor(c)) generic += 2
     }
     if (avail.length < generic) return null
-    for (let i = 0; i < generic; i++) chosen.push(avail[i].oid)
-    return { spend, spendR, tap: [...new Set(chosen)], life: lifeCost }
+    for (let i = 0; i < generic; i++) chosen.push(avail.shift().oid)
+    // 106.4: a mana ability produces all of its mana. Tapping a Karoo for {W}{U}
+    // to pay {W}, or a Sol Ring to pay {1}, leaves the rest floating in the pool
+    // rather than throwing it away.
+    const tap = [...new Set(chosen)]
+    const spent = new Map() // per source, the colours this payment actually used
+    for (const u of all) if (!avail.includes(u) && u.colors.length === 1) spent.set(u.oid, u.colors[0])
+    const float = avail
+      .filter((u) => !u.kind && tap.includes(u.oid))
+      // "Add two mana of any one colour": the leftover matches what was spent.
+      .map((u) => ({ oid: u.oid, color: u.colors.length === 1 ? u.colors[0] : spent.get(u.oid) || u.colors[0], only: u.only }))
+    return { spend, spendR, tap, life: lifeCost, float }
   },
 
   // Restricted floating mana of `pid` that may be spent on `printed` (106.6).
@@ -520,6 +533,14 @@ export const manaMethods = {
       }
     }
     if (tapped.length) this._log(`${p.name} taps ${tapped.join(', ')}`)
+    // Mana a tapped source produced but this cost didn't need stays in the pool.
+    const spilled = []
+    for (const f of plan.float || []) {
+      if (f.only) (p.restrictedPool ||= []).push({ color: f.color, only: f.only, source: s.objects[f.oid] })
+      else p.manaPool[f.color]++
+      spilled.push(`{${f.color}}`)
+    }
+    if (spilled.length) this._log(`${p.name} has ${spilled.join('')} left in their mana pool`)
     if (plan.life) {
       p.life -= plan.life
       this._log(`${p.name} pays ${plan.life} life (${p.life})`)

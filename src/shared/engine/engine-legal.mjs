@@ -280,6 +280,19 @@ export const legalMethods = {
       if (o.controller !== pid || o.status.tapped) continue
       if (o.printed.types.includes('Creature') && !this._canTap(o)) continue
       this._manaOptionsOf(o).forEach((m, option) => {
+        // A fixed set of pips (a Karoo's {W}{U}) is one action, not one per
+        // colour: there is nothing to choose, and both pips are produced.
+        if (m.pips) {
+          actions.push({
+            type: 'tapForMana',
+            oid: o.oid,
+            color: m.pips[0],
+            option,
+            mana: true,
+            label: `Tap for ${m.pips.map((c) => `{${c}}`).join('')}`
+          })
+          return
+        }
         for (const color of m.colors)
           actions.push({
             type: 'tapForMana',
@@ -439,7 +452,17 @@ export const legalMethods = {
     if (kicker && this._canPay(pid, addCosts(base, parseManaCost(kicker.cost)), extra, null, p)) actions.push(withFace(castAction(true)))
     // Evoke (702.74): an alternative cost; the creature is sacrificed as it enters.
     if (b.evoke && p.types.includes('Creature') && this._canPay(pid, parseManaCost(b.evoke.cost), extra))
-      actions.push(withFace({ ...castAction(false), evoke: true, label: `${p.name} (evoke)`, hasX: false, maxX: 0 }))
+      actions.push(
+        withFace({
+          ...castAction(false),
+          evoke: true,
+          // Spelled out: evoking is cheap and sacrifices the creature, which is
+          // not obvious from the word alone.
+          label: `${p.name} — evoke ${b.evoke.cost}, sacrificed as it enters`,
+          hasX: false,
+          maxX: 0
+        })
+      )
     // Buyback (702.27): the same spell with its buyback cost paid (returns to hand).
     if (b.buyback && this._canPay(pid, addCosts(base, parseManaCost(b.buyback.cost)), extra))
       actions.push(withFace({ ...castAction(false), buyback: true, label: `${p.name} (buyback)` }))

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
 import { cardImageUrl, boardImageSize } from '../../../lib/cardUtils.js'
+import { moveKept, canMoveKept, keptOrder } from '../../../lib/scryOrder.js'
 
 // Modal / floating overlays of the rules-enforced board.
 
@@ -51,6 +52,59 @@ export function ZoneViewer({ title, cards, castableFor, onCast, onZoom, onClose 
                 </div>
               )
             })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Choosing a card in a graveyard as a target (Archaeomancer's "return target
+// instant or sorcery card from your graveyard", Mortuary Mire, Faerie Macabre).
+//
+// Graveyards live on the seat rail as a single stacked pile, which is fine for
+// browsing and useless for picking, so the choice gets its own board: every card
+// the effect can reach, grouped by whose graveyard it is in, in the order the
+// cards were put there (most recent last, as the pile is stacked).
+export function GraveyardTargetOverlay({ label, groups, canPick, onPick, onZoom, onDecline }) {
+  const total = groups.reduce((n, g) => n + g.cards.length, 0)
+  return (
+    <div className="eng-scry">
+      <div className="eng-scry-panel">
+        <div className="eng-scry-title">{label}</div>
+        {total === 0 && <p className="muted">No card in any graveyard fits.</p>}
+        {groups
+          .filter((g) => g.cards.length > 0)
+          .map((g) => (
+            <div key={g.pid}>
+              {groups.length > 1 && <div className="eng-scry-sub">{g.name}</div>}
+              <div className="eng-scry-cards eng-search-grid">
+                {g.cards.map((c) => {
+                  const ok = canPick(c)
+                  return (
+                    <div
+                      className={'eng-scry-card' + (ok ? '' : ' dim')}
+                      key={c.oid}
+                      onClick={() => ok && onPick(c.oid)}
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        if (c.cardId) onZoom(c)
+                      }}
+                      title={ok ? `Target ${c.name}` : `${c.name} — not a legal target`}
+                    >
+                      {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
+                      <div className="eng-scry-dest">{c.name}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        {onDecline && (
+          <div className="eng-scry-actions">
+            <button className="mini" onClick={onDecline}>
+              Choose no card
+            </button>
           </div>
         )}
       </div>
@@ -182,40 +236,80 @@ export function HandRevealOverlay({ pending, targetName, onPick, onDecline, onOk
 // the order they'll go back on top; unclicked ones follow in their current order.
 export function ScryOverlay({ pending, bottom, setBottom, onConfirm }) {
   const reorder = !!pending.noBottom
-  const toggle = (oid) =>
+  // The order the kept cards go back on top, first = topmost. Scrying 2 lets you
+  // swap them, which is half of what scry does and used to be missing.
+  const [order, setOrder] = useState(() => pending.cards.map((c) => c.oid))
+  // The view is rebuilt on every render, so this keys on the ids themselves —
+  // depending on the array would reset the order forever.
+  const ids = pending.cards.map((c) => c.oid).join(',')
+  useEffect(() => setOrder(ids.split(',')), [ids])
+  const toggle = (oid) => {
+    if (reorder) return
     setBottom((b) => (b.includes(oid) ? b.filter((o) => o !== oid) : [...b, oid]))
+  }
+  const move = (oid, by) => setOrder((o) => moveKept(o, bottom, oid, by))
   const dest = pending.surveil ? 'graveyard' : 'bottom'
+  const cardBy = (oid) => pending.cards.find((c) => c.oid === oid)
+  const kept = keptOrder(order, bottom)
+  const canOrder = kept.length > 1
   return (
     <div className="eng-scry">
       <div className="eng-scry-panel">
         <div className="eng-scry-title">
           {reorder
-            ? `Look at the top ${pending.cards.length} — click cards in the order they should go back on top (first click = top)`
-            : `${pending.surveil ? 'Surveil' : 'Scry'} ${pending.cards.length} — click a card to send it to the ${dest}`}
+            ? `Look at the top ${pending.cards.length} — put them back in any order (left is the top card)`
+            : `${pending.surveil ? 'Surveil' : 'Scry'} ${pending.cards.length} — click a card to send it to the ${dest}${
+                canOrder ? ', arrows to order the ones you keep' : ''
+              }`}
         </div>
         <div className="eng-scry-cards">
-          {pending.cards.map((c) => {
-            const marked = bottom.includes(c.oid)
-            const nth = bottom.indexOf(c.oid)
+          {order.map((oid) => {
+            const c = cardBy(oid)
+            if (!c) return null
+            const marked = bottom.includes(oid)
+            const nth = kept.indexOf(oid)
             return (
-              <div
-                key={c.oid}
-                className={'eng-scry-card' + (marked && !reorder ? ' to-bottom' : '')}
-                onClick={() => toggle(c.oid)}
-                title={c.name}
-              >
-                {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
-                <div className="eng-scry-dest">{reorder ? (nth >= 0 ? `#${nth + 1}` : 'as is') : marked ? dest : 'top'}</div>
+              <div key={oid} className="eng-scry-slot">
+                <div
+                  className={'eng-scry-card' + (marked ? ' to-bottom' : '')}
+                  onClick={() => toggle(oid)}
+                  title={reorder ? c.name : marked ? `${c.name} — to the ${dest}` : `${c.name} — click to send it to the ${dest}`}
+                >
+                  {c.cardId ? <img src={cardImageUrl(c.cardId)} alt={c.name} /> : <div className="cardback" />}
+                  <div className="eng-scry-dest">
+                    {marked ? dest : nth === 0 ? 'top' : `#${nth + 1} from the top`}
+                  </div>
+                </div>
+                {!marked && canOrder && (
+                  <div className="eng-scry-order">
+                    <button
+                      className="mini"
+                      disabled={!canMoveKept(order, bottom, oid, -1)}
+                      onClick={() => move(oid, -1)}
+                      title="Move nearer the top"
+                    >
+                      ◀
+                    </button>
+                    <button
+                      className="mini"
+                      disabled={!canMoveKept(order, bottom, oid, 1)}
+                      onClick={() => move(oid, 1)}
+                      title="Move further down"
+                    >
+                      ▶
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
         <div className="eng-scry-actions">
-          <button className="primary" onClick={() => onConfirm(false)}>
+          <button className="primary" onClick={() => onConfirm(false, kept)}>
             {reorder ? 'Put back' : 'Confirm'}
           </button>
           {reorder && pending.mayShuffle && (
-            <button className="mini" onClick={() => onConfirm(true)} title="Put them back, then shuffle your library">
+            <button className="mini" onClick={() => onConfirm(true, kept)} title="Put them back, then shuffle your library">
               Shuffle instead
             </button>
           )}

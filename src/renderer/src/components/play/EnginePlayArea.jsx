@@ -10,7 +10,7 @@ import { zoneCardAction, readyCount } from '../../lib/zoneActions.js'
 import { RulesText } from '../Mana.jsx'
 import { useSettings } from '../../store/settings.js'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
-import { ZoneViewer, SearchOverlay, ScryOverlay, LookTopOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay } from './engine/Overlays.jsx'
+import { ZoneViewer, SearchOverlay, ScryOverlay, LookTopOverlay, ZoomOverlay, StackOverlay, HandRevealOverlay, GraveyardTargetOverlay } from './engine/Overlays.jsx'
 import '../../play.css'
 import './engine.css'
 
@@ -277,6 +277,22 @@ export default function EnginePlayArea() {
   const fitsSlot = (c, controllerPid) =>
     matchesCreature(c, controllerPid) || matchesLand(c, controllerPid) || matchesArtifact(c, controllerPid) || matchesPermanent(c, controllerPid)
 
+  // "Target card in a graveyard" is the one target that isn't on the battlefield,
+  // so it can't be picked by clicking the board; it gets its own overlay below.
+  const wantsGraveyard = !!(targetSlot && targetSlot.type === 'graveyardCard')
+  const graveyardGroups = wantsGraveyard
+    ? view.players
+        .filter(
+          (p) =>
+            !targetSlot.controller ||
+            (targetSlot.controller === 'you' ? p.id === casterPid : p.id !== casterPid)
+        )
+        .map((p) => ({ pid: p.id, name: `${p.name}'s graveyard`, cards: p.graveyard }))
+    : []
+  const graveyardCardOk = (c) =>
+    (!targetSlot.types || targetSlot.types.some((t) => c.types?.includes(t))) &&
+    (!targetSlot.cardType || c.types?.includes(targetSlot.cardType))
+
   // Standard Bearer: while an opponent has a Flagbearer in play, you must
   // target it if you can. The engine enforces that either way; without this the
   // board lights up every creature and then refuses the click, which reads as a
@@ -509,8 +525,13 @@ export default function EnginePlayArea() {
           a.oid === card.oid &&
           ['cast', 'castBestow', 'castOmen', 'castFlashback', 'castFaceDown', 'playLand', 'plot', 'ninjutsu', 'cycle', 'suspend', 'activate'].includes(a.type)
       )
-      if (acts.length === 1) startAction(acts[0])
-      else if (acts.length > 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
+      // Evoke (and the other alternative costs that change what the card does)
+      // always asks, even when it is the only thing affordable: casting a
+      // Mulldrifter for its evoke cost sacrifices it, and that is not something
+      // to do to someone who just clicked the card.
+      const asks = acts.some((a) => a.evoke || a.altCost)
+      if (acts.length === 1 && !asks) startAction(acts[0])
+      else if (acts.length >= 1) setAbilityMenu({ actions: acts, x: ev?.clientX ?? 200, y: ev?.clientY ?? 200 })
     }
   }
 
@@ -1050,15 +1071,11 @@ export default function EnginePlayArea() {
           pending={pending}
           bottom={scryBottom}
           setBottom={setScryBottom}
-          onConfirm={(shuffle) => {
-            if (pending.noBottom) {
-              // Reorder: clicked cards first (in click order), the rest as they were.
-              const all = pending.cards.map((c) => c.oid)
-              choose({ toTop: [...scryBottom, ...all.filter((oid) => !scryBottom.includes(oid))], toBottom: [], shuffle: !!shuffle })
-              return
-            }
-            const toTop = pending.cards.map((c) => c.oid).filter((oid) => !scryBottom.includes(oid))
-            choose({ toBottom: scryBottom, toTop })
+          onConfirm={(shuffle, toTop) => {
+            // `toTop` is the kept cards in the order the overlay put them,
+            // topmost first; the engine reads it as the new top of the library.
+            if (pending.noBottom) choose({ toTop, toBottom: [], shuffle: !!shuffle })
+            else choose({ toBottom: scryBottom, toTop })
           }}
         />
       )}
@@ -1069,6 +1086,19 @@ export default function EnginePlayArea() {
           setPicks={setTopSel}
           onConfirm={() => choose({ picks: topSel })}
           onType={(type) => choose({ type })}
+        />
+      )}
+
+      {targeting && wantsGraveyard && myTurn && (
+        <GraveyardTargetOverlay
+          label={`${(cast ? cast.action.label : pending.name) || 'Choose a target'} — a card in ${
+            targetSlot.controller === 'you' ? 'your graveyard' : targetSlot.controller === 'opponent' ? "an opponent's graveyard" : 'a graveyard'
+          }`}
+          groups={graveyardGroups}
+          canPick={graveyardCardOk}
+          onPick={(oid) => addTarget({ kind: 'object', oid })}
+          onZoom={setZoom}
+          onDecline={optionalReady ? finalizeOptional : null}
         />
       )}
 

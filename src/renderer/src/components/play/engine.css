@@ -1539,3 +1539,29 @@
   letter-spacing: 0;
   white-space: normal;
 }
+
+/* Whose graveyard a group of target candidates is in, when the choice spans
+   more than one player's. */
+.eng-scry-sub {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+
+/* A scried card and the buttons that move it up or down the order. */
+.eng-scry-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.eng-scry-order {
+  display: flex;
+  gap: 4px;
+}
+.eng-scry-order .mini {
+  padding: 1px 8px;
+  line-height: 1.4;
+}

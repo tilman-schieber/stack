@@ -1152,10 +1152,15 @@ export class GameEngine {
         }
       }
       const t = s.pendingTriggers.shift()
+      // Whose ability this is and what colours its source has: "target card in
+      // YOUR graveyard" and hexproof/protection both need to know, so the same
+      // context a cast or an activation builds is built here too. Without it an
+      // Archaeomancer's trigger found no legal target and vanished.
+      const tctx = this._triggerCtx(t)
       // A modal trigger (Dawnbringer Cleric) chooses its mode as it goes on the
       // stack (603.3c); the chosen mode supplies the effect and target spec.
       if (t.modes && t.mode == null) {
-        const castable = t.modes.map((m, i) => ({ m, i })).filter(({ m }) => (m.targets || []).every((sp) => this._legalTargetsExist(sp)))
+        const castable = t.modes.map((m, i) => ({ m, i })).filter(({ m }) => (m.targets || []).every((sp) => this._legalTargetsExist(sp, tctx)))
         if (!castable.length) continue
         if (castable.length === 1) {
           const pick = castable[0]
@@ -1181,7 +1186,7 @@ export class GameEngine {
         return
       }
       if (spec.length) {
-        if (!spec.every((sp) => this._legalTargetsExist(sp))) continue // fizzles: no legal target
+        if (!spec.every((sp) => this._legalTargetsExist(sp, tctx))) continue // 603.3d: no legal target, so it never goes on the stack
         s.pending = {
           kind: 'chooseTargets',
           player: t.controller,
@@ -1202,6 +1207,14 @@ export class GameEngine {
 
   _triggerName(t) {
     return t.name || this.state.objects[t.sourceOid]?.printed?.name || 'Ability'
+  }
+
+  // The targeting context of a queued trigger: its controller, and the colors of
+  // the permanent it triggered from (for protection). A trigger of the game
+  // itself (the monarch, a dungeon room) has no source, only a controller.
+  _triggerCtx(t) {
+    const src = this.state.objects[t.sourceOid]
+    return { byPid: t.controller, sourceColors: tags(src?.chars || src?.printed) }
   }
 
   // 603.3b answer: `order` lists trigger ids first-on-the-stack first (so the
@@ -1236,6 +1249,10 @@ export class GameEngine {
       subjectOid: t.subjectOid ?? null, // what the trigger was about ("it gets +1/+0")
       effect: t.effect,
       targets: chosenTargets,
+      // Kept for the fizzle re-check on resolution: without the specs, a target
+      // card in a graveyard is judged by the battlefield rule and the ability
+      // fizzles on a target that never moved (Archaeomancer).
+      targetSpecs: t.targetSpec || [],
       condition: t.condition || null,
       extra: t.extra || null
     })

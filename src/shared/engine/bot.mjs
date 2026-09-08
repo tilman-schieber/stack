@@ -26,7 +26,7 @@ import { zone, objectsIn } from './state.mjs'
 import { recompute } from './layers.mjs'
 
 const HARMFUL = new Set(['destroy', 'dealDamage', 'dealDamageDivided', 'bounce', 'counter', 'tap', 'loseLife', 'exileGraveyard', 'fight', 'mill', 'discard', 'chooseFromHand', 'revealHand', 'discardNamed', 'eachOpponentSacrifices', 'targetPlayerSacrifices', 'gainControl', 'changeTargets', 'restrict', 'goad', 'tapOrUntap'])
-const HELPFUL = new Set(['pump', 'grantKeyword', 'addCounter', 'attach', 'regenerate', 'untap', 'returnFromGraveyard', 'returnToBattlefield', 'exileReturnEndStep', 'becomeCreature', 'animate', 'setColors', 'preventNextDamage', 'copySpell', 'createTokenCopy', 'transform'])
+const HELPFUL = new Set(['pump', 'grantKeyword', 'addCounter', 'attach', 'regenerate', 'untap', 'returnFromGraveyard', 'returnToBattlefield', 'returnGraveyardTarget', 'graveyardToTop', 'exileReturnEndStep', 'becomeCreature', 'animate', 'setColors', 'preventNextDamage', 'copySpell', 'createTokenCopy', 'transform'])
 
 const mv = (o) => o?.printed?.manaValue || 0
 const isLand = (o) => o?.printed?.types?.includes('Land')
@@ -150,6 +150,19 @@ export function botChoose(engine, pid) {
       const top = [...stack].reverse().find((o) => o.controller !== pid && !o.isCopy)
       return top ? { kind: 'spell', oid: top.oid } : null
     }
+    // A card in a graveyard (Archaeomancer, Mortuary Mire, Faerie Macabre) — a
+    // pool the battlefield lists below don't cover at all, so without this the
+    // bot answers with a permanent and the engine rejects it.
+    if (spec.type === 'graveyardCard') {
+      const cards = s.players.flatMap((q) => zone(s, 'graveyard', q.id).map((oid) => s.objects[oid]))
+      const cands = cards.filter((o) => legal(o, spec, ctxColors))
+      if (!cands.length) return null
+      // Taking a card back is worth most on the best card; exiling one is worth
+      // most on the opponent's best.
+      const ours = (o) => (o.owner === pid ? 1 : 0)
+      const best = cands.sort((a, b) => (how === 'harm' ? ours(a) - ours(b) : ours(b) - ours(a)) || worth(b) - worth(a))[0]
+      return { kind: 'object', oid: best.oid }
+    }
     if (prefer && legal(prefer, spec, ctxColors)) return { kind: 'object', oid: prefer.oid }
     const pool = spec.controller === 'you' ? mine : spec.controller === 'opponent' ? theirs : how === 'harm' ? [...theirs, ...mine] : [...mine, ...theirs]
     const cands = pool.filter((o) => legal(o, spec, ctxColors))
@@ -183,7 +196,11 @@ export function botChoose(engine, pid) {
   const fallbackTargets = (specs, ctxColors) =>
     (specs || []).map((spec) => {
       if (spec.type === 'player') return { kind: 'player', pid: spec.controller === 'opponent' ? (opp?.id ?? pid) : pid }
-      const o = bf.find((x) => legal(x, spec, ctxColors))
+      const pool =
+        spec.type === 'graveyardCard'
+          ? s.players.flatMap((q) => zone(s, 'graveyard', q.id).map((oid) => s.objects[oid]))
+          : bf
+      const o = pool.find((x) => legal(x, spec, ctxColors))
       return o ? { kind: 'object', oid: o.oid } : { kind: 'player', pid: opp?.id ?? pid }
     })
 
