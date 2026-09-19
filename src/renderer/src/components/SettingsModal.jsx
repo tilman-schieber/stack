@@ -60,6 +60,20 @@ export default function SettingsModal({ onClose }) {
           </label>
 
           <div className="setting-field">
+            <label className="field-label">Table speed</label>
+            <select value={s.tableSpeed || 'normal'} onChange={(e) => s.update({ tableSpeed: e.target.value })}>
+              <option value="instant">Instant — no pauses at all</option>
+              <option value="brisk">Brisk</option>
+              <option value="normal">Normal</option>
+              <option value="relaxed">Relaxed</option>
+            </select>
+            <p className="muted small">
+              How long the game pauses between the things it does on its own — a spell resolving, the turn
+              changing, the computer taking a move. It never delays anything you do.
+            </p>
+          </div>
+
+          <div className="setting-field">
             <label className="field-label">Additional set codes to ignore</label>
             <input
               type="text"

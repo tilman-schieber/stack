@@ -1611,3 +1611,127 @@
     animation: none;
   }
 }
+
+/* ---- Whose turn it is ---------------------------------------------------- */
+
+/* Always on, at the head of the reference column: the one thing you should
+   never have to work out from the board. */
+.eng-turn-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: #141c17;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.eng-turn-badge.mine {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(201, 162, 83, 0.16), rgba(201, 162, 83, 0.05));
+}
+.eng-turn-who {
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eng-turn-badge.mine .eng-turn-who {
+  color: var(--accent);
+}
+.eng-turn-step {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Three dots while the computer decides, so a pause reads as a player taking
+   their time rather than the app having stopped. */
+.eng-turn-thinking {
+  display: inline-flex;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+.eng-turn-thinking i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: eng-think 1.05s ease-in-out infinite;
+}
+.eng-turn-thinking i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.eng-turn-thinking i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes eng-think {
+  0%,
+  70%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* The handover, announced once across the table and then gone. */
+.eng-turn-announce {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  z-index: 1750;
+  pointer-events: none;
+  padding: 10px 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(12, 18, 14, 0.9);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  animation: eng-announce 1.4s ease-out forwards;
+}
+.eng-turn-announce.mine {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 24px rgba(201, 162, 83, 0.25);
+}
+@keyframes eng-announce {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -58%) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eng-turn-announce {
+    animation: none;
+    opacity: 0;
+  }
+  .eng-turn-thinking i {
+    animation: none;
+    opacity: 0.7;
+  }
+}

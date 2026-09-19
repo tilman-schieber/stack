@@ -4,11 +4,13 @@ import { EngineCard, Pile, ManaPool, LifePlate, HelperCard, isCreature, isLand }
 import Prompt from './engine/Prompt.jsx'
 import MotionLayer from './engine/Motion.jsx'
 import CombatArrows from './engine/CombatArrows.jsx'
+import TurnBadge from './engine/TurnBadge.jsx'
 import { useBoardMotion } from '../../lib/boardMotion.js'
 import { play as playSound, setSoundEnabled } from '../../lib/sound.js'
 import { loadScale, saveScale, scaleBy, cardWidth, handHoverScale } from '../../lib/cardScale.js'
 import { zoneCardAction, readyCount } from '../../lib/zoneActions.js'
 import { blockPairs } from '../../lib/combatArrows.js'
+import { DEFAULT_SPEED } from '../../lib/tempo.js'
 import { RulesText } from '../Mana.jsx'
 import { useSettings } from '../../store/settings.js'
 import { GameLog, StopsPanel, PhaseBar, Inspector } from './engine/Panels.jsx'
@@ -48,6 +50,8 @@ export default function EnginePlayArea() {
   const mode = useEngineGame((s) => s.mode)
   const mySeat = useEngineGame((s) => s.netSeat)
   const botSeats = useEngineGame((s) => s.botSeats)
+  const thinking = useEngineGame((s) => s.thinking)
+  const setSpeed = useEngineGame((s) => s.setSpeed)
   // Online / vs. the computer: whether the local player is the one who must act.
   const myTurn = (mode === 'local' && !botSeats.includes(view?.pending?.player)) || view?.pending?.player === mySeat
   const [showStops, setShowStops] = useState(false)
@@ -169,6 +173,13 @@ export default function EnginePlayArea() {
   // switched on, so nothing tries to start an AudioContext unasked.
   const soundsOn = useSettings((st) => st.sounds)
   useEffect(() => setSoundEnabled(!!soundsOn), [soundsOn])
+  // How fast the table plays itself. Someone who has asked for less motion has
+  // asked for less of this too, so the beats go away entirely.
+  const speedSetting = useSettings((st) => st.tableSpeed)
+  useEffect(() => {
+    const still = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    setSpeed(still ? 'instant' : speedSetting || DEFAULT_SPEED)
+  }, [speedSetting, setSpeed])
 
   // Watches for cards that changed zone between this view and the last one, and
   // for damage newly marked, so the board can show the move instead of just the
@@ -1028,6 +1039,15 @@ export default function EnginePlayArea() {
             hovering, and the log. The ladder lives here rather than in a strip
             across the board, where it would cost every row of cards its height. */}
         <div className="eng-side">
+          {!inSetup && (
+            <TurnBadge
+              mine={view.activePlayer === mySeat}
+              turnNumber={view.turnNumber}
+              stepLabel={STEP_LABEL[view.step] || view.step}
+              oppName={view.players[mySeat === 0 ? 1 : 0]?.name?.replace(/\s*\(.*\)\s*$/, '')}
+              thinking={thinking}
+            />
+          )}
           <div className="eng-side-turn">
             <span className="eng-turn" title={`Active player: ${view.players[view.activePlayer].name}`}>
               {inSetup ? (kind === 'playOrDraw' ? 'Play or draw' : 'Mulligan') : `Turn ${view.turnNumber}`}

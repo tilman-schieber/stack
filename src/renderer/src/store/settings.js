@@ -7,6 +7,7 @@ export const useSettings = create((set, get) => ({
   ignoreNonTournamentLegal: true,
   ignoredSets: [],
   sounds: false,
+  tableSpeed: 'normal', // how fast the opponent's side of the game plays out (lib/tempo.js)
 
   load: async () => {
     const s = await window.api.getSettings()

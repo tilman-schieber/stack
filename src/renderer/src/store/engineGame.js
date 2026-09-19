@@ -1,8 +1,7 @@
 import { create } from 'zustand'
 import { GameEngine, projectGame, botChoose, botFallback, BOT_STOPS } from '@engine/index.mjs'
 import { priorityDecision, stopKey, DEFAULT_STOPS, YIELD_KINDS } from '@engine/priority.mjs'
-
-const BOT_DELAY_MS = 450 // a beat between computer moves so they can be followed
+import { signatureOf, changeKind, beatFor, thinkTime, DEFAULT_SPEED } from '../lib/tempo.js'
 
 // Steps that grant priority (where a stop can be set). Untap and cleanup never
 // grant priority, so they are omitted.
@@ -30,32 +29,42 @@ const defaultStops = (n = 2) => {
   return s
 }
 
-// Auto-pass through priority windows the way Magic Online does, handing one to a
-// player only when priorityDecision says so. A computer seat sees every window;
-// when its answer is simply to pass, that happens here at once (no delay), so
-// only its real moves take time. `yields` and `holds` are updated in place when
-// a decision consumes them (F4 cancelled by a response; a hold used up).
-function settle(engine, stops, botSeats = [], yields = {}, holds = {}) {
-  let guard = 0
-  while (engine.state.pending?.kind === 'priority' && guard++ < 4000) {
-    const me = engine.state.pending.player
-    const d = priorityDecision(engine.state, stops[me], yields[me], !!holds[me])
-    if (d.cancelYield) delete yields[me]
-    if (d.consumeHold) delete holds[me]
-    if (d.give) {
-      if (!botSeats.includes(me)) break // hand this player priority
-      let ans = null
-      try {
-        ans = botChoose(engine, me)
-      } catch {
-        ans = { type: 'pass' }
-      }
-      if (ans && ans.type !== 'pass') break // a real move: the timer plays it visibly
-      engine.choose({ type: 'pass' })
-      continue
+// One automatic step of the game — the part nobody is asked about. Auto-passes
+// through priority windows the way Magic Online does, handing a window to a
+// player only when priorityDecision says so. `yields` and `holds` are updated in
+// place when a decision consumes them (F4 cancelled by a response; a hold used).
+//
+// It takes exactly one step and says what it ran into, so the caller can put a
+// beat between the steps a person would notice (see lib/tempo.js). Doing the
+// whole cascade in one synchronous loop is what made the opponent's turn arrive
+// as a single jump.
+//
+//   'human'   — someone must answer; stop here.
+//   'bot'     — the computer has a real move to make; play it on a timer.
+//   'stepped' — an automatic pass was taken; there may be more.
+//   'done'    — the game is over, or nothing is pending.
+function autoStep(engine, stops, botSeats = [], yields = {}, holds = {}) {
+  const p = engine.state.pending
+  if (!p || p.kind === 'gameOver') return 'done'
+  if (p.kind !== 'priority') return botSeats.includes(p.player) ? 'bot' : 'human'
+  const me = p.player
+  const d = priorityDecision(engine.state, stops[me], yields[me], !!holds[me])
+  if (d.cancelYield) delete yields[me]
+  if (d.consumeHold) delete holds[me]
+  if (d.give) {
+    if (!botSeats.includes(me)) return 'human'
+    let ans = null
+    try {
+      ans = botChoose(engine, me)
+    } catch {
+      ans = { type: 'pass' }
     }
+    if (ans && ans.type !== 'pass') return 'bot' // a real move: the timer plays it visibly
     engine.choose({ type: 'pass' })
+    return 'stepped'
   }
+  engine.choose({ type: 'pass' })
+  return 'stepped'
 }
 
 // Engine-backed play mode. Three modes share one interface:
@@ -81,7 +90,9 @@ export const useEngineGame = create((set, get) => ({
   sideboarding: false, // between games of a match
   _engine: null,
   _transport: null,
-  _botTimer: null,
+  _timer: null, // the next automatic step, or the computer's next move
+  thinking: null, // the seat the game is waiting on, while it "thinks"
+  speed: DEFAULT_SPEED, // how fast the table plays itself (lib/tempo.js)
 
   // ---- local hot-seat / vs. computer ---------------------------------------
   // decks: [{ name, cards: [scryfallCard…], sideboard? }, …]; bots: seat ids the
@@ -101,7 +112,6 @@ export const useEngineGame = create((set, get) => ({
     for (const b of bots) stops[b] = new Set(BOT_STOPS) // the bot sees every window; passes are instant
     const yields = {}
     const holds = {}
-    settle(engine, stops, bots, yields, holds)
     const prior = get().match
     // A match keeps the decks (with sideboards) and the running score across games.
     const match =
@@ -117,8 +127,8 @@ export const useEngineGame = create((set, get) => ({
             over: false
           }
         : null
-    set({ started: true, mode: 'local', netSeat: 0, botSeats: bots, stops, yields, holds, match, sideboarding: false, _engine: engine, error: null, notice: null })
-    get()._commit()
+    set({ started: true, mode: 'local', netSeat: 0, botSeats: bots, stops, yields, holds, match, sideboarding: false, _engine: engine, error: null, notice: null, thinking: null })
+    get()._advance()
   },
 
   // A game of a match has ended: record it, and either finish the match or open
@@ -140,43 +150,78 @@ export const useEngineGame = create((set, get) => ({
   // Start the next game of the match with the (re-sideboarded) decks. The loser
   // of the last game chooses to play or draw (103.6).
   nextGame: (decks) => {
-    const { match, _engine, _botTimer } = get()
+    const { match, _engine, _timer } = get()
     if (!match) return
-    if (_botTimer) clearTimeout(_botTimer)
+    if (_timer) clearTimeout(_timer)
     void _engine
     const loser = match.lastWinner == null ? 0 : decks.findIndex((_, i) => i !== match.lastWinner)
     set({ sideboarding: false, _engine: null, view: null })
     get().startEngineGame({ decks, format: match.format, bots: match.bots, chooser: loser < 0 ? 0 : loser })
   },
 
-  // Let the computer take its decisions, one every BOT_DELAY_MS, until a human
-  // must act. Scheduled after every commit; harmless when it's not a bot's turn.
-  _scheduleBot: () => {
-    const { _engine, botSeats, _botTimer } = get()
-    if (!_engine || !botSeats.length) return
-    const pid = _engine.state.pending?.player
-    if (pid == null || !botSeats.includes(pid) || _engine.state.pending.kind === 'gameOver') return
-    if (_botTimer) clearTimeout(_botTimer)
-    const timer = setTimeout(() => {
-      set({ _botTimer: null })
-      const e = get()._engine
-      if (e !== _engine || !e.state.pending || e.state.pending.player !== pid) return
-      try {
-        e.choose(botChoose(e, pid))
-      } catch (err) {
-        console.warn('bot answer rejected, falling back:', err)
-        try {
-          e.choose(botFallback(e, pid))
-        } catch (err2) {
-          console.error('bot fallback rejected — conceding for it:', err2)
-          e.concede(pid)
-        }
-      }
-      settle(e, get().stops, get().botSeats, get().yields, get().holds)
+  // Play the automatic side of the game out over time instead of all at once.
+  //
+  // One step, one frame: after each step that moves something a person would
+  // notice, the view is committed and the next step waits a beat sized to what
+  // changed (lib/tempo.js). Steps that change nothing run straight through, so
+  // the pacing costs nothing when nothing is happening. `depth` counts the steps
+  // in this burst — a long one speeds up as it goes.
+  _advance: (depth = 0) => {
+    const { _engine, stops, botSeats, yields, holds, _timer, speed } = get()
+    if (_timer) clearTimeout(_timer)
+    if (!_engine) return
+    const later = (fn, ms, thinking = null) => {
+      set({ _timer: setTimeout(fn, ms), thinking })
       get()._commit()
-    }, BOT_DELAY_MS)
-    set({ _botTimer: timer })
+    }
+    let d = depth
+    for (let guard = 0; guard < 4000; guard++) {
+      const before = signatureOf(_engine.state)
+      const status = autoStep(_engine, stops, botSeats, yields, holds)
+      if (status === 'bot') {
+        // The computer is about to do something. Showing that it is thinking
+        // turns the pause into part of the game rather than a freeze.
+        const pid = _engine.state.pending.player
+        later(() => get()._botMove(pid), thinkTime(_engine.state.pending.kind, speed), pid)
+        return
+      }
+      if (status !== 'stepped') {
+        set({ _timer: null, thinking: null })
+        get()._commit()
+        return
+      }
+      const ms = beatFor(changeKind(before, signatureOf(_engine.state)), d, speed)
+      if (!ms) continue
+      d++
+      later(() => get()._advance(d), ms)
+      return
+    }
+    set({ _timer: null, thinking: null })
+    get()._commit()
   },
+
+  // The computer's one real move, then a fresh burst of automatic steps.
+  _botMove: (pid) => {
+    const e = get()._engine
+    set({ _timer: null, thinking: null })
+    if (!e || !e.state.pending || e.state.pending.player !== pid) return
+    try {
+      e.choose(botChoose(e, pid))
+    } catch (err) {
+      console.warn('bot answer rejected, falling back:', err)
+      try {
+        e.choose(botFallback(e, pid))
+      } catch (err2) {
+        console.error('bot fallback rejected — conceding for it:', err2)
+        e.concede(pid)
+      }
+    }
+    get()._advance(0)
+  },
+
+  // How fast the table plays itself; see lib/tempo.js. Mirrored from settings so
+  // the store need not reach into another one on every step.
+  setSpeed: (speed) => set({ speed }),
 
   clearNotice: () => set({ notice: null }),
 
@@ -199,7 +244,7 @@ export const useEngineGame = create((set, get) => ({
   },
 
   choose: (answer) => {
-    const { mode, _engine, _transport, view, stops } = get()
+    const { mode, _engine, _transport, view } = get()
     if (mode === 'guest') {
       _transport?.send({ t: 'choose', answer }) // host applies it authoritatively
       return
@@ -210,8 +255,7 @@ export const useEngineGame = create((set, get) => ({
     if (view?.pending && get().botSeats.includes(view.pending.player)) return // the computer's decision
     try {
       _engine.choose(answer)
-      settle(_engine, stops, get().botSeats, get().yields, get().holds)
-      get()._commit()
+      get()._advance()
     } catch (err) {
       set({ error: String(err?.message || err) })
     }
@@ -225,11 +269,10 @@ export const useEngineGame = create((set, get) => ({
     set({ view: projectGame(_engine, viewer), error: null, yields: { ...get().yields }, holds: { ...get().holds } })
     if (mode === 'host') _transport?.send({ t: 'view', view: projectGame(_engine, 1) })
     get()._recordMatchGame()
-    get()._scheduleBot()
   },
 
   _onHostMessage: (msg, myDeck) => {
-    const { _engine, stops } = get()
+    const { _engine } = get()
     if (msg.t === 'deck') {
       if (_engine) return // the game is already running; a second deck can't replace it
       const format = null // 1v1 constructed
@@ -242,43 +285,37 @@ export const useEngineGame = create((set, get) => ({
         ]
       })
       engine.start()
-      settle(engine, stops, [], get().yields, get().holds)
       set({ started: true, _engine: engine })
-      get()._commit()
+      get()._advance()
     } else if (msg.t === 'choose') {
       if (!_engine || _engine.state.pending?.player !== 1) return // only the guest's decisions
       try {
         _engine.choose(msg.answer)
-        settle(_engine, get().stops, [], get().yields, get().holds)
-        get()._commit()
+        get()._advance()
       } catch {
         /* illegal remote choice: ignore, state is untouched */
       }
     } else if (msg.t === 'concede') {
       if (!_engine) return
       _engine.concede(1)
-      settle(_engine, get().stops, [], get().yields, get().holds)
-      get()._commit()
+      get()._advance()
     } else if (msg.t === 'stops') {
       const next = { ...get().stops, 1: new Set(msg.steps) }
-      if (_engine) settle(_engine, next, [], get().yields, get().holds)
       set({ stops: next })
-      get()._commit()
+      if (_engine) get()._advance()
     } else if (msg.t === 'yield') {
       // The guest yielded (or cancelled a yield) for this turn.
       const yields = { ...get().yields }
       if (msg.kind && YIELD_KINDS.includes(msg.kind) && _engine) yields[1] = { kind: msg.kind, turn: _engine.state.turnNumber }
       else delete yields[1]
-      if (_engine) settle(_engine, get().stops, [], yields, get().holds)
       set({ yields })
-      get()._commit()
+      if (_engine) get()._advance()
     } else if (msg.t === 'hold') {
       const holds = { ...get().holds }
       if (msg.on) holds[1] = true
       else delete holds[1]
-      if (_engine) settle(_engine, get().stops, [], get().yields, holds)
       set({ holds })
-      get()._commit()
+      if (_engine) get()._advance()
     } else if (msg.t === 'bye') {
       get().endGame(get().started ? 'Your opponent left the game.' : 'Your opponent cancelled.')
     }
@@ -305,9 +342,8 @@ export const useEngineGame = create((set, get) => ({
       set({ stops })
       return
     }
-    if (_engine) settle(_engine, stops, get().botSeats, get().yields, get().holds)
     set({ stops })
-    if (_engine) get()._commit()
+    if (_engine) get()._advance()
   },
 
   // Yield for the rest of this turn (`kind`: 'turn' = F4, 'all' = F6) or cancel
@@ -326,9 +362,8 @@ export const useEngineGame = create((set, get) => ({
     const yields = { ...get().yields }
     if (kind) yields[netSeat] = { kind, turn: _engine.state.turnNumber }
     else delete yields[netSeat]
-    settle(_engine, get().stops, get().botSeats, yields, get().holds)
     set({ yields })
-    get()._commit()
+    get()._advance()
   },
 
   // Keep priority after your next spell or ability (to respond to it yourself);
@@ -343,31 +378,29 @@ export const useEngineGame = create((set, get) => ({
       set({ holds })
       return
     }
-    if (_engine) settle(_engine, get().stops, get().botSeats, get().yields, holds)
     set({ holds })
-    if (_engine) get()._commit()
+    if (_engine) get()._advance()
   },
 
   // Concede as a game action (104.3a): the local seat leaves the game and the
   // engine decides the outcome (in a 2-player game the opponent wins). Online
   // the game-over screen then shows on both sides; locally `endGame` is the exit.
   concede: () => {
-    const { mode, _engine, _transport, netSeat, stops } = get()
+    const { mode, _engine, _transport, netSeat } = get()
     if (mode === 'guest') {
       _transport?.send({ t: 'concede' })
       return
     }
     if (!_engine) return
     _engine.concede(netSeat)
-    settle(_engine, stops, get().botSeats, get().yields, get().holds)
-    get()._commit()
+    get()._advance()
   },
 
   // End the game (concede / exit / connection lost). `reason`, if given, is shown
   // on the setup screen so an unexpected end isn't silent.
   endGame: (reason = null) => {
-    const { _transport, _botTimer } = get()
-    if (_botTimer) clearTimeout(_botTimer)
+    const { _transport, _timer } = get()
+    if (_timer) clearTimeout(_timer)
     if (_transport) {
       // Detach first so closing the channel doesn't re-enter endGame with a
       // "connection lost" notice of its own.
@@ -386,7 +419,8 @@ export const useEngineGame = create((set, get) => ({
       netSeat: 0,
       _engine: null,
       _transport: null,
-      _botTimer: null,
+      _timer: null,
+      thinking: null,
       botSeats: [],
       yields: {},
       holds: {},
