@@ -366,6 +366,26 @@ export const triggersMethods = {
 
   // ---- triggered abilities --------------------------------------------
 
+  // The line of the source's own text that this triggered ability is.
+  //
+  // Two Mulldrifter triggers on the stack are indistinguishable from each other
+  // and from any other ability until they say what they do, and "order your
+  // triggers" is unanswerable without it. The oracle text already has the words;
+  // what is needed is which line belongs to which ability. A triggered ability
+  // is a line starting "When", "Whenever" or "At", so when the lines and the
+  // abilities pair up one-to-one, the nth ability is the nth line.
+  _triggerText(w, index) {
+    const lines = String(w?.printed?.oracleText || '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    const trig = lines.filter((l) => /^(when|whenever|at )/i.test(l))
+    const abilities = w?.behavior?.triggered?.length ?? 0
+    if (trig.length === abilities && trig[index]) return trig[index]
+    if (trig.length === 1) return trig[0] // one trigger, whatever the behaviour split into
+    return null
+  },
+
   // Scan permanents on the battlefield for triggered abilities matching `event`
   // about `subject`, and queue matches. They are put on the stack the next time
   // a player would receive priority (see _putTriggersOnStack).
@@ -381,7 +401,7 @@ export const triggersMethods = {
     for (const oid of watchers) {
       const w = s.objects[oid]
       if (!w || w.chars?.lostAbilities) continue // "loses all abilities" (613.1f)
-      for (const ab of w.behavior?.triggered || []) {
+      for (const [abIndex, ab] of (w.behavior?.triggered || []).entries()) {
         if (ab.trigger.event !== event) continue
         if (ab.trigger.level != null && extra.level !== ab.trigger.level) continue // "when this Class becomes level N"
         if (ab.trigger.self) {
@@ -401,6 +421,7 @@ export const triggersMethods = {
           controller: w.controller,
           sourceOid: w.oid,
           subjectOid: subject.oid,
+          text: this._triggerText(w, abIndex), // what it does, in the card's words
           effect: ab.effect,
           targetSpec: ab.targets || [], // targets chosen when placed on the stack
           modes: ab.modes || null, // a modal trigger picks its mode as it goes on the stack
@@ -461,7 +482,7 @@ export const triggersMethods = {
     for (const oid of [...zone(s, 'battlefield')]) {
       const w = s.objects[oid]
       if (w.chars?.lostAbilities) continue
-      for (const ab of w.behavior?.triggered || []) {
+      for (const [abIndex, ab] of (w.behavior?.triggered || []).entries()) {
         if (ab.trigger.event !== event) continue
         if (ab.trigger.yourTurn && w.controller !== s.activePlayer) continue
         if (ab.trigger.if && !this._cond(ab.trigger.if, w)) continue
@@ -469,6 +490,7 @@ export const triggersMethods = {
           controller: w.controller,
           sourceOid: w.oid,
           subjectOid: w.oid,
+          text: this._triggerText(w, abIndex),
           effect: ab.effect,
           targetSpec: ab.targets || [],
           modes: ab.modes || null,

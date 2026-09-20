@@ -125,7 +125,20 @@ export const combatMethods = {
     const s = this.state
     const def = s.combat.blockQueue.shift()
     const attackers = s.combat.attackers.filter((oid) => this._defenderOfAttacker(s.objects[oid]) === def)
-    const eligible = this._eligibleBlockers(def)
+    // Only creatures that can actually block one of *these* attackers. Being
+    // untapped and able to block in general is not enough: against a flier with
+    // no flier or reach to answer it, there is no decision to make, and asking
+    // for one reads as though a block were being missed.
+    const eligible = this._eligibleBlockers(def).filter((oid) =>
+      attackers.some((a) => this._canBlock(s.objects[oid], s.objects[a]))
+    )
+    if (!eligible.length) {
+      // Nothing can block. Take the empty declaration itself, so the log, the
+      // triggers and the rest of combat happen exactly as if it had been made.
+      s.pending = { kind: 'declareBlockers', player: def, eligible, attackers, extraBlocks: {} }
+      this._applyBlockers({ blocks: {} })
+      return
+    }
     // For the UI: blockers that may block additional creatures (Entourage of Trest).
     const extraBlocks = {}
     for (const oid of eligible) {

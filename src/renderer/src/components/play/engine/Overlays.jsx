@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useTokenArt, tokenKey } from '../../../store/tokenArt.js'
 import { cardImageUrl, boardImageSize } from '../../../lib/cardUtils.js'
 import { moveTo, keptOrder } from '../../../lib/scryOrder.js'
+import { RulesText } from '../../Mana.jsx'
 
 // Modal / floating overlays of the rules-enforced board.
 
@@ -496,6 +497,13 @@ export function StackOverlay({ stack, targeting, onItem, onZoom }) {
             )}
             <div className="eng-stack-info">
               <div className="eng-stack-cardname">{item.name}</div>
+              {/* What it does. An ability is otherwise an anonymous sparkle, and
+                  two triggers off the same card cannot be told apart at all. */}
+              {item.text && (
+                <div className="eng-stack-text">
+                  <RulesText text={item.text} />
+                </div>
+              )}
               {item.targetNames?.length > 0 && <div className="eng-stack-targets">→ {item.targetNames.join(', ')}</div>}
               {i === 0 && <div className="eng-stack-next">resolves next</div>}
             </div>

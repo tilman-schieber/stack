@@ -77,15 +77,16 @@ section('4. Levitation grants flying (layer 6)')
   let g = 0
   while (e.pending.kind !== 'declareAttackers' && g++ < 50) e.choose({ type: 'pass' })
   e.choose({ attackers: [bear.oid] })
+  assert(!e._canBlock(ground, bear), 'granted flying makes it unblockable by a groundling')
+  // And since that is the only creature that could have blocked, the game does
+  // not stop to ask for a declaration nobody can make.
+  let asked = false
   g = 0
-  while (e.pending.kind !== 'declareBlockers' && g++ < 50) e.choose({ type: 'pass' })
-  let threw = false
-  try {
-    e.choose({ blocks: { [ground.oid]: bear.oid } })
-  } catch {
-    threw = true
+  while (e.pending.kind === 'priority' && e.state.step !== 'combatDamage' && g++ < 50) {
+    e.choose({ type: 'pass' })
+    if (e.pending.kind === 'declareBlockers') asked = true
   }
-  assert(threw, 'granted flying makes it unblockable by a groundling')
+  assert(!asked, 'with no legal block, blockers are never asked for')
 }
 
 // --- 5. Giant Growth: +3/+3 until end of turn, then wears off ---------------

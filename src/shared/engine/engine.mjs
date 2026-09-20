@@ -1145,7 +1145,7 @@ export class GameEngine {
           s.pending = {
             kind: 'orderTriggers',
             player: first.controller,
-            triggers: mine.map((t, i) => ({ id: i, name: this._triggerName(t) })),
+            triggers: mine.map((t, i) => ({ id: i, name: this._triggerName(t), text: t.text || null })),
             _triggers: mine
           }
           return
@@ -1247,6 +1247,7 @@ export class GameEngine {
       name: t.name || null, // a sourceless trigger of the game (the monarch, a dungeon room)
       dungeonRoom: t.dungeonRoom || null,
       subjectOid: t.subjectOid ?? null, // what the trigger was about ("it gets +1/+0")
+      text: t.text || null, // the ability in its own words, for the stack and the ordering prompt
       effect: t.effect,
       targets: chosenTargets,
       // Kept for the fizzle re-check on resolution: without the specs, a target
@@ -1683,6 +1684,11 @@ export class GameEngine {
     const s = this.state
     p.hasLost = true
     this._log(`${p.name} loses the game`, { marker: true })
+    // 104.2a: with nobody left to play on, the game simply ends. Rule 800.4's
+    // clean-up exists so a multiplayer game can carry on without the player who
+    // left; running it on the last loss only sweeps away the position both
+    // players want to look at.
+    if (s.players.filter((q) => !q.hasLost).length < 2) return
     // Objects they own leave the game (to their exile zone; tokens cease to
     // exist); anything they merely controlled reverts to its owner (800.4a/c).
     for (const key of ['battlefield', 'stack']) {

@@ -612,8 +612,15 @@ function TriggerOrderer({ pending, nameOf, onDone }) {
         <b>{nameOf(pending.player)}</b> — order your triggers (click the one to put on the stack first; the last resolves first):
       </span>
       {remaining.map((t) => (
-        <button key={t.id} className="mini" onClick={() => pick(t.id)}>
-          {t.name}
+        <button key={t.id} className="mini eng-trigger-choice" onClick={() => pick(t.id)} title={t.text || t.name}>
+          <b>{t.name}</b>
+          {/* Two triggers off the same card are the same word twice; the
+              question is unanswerable without what each one does. */}
+          {t.text && (
+            <span className="eng-trigger-text">
+              <RulesText text={t.text} />
+            </span>
+          )}
         </button>
       ))}
       {order.length > 0 && <span className="muted">{order.length}/{pending.triggers.length} placed</span>}

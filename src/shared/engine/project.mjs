@@ -109,7 +109,10 @@ function stackView(state, oid) {
       // A sourceless trigger of the game (the monarch's draw, a dungeon room) is
       // named by what it is; the room's text is shown too.
       name: src ? (src.printed?.name || 'Ability') + ' — ability' : o.name || 'Ability',
-      text: o.dungeonRoom ? roomOf(o.dungeonRoom.dungeon, o.dungeonRoom.room)?.text || '' : '',
+      // What the ability actually does. Without it the stack is a row of
+      // identical sparkles and two triggers off the same card cannot be told
+      // apart, let alone ordered.
+      text: o.dungeonRoom ? roomOf(o.dungeonRoom.dungeon, o.dungeonRoom.room)?.text || '' : o.text || '',
       cardId: src?.cardId || null,
       controller: o.controller,
       targets: o.targets || [],
@@ -120,6 +123,7 @@ function stackView(state, oid) {
     oid: o.oid,
     kind: 'spell',
     name: o.printed?.name || '',
+    text: o.printed?.oracleText || '', // what it does, while it is still on the stack
     cardId: o.cardId || null,
     face: o.layout === 'transform' || o.layout === 'modal_dfc' ? o.face || 0 : 0,
     controller: o.controller,

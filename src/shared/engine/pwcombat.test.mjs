@@ -16,9 +16,7 @@ function attackPW(e, attacker, pwOid) {
   // the decision advertises the available defenders
   const defenders = e.pending.defenders
   e.choose({ attackers: [{ oid: attacker.oid, defender: { planeswalker: pwOid } }] })
-  g = 0
-  while (e.pending.kind !== 'declareBlockers' && g++ < 50) e.choose({ type: 'pass' })
-  e.choose({ blocks: {} })
+  // Nothing the defender controls can block, so blockers are never asked for.
   g = 0
   while (e.pending.kind === 'priority' && e.state.step !== 'main2' && g++ < 50)
     e.choose({ type: 'pass' })

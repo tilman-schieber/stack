@@ -144,8 +144,8 @@ section('Ninjutsu: swap an unblocked attacker for the ninja, tapped and attackin
   g = 0
   while (e.pending.kind === 'priority' && e.state.step !== 'declareBlockers' && g++ < 50)
     e.choose({ type: 'pass' })
-  e.choose({ blocks: {} }) // opponent declares no blocks
-  // Now the active player has priority in declare-blockers with an unblocked attacker.
+  // The opponent has nothing that can block, so no declaration is asked for and
+  // the active player simply gets priority in declare-blockers.
   const ninAct = e.pending.actions.find((a) => a.type === 'ninjutsu' && a.oid === ninja.oid)
   assert(!!ninAct, 'ninjutsu is offered with an unblocked attacker')
   e.choose({ type: 'ninjutsu', oid: ninja.oid, returned: bear.oid })

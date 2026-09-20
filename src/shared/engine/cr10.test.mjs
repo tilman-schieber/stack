@@ -36,6 +36,9 @@ section('310: a Siege enters with defense, is protected by an opponent, and can 
   const inv = put(e, 0, 'Invasion of Regatha // Disciples of the Inferno', 'hand')
   const bear = put(e, 0, 'Grizzly Bears', 'battlefield', { summoningSick: false })
   const angel = put(e, 0, 'Serra Angel', 'battlefield', { summoningSick: false })
+  // The protector needs something that could block, or there is no declaration
+  // to make and the game rightly never asks for one.
+  put(e, 1, 'Grizzly Bears', 'battlefield')
   advanceToPriorityAt(e, 'main1')
   e.choose({ type: 'cast', oid: inv.oid })
   bothPass(e) // resolves; ETB trigger asks for a target opponent

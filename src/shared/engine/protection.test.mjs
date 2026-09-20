@@ -17,15 +17,16 @@ section('1. a black creature cannot block a creature with protection from black'
   let g = 0
   while (e.pending.kind !== 'declareAttackers' && g++ < 50) e.choose({ type: 'pass' })
   e.choose({ attackers: [knight.oid] })
+  assert(!e._canBlock(blackBlocker, knight), 'the black creature was not allowed to block')
+  // It was the only creature that could have blocked, so the game never stops
+  // to ask for a declaration nobody can make.
+  let asked = false
   g = 0
-  while (e.pending.kind !== 'declareBlockers' && g++ < 50) e.choose({ type: 'pass' })
-  let threw = false
-  try {
-    e.choose({ blocks: { [blackBlocker.oid]: knight.oid } })
-  } catch {
-    threw = true
+  while (e.pending.kind === 'priority' && e.state.step !== 'combatDamage' && g++ < 50) {
+    e.choose({ type: 'pass' })
+    if (e.pending.kind === 'declareBlockers') asked = true
   }
-  assert(threw, 'the black creature was not allowed to block')
+  assert(!asked, 'and blockers are never asked for')
 }
 
 section('2. damage from a black source is prevented')

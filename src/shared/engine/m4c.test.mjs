@@ -50,8 +50,9 @@ section('2. Fog prevents all combat damage this turn')
 
   passUntil(e, (e) => e.pending.kind === 'declareAttackers')
   e.choose({ attackers: [bear.oid] })
-  passUntil(e, (e) => e.pending.kind === 'declareBlockers')
-  e.choose({ blocks: {} }) // unblocked — 2 damage incoming
+  // The defender controls no creatures, so there is no block to declare and the
+  // game does not stop to ask — 2 damage is incoming.
+  passUntil(e, (e) => e.state.step === 'declareBlockers' && e.pending.kind === 'priority')
 
   // Now the attacking player has priority before combat damage; cast Fog.
   assert(e.pending.kind === 'priority', 'priority before combat damage')
@@ -70,8 +71,6 @@ section('3. control — no Fog, damage lands')
   advanceToPriorityAt(e, 'main1')
   passUntil(e, (e) => e.pending.kind === 'declareAttackers')
   e.choose({ attackers: [bear.oid] })
-  passUntil(e, (e) => e.pending.kind === 'declareBlockers')
-  e.choose({ blocks: {} })
   passUntil(e, (e) => e.state.step === 'main2')
   assert(e.state.players[1].life === 18, 'unprevented 2 damage reduced the defender to 18')
 }

@@ -559,7 +559,9 @@
   right: 22px;
   transform: translateY(-50%);
   z-index: 900;
-  width: 226px;
+  /* Sized off the board's card width, so the wheel over the table grows the
+     stack along with everything else it is describing. */
+  width: calc(var(--card-w, 100px) * 2.5);
   pointer-events: none;
 }
 .eng-stack-title {
@@ -585,18 +587,22 @@
   border-radius: 8px;
   padding: 0 6px;
 }
-/* Each card is pulled up over the one before it, leaving a readable sliver. */
+/* A list, not a fan. The cards used to overlap by 32px, which left a sliver of
+   each buried one — enough for a name, and nothing like enough to say what an
+   ability does or to tell two triggers off the same card apart. */
 .eng-stack-fan {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+  max-height: 66vh;
+  overflow-y: auto;
+  pointer-events: auto;
 }
 .eng-stack-card {
   position: relative;
   pointer-events: auto;
   display: flex;
-  /* Names sit along the bottom edge, which is the part of a buried card that
-     still shows once the one above it covers the rest. */
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 9px;
   padding: 5px;
   border: 1px solid var(--border-bright);
@@ -604,9 +610,6 @@
   background: linear-gradient(180deg, #1f2a24 0%, #141d18 100%);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
   transition: translate 0.12s ease-out;
-}
-.eng-stack-card + .eng-stack-card {
-  margin-top: -32px;
 }
 .eng-stack-card:hover {
   translate: -8px 0;
@@ -622,8 +625,8 @@
 .eng-stack-card img,
 .eng-stack-ability {
   flex: 0 0 auto;
-  width: 42px;
-  height: 59px;
+  width: calc(var(--card-w, 100px) * 0.46);
+  height: calc(var(--card-w, 100px) * 0.64);
   border-radius: 5px;
   object-fit: cover;
   object-position: 50% 14%;
@@ -644,6 +647,19 @@
   font-size: 14px;
   font-weight: 600;
   line-height: 1.15;
+}
+/* What the spell or ability does, in the card's own words. Clamped, because the
+   stack is a summary — the card itself is a right-click away. */
+.eng-stack-text {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.32;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
 }
 .eng-stack-next {
   font-family: var(--font-ui);
@@ -1734,4 +1750,22 @@
     animation: none;
     opacity: 0.7;
   }
+}
+
+/* Ordering your triggers: each choice says what it does, because two triggers
+   off the same card are otherwise the same word twice. */
+.eng-trigger-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  max-width: 320px;
+  white-space: normal;
+  line-height: 1.3;
+}
+.eng-trigger-text {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
 }
